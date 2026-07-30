@@ -1,0 +1,248 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Palette taken from the game's own Vintagestory.API.Client.GuiStyle rather than
+        eyeballed, so the launcher sits next to the game instead of near it:
+
+          ColorParchment      #EDCE98      DialogStrongBgColor  #403529
+          ColorWood           #845C43      DialogDefaultTextCol #E9DDCE
+          ColorRust1          #D05B0C      DarkBrownColor       #5A4530
+          ColorRot4           #2D2321      ButtonBackColor      #453424
+          DialogHighlightCol  #A88B6C      ButtonTextColor      #E0CFBB
+          WarningTextColor    #F2C983      ActiveButtonTextCol  #C58948
+
+        GuiStyle also sets DialogBGRadius and ElementBGRadius to 1 — the game's corners
+        are essentially square, so nothing here is rounded off.
+    -->
+
+    <Styles.Resources>
+        <Color x:Key="VsDeepColor">#241C19</Color>
+        <Color x:Key="VsPanelColor">#403529</Color>
+        <Color x:Key="VsPanelAltColor">#4A3D2F</Color>
+        <Color x:Key="VsSunkenColor">#2E251E</Color>
+        <Color x:Key="VsBorderColor">#5A4530</Color>
+        <Color x:Key="VsInkColor">#E9DDCE</Color>
+        <Color x:Key="VsParchmentColor">#EDCE98</Color>
+        <Color x:Key="VsButtonColor">#453424</Color>
+        <Color x:Key="VsButtonHoverColor">#57432E</Color>
+        <Color x:Key="VsButtonPressedColor">#382A1D</Color>
+        <Color x:Key="VsButtonTextColor">#E0CFBB</Color>
+        <Color x:Key="VsAccentColor">#A34509</Color>
+        <Color x:Key="VsAccentHoverColor">#D05B0C</Color>
+        <Color x:Key="VsHighlightColor">#A88B6C</Color>
+        <Color x:Key="VsWarningColor">#F2C983</Color>
+        <Color x:Key="VsErrorColor">#FF8080</Color>
+
+        <SolidColorBrush x:Key="VsDeepBrush" Color="{StaticResource VsDeepColor}" />
+        <SolidColorBrush x:Key="VsPanelBrush" Color="{StaticResource VsPanelColor}" />
+        <SolidColorBrush x:Key="VsPanelAltBrush" Color="{StaticResource VsPanelAltColor}" />
+        <SolidColorBrush x:Key="VsSunkenBrush" Color="{StaticResource VsSunkenColor}" />
+        <SolidColorBrush x:Key="VsBorderBrush" Color="{StaticResource VsBorderColor}" />
+        <SolidColorBrush x:Key="VsInkBrush" Color="{StaticResource VsInkColor}" />
+        <SolidColorBrush x:Key="VsParchmentBrush" Color="{StaticResource VsParchmentColor}" />
+        <SolidColorBrush x:Key="VsButtonBrush" Color="{StaticResource VsButtonColor}" />
+        <SolidColorBrush x:Key="VsButtonHoverBrush" Color="{StaticResource VsButtonHoverColor}" />
+        <SolidColorBrush x:Key="VsButtonPressedBrush" Color="{StaticResource VsButtonPressedColor}" />
+        <SolidColorBrush x:Key="VsButtonTextBrush" Color="{StaticResource VsButtonTextColor}" />
+        <SolidColorBrush x:Key="VsAccentBrush" Color="{StaticResource VsAccentColor}" />
+        <SolidColorBrush x:Key="VsAccentHoverBrush" Color="{StaticResource VsAccentHoverColor}" />
+        <SolidColorBrush x:Key="VsHighlightBrush" Color="{StaticResource VsHighlightColor}" Opacity="0.35" />
+        <SolidColorBrush x:Key="VsWarningBrush" Color="{StaticResource VsWarningColor}" />
+        <SolidColorBrush x:Key="VsErrorBrush" Color="{StaticResource VsErrorColor}" />
+        <SolidColorBrush x:Key="VsWarningFillBrush" Color="{StaticResource VsWarningColor}" Opacity="0.16" />
+        <SolidColorBrush x:Key="VsErrorFillBrush" Color="{StaticResource VsErrorColor}" Opacity="0.16" />
+
+        <!-- The game uses Lora for decorative text. It is not installed system-wide, so
+             fall back through serifs every platform has rather than shipping font files
+             copied out of the game install. -->
+        <FontFamily x:Key="VsDecorativeFont">Lora, Georgia, Palatino, Times New Roman, serif</FontFamily>
+    </Styles.Resources>
+
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource VsDeepBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+    </Style>
+
+    <!-- Headings pick up the decorative serif; size 18+ is the cue. -->
+    <Style Selector="TextBlock.heading">
+        <Setter Property="FontFamily" Value="{DynamicResource VsDecorativeFont}" />
+        <Setter Property="Foreground" Value="{DynamicResource VsParchmentBrush}" />
+    </Style>
+
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{DynamicResource VsButtonBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource VsButtonTextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="1" />
+        <Setter Property="Padding" Value="12,5" />
+    </Style>
+    <!--
+        Fluent paints button backgrounds on the template's ContentPresenter, which wins
+        over a Background setter on the Button itself — so these target the presenter.
+        Without it a button renders Fluent blue while its Background property reads rust,
+        which is exactly the sort of mismatch a property-level assertion misses.
+
+        Order matters: later matching setters win, so this runs base -> states -> accent.
+    -->
+    <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsButtonBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource VsButtonTextBrush}" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsButtonHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsHighlightBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource VsParchmentBrush}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsButtonPressedBrush}" />
+    </Style>
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="{DynamicResource VsAccentBrush}" />
+        <Setter Property="Foreground" Value="#F7E9D7" />
+    </Style>
+    <Style Selector="Button.accent /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="#F7E9D7" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsAccentHoverBrush}" />
+        <Setter Property="TextBlock.Foreground" Value="#FFF3E4" />
+    </Style>
+    <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#7E3406" />
+    </Style>
+
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource VsSunkenBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="1" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource VsHighlightBrush}" />
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource VsParchmentBrush}" />
+    </Style>
+
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="{DynamicResource VsPanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="1" />
+    </Style>
+    <Style Selector="ListBoxItem">
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsPanelAltBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource VsHighlightBrush}" />
+    </Style>
+
+    <Style Selector="TabControl">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!--
+        Fluent overlays PART_SelectedPipe on the header in a Panel and pins it to the
+        bottom of the layout root, so with a short MinHeight it lands against the glyphs
+        and reads as underlined text rather than as a selected tab. Stacking it under the
+        presenter instead gives it a row of its own that the padding keeps clear of the
+        text, and makes the indicator independent of Fluent's pipe placement.
+    -->
+    <Style Selector="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+        <Setter Property="FontFamily" Value="{DynamicResource VsDecorativeFont}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="14,5,14,7" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_LayoutRoot" Background="{TemplateBinding Background}">
+                    <StackPanel>
+                        <!-- Foreground is bound through explicitly: ContentPresenter binds
+                             the TextBlock it generates for string content to its own
+                             Foreground, and that beats the global TextBlock style. -->
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Header}"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                        <Border Name="PART_SelectedPipe" Height="2" Margin="3,0"
+                                Background="Transparent" CornerRadius="1" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="TabItem:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource VsParchmentBrush}" />
+    </Style>
+    <Style Selector="TabItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource VsParchmentBrush}" />
+    </Style>
+    <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+        <Setter Property="Background" Value="{DynamicResource VsAccentHoverBrush}" />
+    </Style>
+
+    <Style Selector="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+    </Style>
+    <!-- Fluent paints the tick box with the system accent, which shows through as blue. -->
+    <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource VsAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+    </Style>
+    <Style Selector="CheckBox:unchecked /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource VsSunkenBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+    </Style>
+    <Style Selector="CheckBox /template/ Path#CheckGlyph">
+        <Setter Property="Fill" Value="#F7E9D7" />
+    </Style>
+
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource VsAccentHoverBrush}" />
+        <Setter Property="Background" Value="{DynamicResource VsSunkenBrush}" />
+        <Setter Property="CornerRadius" Value="1" />
+    </Style>
+
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource VsButtonBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="CornerRadius" Value="1" />
+    </Style>
+
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{DynamicResource VsBorderBrush}" />
+    </Style>
+
+    <!-- Panels: the banner strips and framed regions in the window. -->
+    <Style Selector="Border.panel">
+        <Setter Property="Background" Value="{DynamicResource VsPanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+    </Style>
+    <Style Selector="Border.sunken">
+        <Setter Property="Background" Value="{DynamicResource VsSunkenBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource VsBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="1" />
+    </Style>
+</Styles>

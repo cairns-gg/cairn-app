@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>cairn</AssemblyName>
+    <RootNamespace>Cairn.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Cairn.Core/Cairn.Core.csproj" />
+  </ItemGroup>
+</Project>

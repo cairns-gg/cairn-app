@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Deliberately dependency-free: no reference to the game's assemblies, so Cairn
+    builds in a clean checkout or CI container with no Vintage Story install.
+    Agreement with the game's own version semantics is enforced by the conformance
+    tests in tests/Cairn.Core.Tests instead.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Cairn.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

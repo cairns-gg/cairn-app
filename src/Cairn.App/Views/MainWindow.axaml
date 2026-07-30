@@ -1,0 +1,482 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
+        x:Class="Cairn.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="1000" Height="640"
+        MinWidth="820" MinHeight="520"
+        Icon="/Assets/cairn.ico"
+        Title="Cairn">
+
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <DockPanel LastChildFill="True">
+
+        <Border DockPanel.Dock="Bottom" Padding="12,6"
+                Classes="panel" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding Status}" FontSize="12" VerticalAlignment="Center" />
+                <ProgressBar Grid.Column="1" Width="110" IsIndeterminate="True"
+                             IsVisible="{Binding Detail.IsBusy, FallbackValue=False}"
+                             VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Pack list -->
+        <Border DockPanel.Dock="Left" Width="250" BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource VsBorderBrush}"
+                ClipToBounds="True"
+                IsEnabled="{Binding NotProvisioning}">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="8">
+                    <!-- Deleting is destructive, so it asks before doing anything. -->
+                    <Border IsVisible="{Binding ConfirmingDelete}" Padding="8" CornerRadius="1"
+                            Background="{DynamicResource VsErrorFillBrush}"
+                            BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                        <StackPanel Spacing="6">
+                            <TextBlock FontSize="12" TextWrapping="Wrap"
+                                       Text="{Binding DeleteTargetName, StringFormat='Delete “{0}” and its downloaded mods?'}" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="Delete" Classes="accent"
+                                        Command="{Binding ConfirmDeleteCommand}" />
+                                <Button Content="Keep" Command="{Binding CancelDeleteCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- A horizontal StackPanel lays these out at their desired width and
+                         lets them spill past the 250px sidebar into the detail pane. The
+                         grid makes each button share the column instead. -->
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto"
+                          ColumnSpacing="6" RowSpacing="6">
+                        <!-- Buttons default to centring in their cell, which leaves the
+                             two columns visibly ragged. -->
+                        <Grid.Styles>
+                            <Style Selector="Button">
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            </Style>
+                        </Grid.Styles>
+                        <Button Grid.Row="0" Grid.Column="0" Content="New pack"
+                                Command="{Binding BeginCreateCommand}" />
+                        <Button Grid.Row="0" Grid.Column="1" Content="Import…"
+                                Command="{Binding BeginImportCommand}" />
+                        <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                Content="Game versions"
+                                Command="{Binding ShowGameVersionsCommand}" />
+                        <Button Grid.Row="2" Grid.Column="0" Content="Delete"
+                                Command="{Binding RequestDeleteCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <ListBox ItemsSource="{Binding Packs}" SelectedItem="{Binding SelectedPack}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PackListItemViewModel">
+                            <StackPanel Spacing="2" Margin="0,4">
+                                <TextBlock Text="{Binding Display}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.7" />
+                                <TextBlock Text="{Binding ServerLine}" FontSize="11" Opacity="0.55" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <Panel>
+
+            <!-- Downloading a game version and/or runtime. Deliberately the only thing on
+                 screen: a half-usable pack pane invites edits the running install cannot
+                 see. -->
+            <StackPanel IsVisible="{Binding ShowProvisioning}" Margin="40"
+                        VerticalAlignment="Center" Spacing="16" MaxWidth="520">
+                <TextBlock Text="Getting things ready" Classes="heading" FontSize="22"
+                           FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding ProvisionStatus}" FontSize="13" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" />
+                <ProgressBar x:Name="ProvisionProgress"
+                             Maximum="1" Value="{Binding ProvisionFraction}" Height="10"
+                             IsIndeterminate="{Binding ProvisionIndeterminate}" />
+                <TextBlock FontSize="11" Opacity="0.6" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Text="The game and its .NET runtime are several hundred megabytes; this only happens once per version." />
+                <Button Content="Cancel" HorizontalAlignment="Center"
+                        Command="{Binding CancelProvisionCommand}" />
+            </StackPanel>
+
+            <!-- Import a shared pack -->
+            <DockPanel IsVisible="{Binding ShowImport}" LastChildFill="True" Margin="20">
+                <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
+                    <TextBlock Text="Import a pack" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap"
+                               Text="Paste a shared pack, or a URL to one. Someone else's export reproduces their exact mod versions." />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="Import as id" VerticalAlignment="Center"
+                                   FontSize="12" Opacity="0.7" />
+                        <TextBox Grid.Column="1" Text="{Binding ImportAsId}"
+                                 PlaceholderText="(keep the author's id)" />
+                        <CheckBox Grid.Column="2" Content="pin to their versions"
+                                  IsChecked="{Binding ImportPinToLock}" />
+                    </Grid>
+
+                    <Border IsVisible="{Binding HasImportError}" Padding="10,8" CornerRadius="1"
+                            Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                        <TextBlock Text="{Binding ImportError}" TextWrapping="Wrap" FontSize="12" />
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Import" Classes="accent" Padding="18,6"
+                                Command="{Binding ImportPackCommand}" />
+                        <Button Content="Cancel" Padding="14,6"
+                                Command="{Binding CancelImportCommand}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBox Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="monospace" FontSize="12"
+                         PlaceholderText="Paste the pack JSON here, or a https:// URL" />
+            </DockPanel>
+
+            <!-- Game versions -->
+            <DockPanel IsVisible="{Binding ShowGames}" LastChildFill="True" Margin="16">
+
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Game versions" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Games.StoreRoot}" FontSize="11" Opacity="0.6"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Back to packs" VerticalAlignment="Top"
+                            Command="{Binding ShowPacksCommand}" />
+                </Grid>
+
+                <Border DockPanel.Dock="Top" Margin="0,0,0,10" Padding="10,8" CornerRadius="1"
+                        IsVisible="{Binding Games.HasError}"
+                        Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                    <TextBlock Text="{Binding Games.Error}" TextWrapping="Wrap" FontSize="12" />
+                </Border>
+
+                <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
+                    <ProgressBar x:Name="GamesProgress"
+                                 Maximum="1" Value="{Binding Games.ProgressFraction}"
+                                 IsIndeterminate="{Binding Games.ProgressIndeterminate}"
+                                 IsVisible="{Binding Games.IsBusy}" Height="6" />
+                    <TextBlock Text="{Binding Games.Progress}" FontSize="12" Opacity="0.75" />
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,16,*">
+
+                    <DockPanel Grid.Column="0" LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Top" Text="Installed" FontWeight="SemiBold"
+                                   Margin="0,0,0,6" />
+                        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="Remove"
+                                        Command="{Binding Games.RemoveSelectedCommand}" />
+                                <Button Content="Install its .NET"
+                                        Command="{Binding Games.InstallRuntimeCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="private .NET runtimes" FontSize="11" Opacity="0.6" />
+                            <ItemsControl ItemsSource="{Binding Games.ManagedRuntimes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Text="{Binding}" FontSize="11" Opacity="0.7" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Games.Installed}"
+                                 SelectedItem="{Binding Games.SelectedInstalled}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:InstalledGameViewModel">
+                                    <StackPanel Spacing="2" Margin="0,3">
+                                        <TextBlock Text="{Binding Version}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Needs}" FontSize="11" Opacity="0.7" />
+                                        <TextBlock Text="{Binding RuntimeLine}" FontSize="11"
+                                                   Opacity="0.6" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="no matching .NET runtime — cannot start"
+                                                   IsVisible="{Binding RuntimeMissing}"
+                                                   FontSize="11" Foreground="{DynamicResource VsErrorBrush}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+
+                    <DockPanel Grid.Column="2" LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Top" Text="Available" FontWeight="SemiBold"
+                                   Margin="0,0,0,6" />
+                        <!-- Wraps rather than spills: these three together are wider than
+                             half the pane at the window's minimum width. -->
+                        <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                   ItemSpacing="6" LineSpacing="6" Margin="0,6,0,0">
+                            <Button Content="Install" Classes="accent"
+                                    Command="{Binding Games.InstallSelectedCommand}" />
+                            <Button Content="Refresh list"
+                                    Command="{Binding Games.RefreshCatalogCommand}" />
+                            <CheckBox Content="pre-releases"
+                                      IsChecked="{Binding Games.IncludePreReleases}" />
+                        </WrapPanel>
+                        <ListBox ItemsSource="{Binding Games.Available}"
+                                 SelectedItem="{Binding Games.SelectedAvailable}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:AvailableGameViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                                        <TextBlock Grid.Column="0" Text="{Binding Version}"
+                                                   FontWeight="SemiBold" Width="90" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Note}"
+                                                   FontSize="11" Opacity="0.65"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Size}"
+                                                   FontSize="11" Opacity="0.6"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Grid>
+            </DockPanel>
+
+            <!-- Nothing selected -->
+            <TextBlock IsVisible="{Binding ShowEmpty}"
+                       Text="No pack selected. Click “New pack” to create one."
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+
+            <!-- New pack form -->
+            <StackPanel IsVisible="{Binding ShowCreate}" Margin="24" Spacing="12" MaxWidth="440"
+                        HorizontalAlignment="Left" VerticalAlignment="Top">
+                <TextBlock Text="New pack" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Pack id" FontSize="12" Opacity="0.7" />
+                    <TextBox Text="{Binding NewPackId}" PlaceholderText="anego" />
+                    <TextBlock Text="Letters, digits, '-' and '_'. Used as the folder name."
+                               FontSize="11" Opacity="0.55" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Display name" FontSize="12" Opacity="0.7" />
+                    <TextBox Text="{Binding NewPackName}" PlaceholderText="Anego Server" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
+                    <ComboBox ItemsSource="{Binding GameVersionChoices}"
+                              SelectedItem="{Binding NewPackGameVersion}"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="choose a version" />
+                    <TextBlock Text="Loading published versions…" FontSize="11" Opacity="0.55"
+                               IsVisible="{Binding LoadingVersions}" />
+                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                               Text="Anything you do not already have is downloaded for you, along with the .NET runtime it needs." />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Server to join (optional)" FontSize="12" Opacity="0.7" />
+                    <TextBox Text="{Binding NewPackConnect}" PlaceholderText="host:42420" />
+                </StackPanel>
+
+                <Border IsVisible="{Binding HasNewPackError}" Padding="10,8" CornerRadius="1"
+                        Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                    <TextBlock Text="{Binding NewPackError}" TextWrapping="Wrap" FontSize="12" />
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Create" Command="{Binding CreatePackCommand}"
+                            Classes="accent" Padding="18,6" />
+                    <Button Content="Cancel" Command="{Binding CancelCreateCommand}" Padding="14,6" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Pack detail -->
+            <DockPanel IsVisible="{Binding ShowDetail}" LastChildFill="True" Margin="16">
+
+                <StackPanel DockPanel.Dock="Top" Spacing="4">
+                    <TextBlock Text="{Binding Detail.Title}" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Detail.Subtitle}" Opacity="0.7" FontSize="12" />
+                </StackPanel>
+
+                <Border DockPanel.Dock="Top" Margin="0,12,0,0" Padding="10,8" CornerRadius="1"
+                        IsVisible="{Binding Detail.HasError, FallbackValue=False}"
+                        Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                    <TextBlock Text="{Binding Detail.Error}" TextWrapping="Wrap" FontSize="12" />
+                </Border>
+
+                <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,14,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="{Binding Detail.PlayLabel}" Command="{Binding Detail.PlayCommand}"
+                                Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96" />
+                        <Button Content="Sync only" Command="{Binding Detail.SyncCommand}" Padding="14,6" />
+                    </StackPanel>
+
+                    <!-- Syncing and process start take seconds; say what is happening. -->
+                    <Border IsVisible="{Binding Detail.IsShowingLaunchStage, FallbackValue=False}"
+                            Classes="sunken" Padding="10,7">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <ProgressBar Grid.Column="0" Width="90" Height="6" IsIndeterminate="True"
+                                         VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding Detail.LaunchStage}"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <TabControl Margin="0,14,0,0">
+
+                    <!-- Mods in this pack -->
+                    <TabItem Header="Mods">
+                        <DockPanel LastChildFill="True" Margin="0,8,0,0">
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                        Spacing="8" Margin="0,10,0,0" VerticalAlignment="Center">
+                                <Button Content="Remove" Command="{Binding Detail.RemoveSelectedCommand}" />
+
+                                <!-- Versions load on selection and apply on choice; this
+                                     used to be Versions… then Pin, three clicks deep. -->
+                                <TextBlock Text="Version" VerticalAlignment="Center"
+                                           FontSize="12" Opacity="0.7" />
+                                <ComboBox ItemsSource="{Binding Detail.ReleaseChoices}"
+                                          SelectedItem="{Binding Detail.SelectedRelease}"
+                                          MinWidth="150" PlaceholderText="select a mod" />
+                                <TextBlock Text="loading…" VerticalAlignment="Center"
+                                           FontSize="11" Opacity="0.6"
+                                           IsVisible="{Binding Detail.LoadingReleases, FallbackValue=False}" />
+                            </StackPanel>
+
+                            <ListBox ItemsSource="{Binding Detail.Mods}"
+                                     SelectedItem="{Binding Detail.SelectedMod}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ModRowViewModel">
+                                        <Grid ColumnDefinitions="2*,*,*,Auto" Margin="0,3">
+                                            <TextBlock Grid.Column="0" Text="{Binding ModId}"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding PinDisplay}"
+                                                       FontSize="12" Opacity="0.75" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding InstalledDisplay}"
+                                                       FontSize="12" Opacity="0.75" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="server-side"
+                                                       IsVisible="{Binding IsServerSide}"
+                                                       FontSize="11" Foreground="{DynamicResource VsWarningBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem>
+
+                    <!-- ModDB search -->
+                    <TabItem Header="Add mods">
+                        <DockPanel LastChildFill="True" Margin="0,8,0,0">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
+                                         PlaceholderText="Search ModDB…" />
+                                <Button Grid.Column="1" Content="Search"
+                                        Command="{Binding Detail.SearchCommand}" />
+                                <Button Grid.Column="2" Content="Add selected" Classes="accent"
+                                        Command="{Binding Detail.AddSelectedCommand}" />
+                            </Grid>
+
+                            <ListBox Margin="0,10,0,0" ItemsSource="{Binding Detail.SearchHits}"
+                                     SelectedItem="{Binding Detail.SelectedHit}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SearchHitViewModel">
+                                        <StackPanel Spacing="2" Margin="0,3">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding ModId}" FontSize="11" Opacity="0.6"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Side}" FontSize="11" Opacity="0.6"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Downloads}" FontSize="11" Opacity="0.5"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem>
+
+                    <!-- Pack settings -->
+                    <TabItem Header="Settings">
+                        <StackPanel Margin="0,10,0,0" Spacing="12" MaxWidth="460" HorizontalAlignment="Left">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Display name" FontSize="12" Opacity="0.7" />
+                                <TextBox Text="{Binding Detail.EditName}" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
+                                <TextBox Text="{Binding Detail.EditGameVersion}" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Server to join (blank for singleplayer)"
+                                           FontSize="12" Opacity="0.7" />
+                                <TextBox Text="{Binding Detail.EditConnect}" />
+                            </StackPanel>
+
+                            <!-- Delete is deliberately not beside Save; it lives with the
+                                 other destructive affordance in the sidebar. -->
+                            <Button Content="Save" Classes="accent" HorizontalAlignment="Left"
+                                    Command="{Binding Detail.SaveSettingsCommand}" Padding="18,6" />
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Mods directory" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{Binding Detail.ModsDirectory}" FontSize="11" Opacity="0.6"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Separator Margin="0,4" />
+
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Share this pack" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
+                                           Text="Writes one file others can import. With the lockfile included they get the exact versions you have." />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Export…" Command="{Binding Detail.ExportCommand}" />
+                                    <CheckBox Content="include exact versions"
+                                              IsChecked="{Binding Detail.ExportIncludesLock}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Detail.ExportedPath}"
+                                           IsVisible="{Binding Detail.HasExported}"
+                                           FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+                                <TextBox Text="{Binding Detail.ExportedJson}"
+                                         IsVisible="{Binding Detail.HasExported}"
+                                         IsReadOnly="True" AcceptsReturn="True" Height="120"
+                                         FontFamily="monospace" FontSize="11" />
+                            </StackPanel>
+                        </StackPanel>
+                    </TabItem>
+
+                    <TabItem Header="Log">
+                        <DockPanel LastChildFill="True" Margin="0,8,0,0">
+                            <Button DockPanel.Dock="Bottom" Content="Clear" HorizontalAlignment="Left"
+                                    Margin="0,8,0,0" Command="{Binding Detail.ClearLogCommand}" />
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding Detail.Log}" Margin="4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" FontFamily="monospace" FontSize="12" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </TabItem>
+
+                </TabControl>
+            </DockPanel>
+        </Panel>
+    </DockPanel>
+</Window>

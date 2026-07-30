@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Cairn.Core.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Cairn.Core/Cairn.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    The conformance suite compares our GameVersions port against the game's real
+    Vintagestory.API.Config.GameVersion. It only compiles when VINTAGE_STORY points at
+    an install, so a clean CI checkout still builds and runs every other test.
+    Private=true copies the DLL into the test output only; it is never redistributed.
+  -->
+  <PropertyGroup Condition="'$(VINTAGE_STORY)' != ''">
+    <DefineConstants>$(DefineConstants);HAS_GAME</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(VINTAGE_STORY)' != ''">
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

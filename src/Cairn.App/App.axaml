@@ -1,0 +1,19 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Cairn.App.App"
+             xmlns:local="using:Cairn.App"
+             Name="Cairn"
+             RequestedThemeVariant="Dark">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+        <!-- Layered over Fluent rather than replacing it: property setters keep the
+             control templates intact, so behaviour is untouched. -->
+        <StyleInclude Source="avares://cairn-launcher/Styles/VintageStory.axaml" />
+    </Application.Styles>
+</Application>

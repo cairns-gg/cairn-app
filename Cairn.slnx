@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cairn.App/Cairn.App.csproj" />
+    <Project Path="src/Cairn.Cli/Cairn.Cli.csproj" />
+    <Project Path="src/Cairn.Core/Cairn.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cairn.App.Tests/Cairn.App.Tests.csproj" />
+    <Project Path="tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj" />
+  </Folder>
+</Solution>

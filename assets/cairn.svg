@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Cairn: the stack of stones you build so you can find the exact way back.
+
+    Palette is the game's own Vintagestory.API.Client.GuiStyle, the same source the
+    launcher's theme draws from, so the icon sits next to the app rather than merely
+    near it. Stones lighten as they rise and the cap is ColorRust1 — the accent already
+    carried by the Play button and the selected tab.
+
+    Constraint that drove the shapes: this has to survive 16x16 in a Windows taskbar.
+    So the silhouette does the work — a clear taper, five stones, dark gaps wide enough
+    to still separate them when each is barely two pixels tall. Detail is layered on
+    top for the sizes that can show it, and is expendable below them.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#37291F"/>
+      <stop offset="1" stop-color="#191210"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="0.5" cy="0.60" r="0.58">
+      <stop offset="0" stop-color="#C89A5E" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#C89A5E" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="s1" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#D3B78C"/><stop offset="1" stop-color="#836A4E"/>
+    </linearGradient>
+    <linearGradient id="s2" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#DFC393"/><stop offset="1" stop-color="#927A58"/>
+    </linearGradient>
+    <linearGradient id="s3" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#E9CD9B"/><stop offset="1" stop-color="#A28560"/>
+    </linearGradient>
+    <linearGradient id="s4" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#F3D6A2"/><stop offset="1" stop-color="#B0906A"/>
+    </linearGradient>
+    <linearGradient id="s5" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#F0801F"/><stop offset="1" stop-color="#9C4108"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#glow)"/>
+
+  <!-- Grounds the stack without committing to a horizon line. -->
+  <ellipse cx="512" cy="880" rx="322" ry="27" fill="#0F0B09" opacity="0.5"/>
+
+  <!--
+    Each stone is tilted a few degrees, and no two share a width-to-height ratio, so the
+    stack looks built by hand rather than turned on a lathe. The dark outline is what
+    keeps the gaps legible once antialiasing starts merging neighbours.
+  -->
+  <g stroke="#171110" stroke-width="8">
+    <ellipse cx="512" cy="788" rx="286" ry="84" fill="url(#s1)" transform="rotate(-2.5 512 788)"/>
+    <ellipse cx="490" cy="612" rx="236" ry="74" fill="url(#s2)" transform="rotate(3.5 490 612)"/>
+    <ellipse cx="532" cy="458" rx="190" ry="68" fill="url(#s3)" transform="rotate(-4.5 532 458)"/>
+    <ellipse cx="498" cy="322" rx="146" ry="53" fill="url(#s4)" transform="rotate(6 498 322)"/>
+    <ellipse cx="520" cy="204" rx="103" ry="46" fill="url(#s5)" transform="rotate(-4 520 204)"/>
+  </g>
+
+  <!--
+    Top-lit highlights: they give the stones volume at 128px and up, and simply dissolve
+    into the fill below that, which is the correct behaviour for detail this fine.
+  -->
+  <g fill="#FFFFFF" opacity="0.20">
+    <ellipse cx="470" cy="748" rx="150" ry="26" transform="rotate(-2.5 470 748)"/>
+    <ellipse cx="452" cy="578" rx="124" ry="23" transform="rotate(3.5 452 578)"/>
+    <ellipse cx="498" cy="428" rx="100" ry="21" transform="rotate(-4.5 498 428)"/>
+    <ellipse cx="470" cy="299" rx="76"  ry="16" transform="rotate(6 470 299)"/>
+    <ellipse cx="498" cy="184" rx="54"  ry="14" transform="rotate(-4 498 184)"/>
+  </g>
+</svg>
