@@ -358,10 +358,26 @@
                             </Grid>
 
                             <Grid DockPanel.Dock="Top" Margin="0,10,0,6"
-                                  ColumnDefinitions="*,Auto">
+                                  ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
                                 <TextBlock Grid.Column="0" Text="{Binding Detail.ListHeading}"
                                            FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="← back to the pack"
+
+                                <TextBlock Grid.Column="1" Text="{Binding Detail.UpdateSummary}"
+                                           IsVisible="{Binding Detail.HasUpdateSummary}"
+                                           FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource VsParchmentBrush}" />
+
+                                <!-- Nothing moves on its own, so checking is a thing you do. -->
+                                <Button Grid.Column="2" Content="Check for updates"
+                                        IsVisible="{Binding !Detail.ShowingSearch}"
+                                        Command="{Binding Detail.CheckUpdatesCommand}"
+                                        Padding="10,3" FontSize="11" />
+                                <Button Grid.Column="3" Content="Update all" Classes="accent"
+                                        IsVisible="{Binding Detail.AnyUpdates}"
+                                        Command="{Binding Detail.UpdateAllCommand}"
+                                        Padding="10,3" FontSize="11" />
+
+                                <Button Grid.Column="4" Content="← back to the pack"
                                         IsVisible="{Binding Detail.ShowingSearch}"
                                         Command="{Binding Detail.ClearSearchCommand}"
                                         Padding="10,3" FontSize="11" />
@@ -396,6 +412,10 @@
                                                          manifest and lockfile record. -->
                                                     <TextBlock Text="{Binding ModId}" FontSize="11"
                                                                Opacity="0.55" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding InstalledVersion}"
+                                                               IsVisible="{Binding HasInstalledVersion}"
+                                                               FontSize="11" Opacity="0.75"
+                                                               VerticalAlignment="Center" />
                                                     <TextBlock Text="server-side"
                                                                IsVisible="{Binding IsServerSide}"
                                                                FontSize="11" VerticalAlignment="Center"
@@ -405,6 +425,14 @@
                                                 <TextBlock Grid.Column="2" Text="loading…" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
                                                            IsVisible="{Binding LoadingReleases}" />
+
+                                                <!-- Offered, never applied on its own. -->
+                                                <Button Grid.Column="2" Padding="10,4"
+                                                        Classes="accent"
+                                                        IsVisible="{Binding HasUpdate}"
+                                                        Command="{Binding UpdateCommand}"
+                                                        Content="{Binding UpdateNote}"
+                                                        VerticalAlignment="Center" />
 
                                                 <!-- Its versions are fetched when this is opened,
                                                      not for every row up front. -->

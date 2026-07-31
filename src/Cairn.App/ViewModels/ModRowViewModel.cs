@@ -21,6 +21,7 @@ public partial class ModRowViewModel : ViewModelBase
     private readonly Action<ModRowViewModel>? _remove;
     private readonly Action<ModRowViewModel>? _openPage;
     private readonly Action<ModRowViewModel>? _armed;
+    private readonly Action<ModRowViewModel>? _update;
 
     /// <summary>Tells "the list was refilled" apart from "the user chose something".</summary>
     private bool _settingProgrammatically;
@@ -32,7 +33,8 @@ public partial class ModRowViewModel : ViewModelBase
         Action<ModRowViewModel, string?>? pin = null,
         Action<ModRowViewModel>? remove = null,
         Action<ModRowViewModel>? openPage = null,
-        Action<ModRowViewModel>? armed = null)
+        Action<ModRowViewModel>? armed = null,
+        Action<ModRowViewModel>? update = null)
     {
         Mod = mod;
         Locked = locked;
@@ -41,6 +43,7 @@ public partial class ModRowViewModel : ViewModelBase
         _remove = remove;
         _openPage = openPage;
         _armed = armed;
+        _update = update;
 
         // Shown before the list is fetched, so the row reads correctly from the start.
         _settingProgrammatically = true;
@@ -66,10 +69,34 @@ public partial class ModRowViewModel : ViewModelBase
     /// <summary>What to call this mod: its name if known, otherwise its id.</summary>
     public string Title => string.IsNullOrWhiteSpace(Name) ? ModId : Name!;
 
-    /// <summary>"1.3.0" when pinned, otherwise "newest".</summary>
-    public string PinDisplay => Mod.Version ?? "newest";
+    /// <summary>"1.3.0" when pinned, otherwise "latest".</summary>
+    public string PinDisplay => Mod.Version ?? PackDetailViewModel.TrackNewest;
 
     public bool IsPinned => Mod.Version is not null;
+
+    /// <summary>
+    /// The version actually installed, per the lockfile. Meaningful again now that a
+    /// launch cannot silently change it: this is what you are running.
+    /// </summary>
+    public string InstalledVersion => Locked?.Version ?? "";
+
+    public bool HasInstalledVersion => Locked is not null;
+
+    /// <summary>
+    /// What this mod would move to if updated, once a check has run. Null when it is
+    /// current, pinned, or nothing has been checked.
+    /// </summary>
+    [ObservableProperty] public partial string? UpdateAvailable { get; set; }
+
+    partial void OnUpdateAvailableChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasUpdate));
+        OnPropertyChanged(nameof(UpdateNote));
+    }
+
+    public bool HasUpdate => !string.IsNullOrWhiteSpace(UpdateAvailable);
+
+    public string UpdateNote => $"→ {UpdateAvailable}";
 
     public string SideDisplay => Locked?.Side ?? "";
 
@@ -163,4 +190,7 @@ public partial class ModRowViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenPage() => _openPage?.Invoke(this);
+
+    [RelayCommand]
+    private void Update() => _update?.Invoke(this);
 }

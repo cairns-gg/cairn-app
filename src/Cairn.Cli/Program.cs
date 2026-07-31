@@ -40,6 +40,7 @@ internal static class Program
                 "games" => await Games(games, http, args),
                 "runtimes" => await Runtimes(runtimes, http, args),
                 "sync" => await Sync(store, moddb, http, args),
+                "update" => await Update(store, moddb, http, args),
                 "launch" => await LaunchPack(store, games, runtimes, moddb, http, args),
                 "-h" or "--help" or "help" => Ok(Usage),
                 _ => Fail($"unknown command '{args[0]}'"),
@@ -72,7 +73,9 @@ internal static class Program
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
               cairn-cli search <text> [--game <version>]  search ModDB
-              cairn-cli sync <id>                     resolve + download into the pack's Mods dir
+              cairn-cli sync <id>                     install what the lockfile says
+              cairn-cli update <id> [modid...]     move followed mods to their newest
+              cairn-cli update <id> --check        report updates without installing
               cairn-cli launch <id> [--dry-run] [--no-install]  sync, then start the game
 
             Packs live under $CAIRN_HOME (default ~/.cairn/packs/<id>).
@@ -212,6 +215,45 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>
+    /// Moves followed mods to their newest release. Separate from sync on purpose: sync
+    /// installs what the lock says, so launching cannot change a pack underneath a save.
+    /// </summary>
+    private static async Task<int> Update(PackStore store, ModDbClient moddb, HttpClient http, string[] args)
+    {
+        if (args.Length < 2) return Fail("usage: cairn-cli update <id> [modid...] [--check]");
+
+        var id = args[1];
+        var manifest = store.Load(id);
+        var syncer = new PackSyncer(moddb, http);
+
+        var updates = await syncer.CheckUpdatesAsync(manifest, store.LockPath(id));
+
+        if (updates.Count == 0)
+        {
+            Console.WriteLine("everything is up to date");
+            return 0;
+        }
+
+        foreach (var u in updates) Console.WriteLine($"  {u.Describe()}");
+
+        if (args.Contains("--check")) return 0;
+
+        // Named mods only, when any are named.
+        var named = args[2..].Where(a => !a.StartsWith('-')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wanted = named.Count == 0
+            ? updates.Select(u => u.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : named;
+
+        Console.WriteLine();
+        var report = await syncer.SyncAsync(
+            manifest, store.ModsDir(id), store.LockPath(id),
+            new Progress<SyncStep>(s => Console.WriteLine($"  {Describe(s)}")),
+            allowUpdates: wanted);
+
+        return report.Failed ? 1 : 0;
+    }
+
     private static async Task<int> Sync(PackStore store, ModDbClient moddb, HttpClient http, string[] args)
     {
         if (args.Length < 2) return Fail("usage: cairn-cli sync <id>");
@@ -221,25 +263,28 @@ internal static class Program
         return report.Failed ? 1 : 0;
     }
 
+    private static string Describe(SyncStep step)
+    {
+        var marker = step.Action switch
+        {
+            SyncAction.Downloaded => "+",
+            SyncAction.Updated => "^",
+            SyncAction.Removed => "-",
+            SyncAction.Unchanged => "=",
+            SyncAction.Warned => "!",
+            _ => "x",
+        };
+
+        return $"{marker} {step.ModId,-22} {step.Detail}";
+    }
+
     private static async Task<SyncReport> RunSync(PackStore store, ModDbClient moddb, HttpClient http, string id)
     {
         var manifest = store.Load(id);
         Console.WriteLine($"syncing '{id}' for game {manifest.GameVersion}");
 
         var syncer = new PackSyncer(moddb, http);
-        var progress = new Progress<SyncStep>(s =>
-        {
-            var marker = s.Action switch
-            {
-                SyncAction.Downloaded => "+",
-                SyncAction.Updated => "^",
-                SyncAction.Removed => "-",
-                SyncAction.Unchanged => "=",
-                SyncAction.Warned => "!",
-                _ => "x",
-            };
-            Console.WriteLine($"  {marker} {s.ModId,-22} {s.Detail}");
-        });
+        var progress = new Progress<SyncStep>(s => Console.WriteLine($"  {Describe(s)}"));
 
         var report = await syncer.SyncAsync(
             manifest, store.ModsDir(id), store.LockPath(id), progress);

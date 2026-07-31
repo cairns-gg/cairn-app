@@ -7,6 +7,12 @@ public enum SyncAction { Unchanged, Downloaded, Updated, Removed, Failed, Warned
 
 public sealed record SyncStep(SyncAction Action, string ModId, string Detail);
 
+/// <summary>A mod that has moved on since the pack last installed it.</summary>
+public sealed record ModUpdate(string ModId, string From, string To)
+{
+    public string Describe() => $"{ModId} {From} -> {To}";
+}
+
 public sealed record SyncReport(List<SyncStep> Steps, PackLock Lock)
 {
     public bool Failed => Steps.Any(s => s.Action == SyncAction.Failed);
@@ -22,12 +28,18 @@ public sealed record SyncReport(List<SyncStep> Steps, PackLock Lock)
 public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 {
     /// <param name="modsDir">Directory handed to the game via --addModPath.</param>
+    /// <param name="allowUpdates">
+    /// Mod ids permitted to move to a newer release. Empty by default, which is the whole
+    /// point: syncing installs what the lockfile already says, so launching cannot change
+    /// the mods underneath a save. Updating is something you ask for.
+    /// </param>
     public async Task<SyncReport> SyncAsync(
         PackManifest manifest,
         string modsDir,
         string lockPath,
         IProgress<SyncStep>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlySet<string>? allowUpdates = null)
     {
         var problems = manifest.Validate().ToList();
         if (problems.Count > 0)
@@ -49,25 +61,45 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         {
             ct.ThrowIfCancellationRequested();
 
+            var prior = previous?.Mods.FirstOrDefault(
+                m => string.Equals(m.ModId, want.ModId, StringComparison.OrdinalIgnoreCase));
+
+            // The lock decides, unless it cannot: a mod never installed, a pin that has
+            // moved, a pack retargeted at another game version, or an explicit update.
+            var mayUpdate = allowUpdates is not null && allowUpdates.Contains(want.ModId);
+            var lockApplies = prior is not null
+                              && !mayUpdate
+                              && string.Equals(previous!.GameVersion, manifest.GameVersion,
+                                  StringComparison.OrdinalIgnoreCase)
+                              && (want.Version is null || want.Version == prior.Version);
+
             ResolvedRelease? release;
-            try
+
+            if (lockApplies)
             {
-                release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, want.Version, ct).ConfigureAwait(false);
+                release = FromLock(prior!);
             }
-            catch (Exception e) when (e is ModDbException or HttpRequestException)
+            else
             {
-                Record(new SyncStep(SyncAction.Failed, want.ModId, e.Message));
-                continue;
+                try
+                {
+                    release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, want.Version, ct).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is ModDbException or HttpRequestException)
+                {
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, e.Message));
+                    continue;
+                }
+
+                if (release is null)
+                {
+                    Record(new SyncStep(SyncAction.Failed, want.ModId,
+                        $"no release marked for game {manifest.GameVersion}"));
+                    continue;
+                }
             }
 
-            if (release is null)
-            {
-                Record(new SyncStep(SyncAction.Failed, want.ModId,
-                    $"no release marked for game {manifest.GameVersion}"));
-                continue;
-            }
-
-            if (release.Quality == MatchQuality.SameMinor)
+            if (!lockApplies && release.Quality == MatchQuality.SameMinor)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
                     $"{release.ModVersion} is not marked for {manifest.GameVersion} exactly, "
                     + "only for another release in that minor series"));
@@ -77,8 +109,6 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     "ModDB marks this as server-side; installing it client-side may do nothing"));
 
             var target = Path.Combine(modsDir, release.FileName);
-            var prior = previous?.Mods.FirstOrDefault(
-                m => string.Equals(m.ModId, release.ModId, StringComparison.OrdinalIgnoreCase));
 
             var locked = new LockedMod
             {
@@ -150,6 +180,60 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
         newLock.Save(lockPath);
         return new SyncReport(steps, newLock);
+    }
+
+    /// <summary>
+    /// Treats a lock entry as a resolved release. Everything needed to install it is
+    /// already recorded, so a fully-synced pack launches without touching ModDB at all.
+    /// </summary>
+    private static ResolvedRelease FromLock(LockedMod locked) =>
+        new(locked.ModId, locked.Version, locked.FileName, locked.Url,
+            locked.ReleaseId, locked.FileId, MatchQuality.Exact, locked.Side);
+
+    /// <summary>
+    /// What each following mod would move to if updated. Mods pinned to an exact version
+    /// are skipped — a pin is an instruction to stay put, not a thing to nag about.
+    /// </summary>
+    public async Task<List<ModUpdate>> CheckUpdatesAsync(
+        PackManifest manifest,
+        string lockPath,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default)
+    {
+        var locks = PackLock.Load(lockPath);
+        var updates = new List<ModUpdate>();
+
+        foreach (var want in manifest.Mods)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (want.Version is not null) continue;
+
+            progress?.Report(want.ModId);
+
+            var installed = locks?.Mods.FirstOrDefault(
+                m => string.Equals(m.ModId, want.ModId, StringComparison.OrdinalIgnoreCase));
+
+            ResolvedRelease? newest;
+            try
+            {
+                newest = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, null, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is ModDbException or HttpRequestException)
+            {
+                continue;   // unreachable today says nothing about whether an update exists
+            }
+
+            if (newest is null) continue;
+
+            // A mod not installed yet is not an update; the next sync will fetch it.
+            if (installed is null) continue;
+
+            if (!string.Equals(installed.Version, newest.ModVersion, StringComparison.OrdinalIgnoreCase))
+                updates.Add(new ModUpdate(want.ModId, installed.Version, newest.ModVersion));
+        }
+
+        return updates;
     }
 
     private async Task DownloadAsync(string url, string target, CancellationToken ct)

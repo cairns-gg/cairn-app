@@ -318,10 +318,10 @@ public class MainWindowTests : IDisposable
         Assert.Equal("1.3.0", pinned.PinDisplay);
         Assert.Contains("1.3.0", File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json")));
 
-        // And choosing "newest" unpins it again.
+        // And choosing "latest" unpins it again.
         detail.Mods.Single(m => m.ModId == "glassview").SelectedRelease = PackDetailViewModel.TrackNewest;
 
-        Assert.Equal("newest", detail.Mods.Single(m => m.ModId == "glassview").PinDisplay);
+        Assert.Equal("latest", detail.Mods.Single(m => m.ModId == "glassview").PinDisplay);
     }
 
     [AvaloniaFact]
@@ -1003,7 +1003,7 @@ public class MainWindowTests : IDisposable
         var rebuilt = detail.Mods.Single(m => m.ModId == "glassview");
         Assert.True(rebuilt.IsPinned);
 
-        // It must read as pinned straight away, not as "newest" until someone opens it.
+        // It must read as pinned straight away, not as "latest" until someone opens it.
         Assert.Equal("1.2.0", rebuilt.SelectedRelease);
 
         await rebuilt.EnsureReleasesAsync();
@@ -1079,6 +1079,52 @@ public class MainWindowTests : IDisposable
         row.Name = "   ";
 
         Assert.Equal("glassview", row.Title);
+    }
+
+    // ---- updates are asked for, not applied ----
+
+    [AvaloniaFact]
+    public void A_pack_reports_what_is_installed_now_that_it_cannot_change_by_itself()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var row = vm.Detail!.Mods.First();
+
+        // Nothing is locked in the fixture, so there is nothing to report yet.
+        Assert.False(row.HasInstalledVersion);
+        Assert.Equal("", row.InstalledVersion);
+    }
+
+    [AvaloniaFact]
+    public void A_row_offers_an_update_only_once_one_is_known()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+        var row = detail.Mods.First();
+
+        Assert.False(row.HasUpdate);
+        Assert.False(detail.AnyUpdates);
+        Assert.False(detail.UpdateAllCommand.CanExecute(null));
+
+        // What a completed check leaves behind.
+        row.UpdateAvailable = "1.4.0";
+
+        Assert.True(row.HasUpdate);
+        Assert.Equal("→ 1.4.0", row.UpdateNote);
+    }
+
+    [AvaloniaFact]
+    public void Unpinned_now_reads_as_latest_rather_than_newest()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        // "newest" implied it would move on its own, which is exactly what it no
+        // longer does.
+        Assert.Equal("latest", vm.Detail!.Mods.First().PinDisplay);
+        Assert.Equal("latest", PackDetailViewModel.TrackNewest);
     }
 
     // ---- removing a mod ----

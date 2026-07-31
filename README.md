@@ -34,9 +34,24 @@ A **pack** is a manifest plus a lockfile plus a directory of mod zips:
 }
 ```
 
-`sync` resolves each mod against the ModDB API for `gameVersion`, downloads the matching
-release, records the exact version and SHA-256 in the lockfile, and deletes zips that are
-no longer part of the pack. Mods stay zipped — the game loads zip archives directly.
+`sync` installs **what the lockfile says**. It resolves against ModDB only when it has
+no choice: a mod never installed, a pin that has moved, or a pack retargeted at another
+game version. It records the exact version and SHA-256, and deletes zips no longer part
+of the pack. Mods stay zipped — the game loads zip archives directly.
+
+That makes launching safe. Sync runs on every **Play**, and mods break saves, so a launch
+must not be able to move a pack's mods underneath it — a settled pack syncs without
+touching the network at all. Updating is something you ask for:
+
+```
+cairn-cli update anego --check     # what would move
+cairn-cli update anego             # move all followed mods
+cairn-cli update anego olla        # move just this one
+```
+
+or **Check for updates** in the launcher, which offers each one per row and an
+**Update all**. A mod pinned to an exact version is never offered an update, because a pin
+is an instruction to stay put.
 
 `launch` syncs and then starts the game with the pack stacked on:
 
@@ -170,8 +185,9 @@ cairn-cli games install 1.22.5      download, verify md5, unpack
 cairn-cli games remove 1.22.5
 ```
 
-or the **Game versions** pane in the launcher, which is also where a pack's
-"1.21.5 is not installed" warning sends you via its **Install it** button.
+or the **Game versions** pane in the launcher, which is where installed versions are
+removed and private runtimes managed. Nothing nags about a missing version: pressing
+**Play** fetches whatever the pack needs.
 
 Versions land in `~/.cairn/games/<version>/`, so several can coexist and each pack
 launches the one its `gameVersion` names:

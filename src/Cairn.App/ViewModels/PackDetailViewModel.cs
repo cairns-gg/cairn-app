@@ -296,6 +296,8 @@ public partial class PackDetailViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
+        CheckUpdatesCommand.NotifyCanExecuteChanged();
+        UpdateAllCommand.NotifyCanExecuteChanged();
         SearchCommand.NotifyCanExecuteChanged();
         SaveSettingsCommand.NotifyCanExecuteChanged();
         DeletePackCommand.NotifyCanExecuteChanged();
@@ -324,7 +326,8 @@ public partial class PackDetailViewModel : ViewModelBase
                 pin: ApplyPin,
                 remove: RemoveRow,
                 openPage: OpenModPage,
-                armed: DisarmOtherRows));
+                armed: DisarmOtherRows,
+                update: UpdateOne));
         }
 
         OnPropertyChanged(nameof(Subtitle));
@@ -554,6 +557,97 @@ public partial class PackDetailViewModel : ViewModelBase
         _log($"added {hit.ModId}");
     }
 
+    // ---- updates ----
+
+    /// <summary>Set while a check is running, so the button can say so.</summary>
+    [ObservableProperty] public partial bool CheckingUpdates { get; set; }
+
+    [ObservableProperty] public partial string? UpdateSummary { get; set; }
+
+    public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummary);
+
+    partial void OnUpdateSummaryChanged(string? value) => OnPropertyChanged(nameof(HasUpdateSummary));
+
+    public bool AnyUpdates => Mods.Any(m => m.HasUpdate);
+
+    /// <summary>
+    /// Asks ModDB what each followed mod would move to. Reports only — nothing is
+    /// installed until it is asked for, one mod or all.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotBusy))]
+    private async Task CheckUpdates()
+    {
+        CheckingUpdates = true;
+        Error = null;
+
+        try
+        {
+            var syncer = new PackSyncer(_moddb, _http);
+            var updates = await syncer.CheckUpdatesAsync(Manifest, _store.LockPath(Id));
+
+            foreach (var row in Mods)
+                row.UpdateAvailable = updates
+                    .FirstOrDefault(u => string.Equals(u.ModId, row.ModId, StringComparison.OrdinalIgnoreCase))
+                    ?.To;
+
+            UpdateSummary = updates.Count == 0
+                ? "Everything is up to date."
+                : $"{updates.Count} update{(updates.Count == 1 ? "" : "s")} available.";
+
+            foreach (var u in updates) _log($"update available: {u.Describe()}");
+            OnPropertyChanged(nameof(AnyUpdates));
+            UpdateAllCommand.NotifyCanExecuteChanged();
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            CheckingUpdates = false;
+        }
+    }
+
+    private void UpdateOne(ModRowViewModel row) => _ = ApplyUpdatesAsync([row.ModId]);
+
+    [RelayCommand(CanExecute = nameof(CanUpdateAll))]
+    private async Task UpdateAll() =>
+        await ApplyUpdatesAsync([.. Mods.Where(m => m.HasUpdate).Select(m => m.ModId)]);
+
+    private bool CanUpdateAll => !IsBusy && AnyUpdates;
+
+    /// <summary>Installs the named mods' newest releases and records them in the lock.</summary>
+    private async Task ApplyUpdatesAsync(IReadOnlyCollection<string> modIds)
+    {
+        if (modIds.Count == 0) return;
+
+        IsBusy = true;
+        Error = null;
+
+        try
+        {
+            var syncer = new PackSyncer(_moddb, _http);
+            var progress = new Progress<SyncStep>(s => _log(Format(s)));
+
+            var report = await syncer.SyncAsync(
+                Manifest, _store.ModsDir(Id), _store.LockPath(Id), progress,
+                allowUpdates: new HashSet<string>(modIds, StringComparer.OrdinalIgnoreCase));
+
+            if (report.Failed) Error = "Some mods could not be updated — see the log.";
+            UpdateSummary = null;
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+            ReloadMods();
+            OnPropertyChanged(nameof(AnyUpdates));
+        }
+    }
+
     /// <summary>Only one row may be asking at a time, so a stray Enter cannot hit two.</summary>
     private void DisarmOtherRows(ModRowViewModel armed)
     {
@@ -605,8 +699,12 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     private readonly Dictionary<string, List<string>> _releaseCache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The choice that means "do not pin; take whatever is newest".</summary>
-    public const string TrackNewest = "newest";
+    /// <summary>
+    /// The choice that means "not pinned". It no longer means "silently move to whatever
+    /// is newest on every launch" — following a mod means it is offered for update when
+    /// you check, not that it changes underneath you.
+    /// </summary>
+    public const string TrackNewest = "latest";
 
     /// <summary>
     /// Builds a result row wired to this pack, exactly as a search does. Exists so tests

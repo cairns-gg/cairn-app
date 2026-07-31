@@ -186,6 +186,12 @@ public class ThemeTests : IDisposable
 
         Shot("01-pack");
 
+        // What a completed update check leaves behind.
+        vm.Detail!.Mods.First().UpdateAvailable = "1.4.0";
+        vm.Detail.UpdateSummary = "1 update available.";
+        Shot("11-updates");
+        vm.Detail.Mods.First().UpdateAvailable = null;
+        vm.Detail.UpdateSummary = null;
 
         // Search results, with icons standing in for ModDB's. Real ones are 480x480 PNGs
         // decoded down on the way in; these come from the app's own icon so the shot shows
