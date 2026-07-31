@@ -57,7 +57,77 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             progress?.Report(step);
         }
 
-        foreach (var want in manifest.Mods)
+        // Dependencies live inside the zip, so the full set is not known until things have
+        // been downloaded. The queue is seeded from the manifest and grows as each mod's
+        // modinfo.json is read; `seen` both dedupes and terminates it, including for two
+        // libraries that declare each other.
+        var queue = new Queue<PendingMod>(
+            manifest.Mods.Select(m => new PendingMod(m.ModId, m.Version)));
+        var seen = new HashSet<string>(
+            manifest.Mods.Select(m => m.ModId), StringComparer.OrdinalIgnoreCase);
+
+        // Accumulated rather than written straight onto the lock entry, because a library
+        // can be pulled in by several mods and is only discovered as each is processed.
+        var requiredBy = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // Which mods may move. Seeded with what the caller asked to update, then inherited
+        // by dependencies: updating carryon is meaningless if carryonlib stays behind, and
+        // the newer mod is usually the reason the newer library is needed at all. Read at
+        // dequeue rather than at enqueue, so a second requirer that turns up while the
+        // library is still queued can still free it to move.
+        var movable = new HashSet<string>(
+            allowUpdates ?? (IEnumerable<string>)[], StringComparer.OrdinalIgnoreCase);
+
+        while (queue.Count > 0)
+        {
+            var pending = queue.Dequeue();
+            var installed = await InstallAsync(pending, movable.Contains(pending.ModId))
+                .ConfigureAwait(false);
+            if (installed is null) continue;
+
+            var carriesUpdates = movable.Contains(pending.ModId);
+
+            foreach (var dep in ModDependencies.Read(installed))
+            {
+                if (!requiredBy.TryGetValue(dep, out var wanters))
+                    requiredBy[dep] = wanters = [];
+
+                if (!wanters.Contains(pending.ModId, StringComparer.OrdinalIgnoreCase))
+                    wanters.Add(pending.ModId);
+
+                if (carriesUpdates) movable.Add(dep);
+                if (seen.Add(dep)) queue.Enqueue(new PendingMod(dep, null, pending.ModId));
+            }
+        }
+
+        // A mod the manifest names is not "required by" anything, however many other mods
+        // also happen to want it — it is there because the pack asked for it.
+        var direct = manifest.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var locked in newLock.Mods)
+        {
+            if (direct.Contains(locked.ModId)) continue;
+            if (requiredBy.TryGetValue(locked.ModId, out var wanters) && wanters.Count > 0)
+                locked.RequiredBy = [.. wanters.Order(StringComparer.OrdinalIgnoreCase)];
+        }
+
+        // Anything in the directory we did not just account for is no longer part of
+        // the pack. Only touch .zip files so a hand-dropped folder mod is left alone.
+        var keep = newLock.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var stray in Directory.EnumerateFiles(modsDir, "*.zip"))
+        {
+            if (keep.Contains(Path.GetFileName(stray))) continue;
+            File.Delete(stray);
+            Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray), "no longer in pack"));
+        }
+
+        newLock.Save(lockPath);
+        return new SyncReport(steps, newLock);
+
+        // Installs one mod and returns where it landed, or null if it did not. Returning
+        // the path is what lets the caller read its dependencies — which has to happen for
+        // an already-installed mod too, or removing a mod would never reveal that the
+        // library it pulled in has become an orphan.
+        async Task<string?> InstallAsync(PendingMod want, bool mayUpdate)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -66,7 +136,6 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
             // The lock decides, unless it cannot: a mod never installed, a pin that has
             // moved, a pack retargeted at another game version, or an explicit update.
-            var mayUpdate = allowUpdates is not null && allowUpdates.Contains(want.ModId);
             var lockApplies = prior is not null
                               && !mayUpdate
                               && string.Equals(previous!.GameVersion, manifest.GameVersion,
@@ -98,15 +167,15 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 }
                 catch (Exception e) when (e is ModDbException or HttpRequestException)
                 {
-                    Record(new SyncStep(SyncAction.Failed, want.ModId, e.Message));
-                    continue;
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, e.Message)));
+                    return null;
                 }
 
                 if (release is null)
                 {
-                    Record(new SyncStep(SyncAction.Failed, want.ModId,
-                        $"no release marked for game {manifest.GameVersion}"));
-                    continue;
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want,
+                        $"no release marked for game {manifest.GameVersion}")));
+                    return null;
                 }
             }
 
@@ -127,7 +196,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId,
                     $"refusing a mod filename that is not a plain file name: '{release.FileName}'"));
-                continue;
+                return null;
             }
 
             var target = Path.Combine(modsDir, safeName);
@@ -154,7 +223,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 locked.Sha256 = prior!.Sha256;
                 newLock.Mods.Add(locked);
                 Record(new SyncStep(SyncAction.Unchanged, release.ModId, release.ModVersion));
-                continue;
+                return target;
             }
 
             try
@@ -173,7 +242,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     File.Delete(target);
                     Record(new SyncStep(SyncAction.Failed, release.ModId,
                         $"{release.ModVersion} does not match the locked checksum — refusing it"));
-                    continue;
+                    return null;
                 }
 
                 newLock.Mods.Add(locked);
@@ -183,26 +252,27 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     ? release.ModVersion
                     : $"{prior.Version} -> {release.ModVersion}";
                 Record(new SyncStep(action, release.ModId, detail));
+                return target;
             }
             catch (Exception e) when (e is HttpRequestException or IOException)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId, e.Message));
+                return null;
             }
         }
 
-        // Anything in the directory we did not just account for is no longer part of
-        // the pack. Only touch .zip files so a hand-dropped folder mod is left alone.
-        var keep = newLock.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var stray in Directory.EnumerateFiles(modsDir, "*.zip"))
-        {
-            if (keep.Contains(Path.GetFileName(stray))) continue;
-            File.Delete(stray);
-            Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray), "no longer in pack"));
-        }
-
-        newLock.Save(lockPath);
-        return new SyncReport(steps, newLock);
+        // A mod nobody asked for, failing by its id alone, is a puzzle: the user has never
+        // heard of it. Naming who wanted it turns the message into something actionable.
+        string Explain(PendingMod want, string message) =>
+            want.RequiredBy is null ? message : $"{message} (required by {want.RequiredBy})";
     }
+
+    /// <summary>
+    /// A mod waiting to be installed: from the manifest, or discovered inside another mod's
+    /// <c>modinfo.json</c>. A dependency carries no version — the declared one is a minimum
+    /// rather than a pin, so it is not something to resolve against.
+    /// </summary>
+    private sealed record PendingMod(string ModId, string? Version, string? RequiredBy = null);
 
     /// <summary>
     /// The bare filename, or null if it is not one. Rejects rather than sanitises, so a

@@ -91,6 +91,13 @@ public sealed class LockedMod
     [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
 
     [JsonPropertyName("side")] public string? Side { get; set; }
+
+    /// <summary>
+    /// The mods that pulled this one in, when the manifest did not name it directly.
+    /// Null for a mod the pack asked for itself — the common case, where an empty list
+    /// would just be noise in a file people read.
+    /// </summary>
+    [JsonPropertyName("requiredBy")] public List<string>? RequiredBy { get; set; }
 }
 
 /// <summary>
