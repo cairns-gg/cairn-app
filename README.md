@@ -121,10 +121,16 @@ required:
   this is a bigger change than it looks: it can move several mods at once, or leave one
   behind entirely.
 
-  A downgrade additionally warns about the pack's own worlds, since Vintage Story upgrades
-  a save when a newer build opens it and will not open one saved by a newer build. Mods
-  that ModDB could not be asked about are reported as *could not be checked* rather than
-  as working — a preview is worth nothing if it guesses.
+  A downgrade additionally warns about the pack's own worlds. The game is more forgiving
+  here than it first appears — opening a save that a newer build touched produces a
+  warning, `"versionmismatch-savegame": "Was opened in a newer version of the game, might
+  not load correctly"`, not a refusal. The one-way step is the *file format* upgrade, which
+  prompts separately ("This world uses an old file format that needs upgrading … It is
+  also suggested to first back up your savegame") and is keyed on
+  `GameVersion.DatabaseVersion` rather than the version string. That number is still `2`
+  and has not moved once in this source history, so it is a rare event and not something a
+  patch-level change brings on. Mods that ModDB could not be asked about are reported as
+  *could not be checked* rather than as working — a preview is worth nothing if it guesses.
 - **Log** tab — what Cairn did, plus the game's own log. **Game log** pulls the tail of
   `client-main.log` into the pane and **Open logs folder** opens the directory, because
   when the game closes on startup the answer is in its log and nobody should have to know
@@ -174,8 +180,8 @@ In the launcher: **Import…** in the sidebar (paste the file, or a URL), and **
 a pack's Settings tab.
 
 Including the lock is what makes a shared pack *reproducible* rather than merely similar.
-On import each mod is pinned to the version the author had, and the author's checksums
-travel with it, so the first sync verifies the recipient got identical bytes:
+The author's lock travels with the pack and their checksums with it, so the first sync
+installs their exact versions and verifies the recipient got identical bytes:
 
 ```
 $ cairn-cli sync anego          # lock says a checksum that does not match what downloaded
@@ -185,6 +191,13 @@ $ cairn-cli sync anego          # lock says a checksum that does not match what 
 Verified end to end: an exported pack imported into a clean Cairn home produced
 byte-identical files (matching SHA-256 for every mod), and a deliberately altered
 checksum was refused rather than installed.
+
+The lock does that job alone, so import leaves the manifest as the author wrote it. Mods
+they deliberately pinned arrive pinned — a pin is transmitted intent — and the rest arrive
+*followed*: installed at the author's exact version, still offered updates later. Writing
+the lock's versions into the manifest instead would pin everything, and a pinned mod is
+never offered an update, so every imported pack would be frozen the day it landed.
+`--loose` is the opposite choice, and discards the lock as well as the pins.
 
 Both front-ends mutate packs only through `PackStore`, so validation cannot be bypassed
 by using one instead of the other — including on import, where a hostile `id` like
