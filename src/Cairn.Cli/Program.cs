@@ -71,7 +71,7 @@ internal static class Program
               cairn-cli runtimes                      list .NET runtimes Cairn manages
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
-              cairn-cli search <text>                 search ModDB
+              cairn-cli search <text> [--game <version>]  search ModDB
               cairn-cli sync <id>                     resolve + download into the pack's Mods dir
               cairn-cli launch <id> [--dry-run] [--no-install]  sync, then start the game
 
@@ -177,22 +177,37 @@ internal static class Program
 
     private static async Task<int> Search(ModDbClient moddb, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli search <text>");
+        if (args.Length < 2) return Fail("usage: cairn-cli search <text> [--game <version>]");
 
-        var query = string.Join(' ', args[1..]);
-        var results = await moddb.SearchRankedAsync(query);
+        // Defaults to the installed game, so results say what would actually install.
+        var gameVersion = ArgValue(args, "--game") ?? GameInstall.TryLocate()?.Version;
+        if (gameVersion is "unknown") gameVersion = null;
+
+        var words = args[1..].Where(a => a != "--game" && a != gameVersion).ToArray();
+        var query = string.Join(' ', words);
+
+        var results = await moddb.SearchRankedAsync(query, gameVersion);
         if (results.Count == 0) { Console.WriteLine("no results"); return 0; }
 
         if (results.Count > 20)
             Console.WriteLine($"{results.Count} results — showing the closest 20");
 
-        foreach (var m in results.Take(20))
+        foreach (var r in results.Take(20))
         {
+            var m = r.Mod;
             var idStr = m.ModIdStrs.FirstOrDefault() ?? "?";
-            Console.WriteLine($"  {idStr,-24} {m.Side,-7} {m.Downloads,7:N0} dl  {m.Name}");
+
+            // Listed rather than dropped: knowing a mod exists but has no release yet is
+            // more useful than it silently missing from the results.
+            var mark = r.Compatible ? " " : "!";
+
+            Console.WriteLine($"{mark} {idStr,-24} {m.Side,-7} {m.Downloads,7:N0} dl  {m.Name}");
             if (!string.IsNullOrWhiteSpace(m.Summary))
                 Console.WriteLine($"  {"",-24} {Truncate(m.Summary, 76)}");
         }
+
+        if (gameVersion is not null && results.Any(r => !r.Compatible))
+            Console.WriteLine($"\n  ! = no release for game {gameVersion}");
 
         return 0;
     }

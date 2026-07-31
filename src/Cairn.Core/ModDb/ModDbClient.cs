@@ -29,11 +29,27 @@ public sealed record ResolvedRelease(
 
 public sealed class ModDbException(string message) : Exception(message);
 
+/// <summary>
+/// A search result, and whether it has a release the pack's game version can use.
+///
+/// Both are reported rather than the incompatible ones being dropped: "this mod exists
+/// but has no 1.22.x release yet" is useful, and silently missing results just move the
+/// confusion somewhere harder to see.
+/// </summary>
+public sealed record ModSearchResult(ModDbSearchEntry Mod, bool Compatible);
+
 public sealed class ModDbClient(HttpClient http)
 {
     private const string ApiBase = "https://mods.vintagestory.at/api";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// The site's game-version list, fetched once per process. It is 245 entries that
+    /// change only when the game ships a release, so re-fetching it per search would be
+    /// pure waste.
+    /// </summary>
+    private IReadOnlyList<ModDbGameVersion>? _gameVersions;
 
     public async Task<ModDbMod> GetModAsync(string modId, CancellationToken ct = default)
     {
@@ -48,11 +64,70 @@ public sealed class ModDbClient(HttpClient http)
         return resp.Mod;
     }
 
-    public async Task<List<ModDbSearchEntry>> SearchAsync(string text, CancellationToken ct = default)
+    /// <summary>Every game version ModDB knows, with the tag ids searching by version needs.</summary>
+    public async Task<IReadOnlyList<ModDbGameVersion>> GetGameVersionsAsync(CancellationToken ct = default)
     {
-        var resp = await http.GetFromJsonAsync<ModDbSearchResponse>(
-                $"{ApiBase}/mods?text={Uri.EscapeDataString(text)}", Json, ct)
+        if (_gameVersions is not null) return _gameVersions;
+
+        var resp = await http.GetFromJsonAsync<ModDbGameVersionsResponse>(
+            $"{ApiBase}/gameversions", Json, ct).ConfigureAwait(false);
+
+        return _gameVersions = resp?.GameVersions ?? [];
+    }
+
+    /// <summary>
+    /// Tag ids for every version sharing <paramref name="gameVersion"/>'s major.minor.
+    ///
+    /// Deliberately the whole minor rather than the exact patch. The engine ships patch
+    /// releases that rarely break anything, so most mods are marked for x.y.0 and never
+    /// re-tagged — measured against the live API, filtering "olla" to exactly 1.22.5 gave
+    /// 49 results where the full 1.22.x range gave 248, and Cairn installs every one of
+    /// those 248 quite happily. This is the same rule Classify already applies when
+    /// resolving a release, so search and install agree.
+    /// </summary>
+    public async Task<IReadOnlyList<long>> GameVersionTagsForMinorAsync(
+        string gameVersion, CancellationToken ct = default)
+    {
+        var all = await GetGameVersionsAsync(ct).ConfigureAwait(false);
+
+        return all.Where(v => IsSameMinor(v.Name, gameVersion))
+            .Select(v => v.TagId)
+            .ToList();
+    }
+
+    private static bool IsSameMinor(string candidate, string gameVersion)
+    {
+        try
+        {
+            return GameVersions.IsSameMajorMinor(candidate, gameVersion);
+        }
+        catch (ArgumentNullException)
+        {
+            return false;   // an empty name in the list; not a match for anything
+        }
+    }
+
+    /// <summary>
+    /// Text search, optionally restricted to mods with a release for
+    /// <paramref name="gameVersion"/>'s minor.
+    /// </summary>
+    public async Task<List<ModDbSearchEntry>> SearchAsync(
+        string text, string? gameVersion = null, CancellationToken ct = default)
+    {
+        var query = $"{ApiBase}/mods?text={Uri.EscapeDataString(text)}";
+
+        if (gameVersion is not null)
+        {
+            var tags = await GameVersionTagsForMinorAsync(gameVersion, ct).ConfigureAwait(false);
+
+            // No tags means the version is unknown to ModDB. Searching unfiltered beats
+            // sending no tags, which the API answers with everything anyway.
+            foreach (var tag in tags) query += $"&gameversions[]={tag}";
+        }
+
+        var resp = await http.GetFromJsonAsync<ModDbSearchResponse>(query, Json, ct)
             .ConfigureAwait(false);
+
         return resp?.Mods ?? [];
     }
 
@@ -64,20 +139,43 @@ public sealed class ModDbClient(HttpClient http)
     /// entirely — the mod actually called Olla comes back 194th. Ranking has to happen
     /// here.
     /// </summary>
-    public async Task<List<ModDbSearchEntry>> SearchRankedAsync(
-        string text, CancellationToken ct = default)
+    public async Task<List<ModSearchResult>> SearchRankedAsync(
+        string text, string? gameVersion = null, CancellationToken ct = default)
     {
         var query = text.Trim();
-        var ranked = Rank(await SearchAsync(query, ct).ConfigureAwait(false), query);
+
+        // Two searches rather than one: the same query filtered to the game version, and
+        // unfiltered. The difference between them is exactly the set of mods with no
+        // usable release, which the per-result API does not otherwise tell us — and it
+        // costs two requests instead of one lookup per result.
+        var all = SearchAsync(query, null, ct);
+        var usable = gameVersion is null ? null : SearchAsync(query, gameVersion, ct);
+
+        var entries = await all.ConfigureAwait(false);
+        var compatibleIds = usable is null
+            ? null
+            : (await usable.ConfigureAwait(false)).Select(m => m.AssetId).ToHashSet();
+
+        bool IsCompatible(ModDbSearchEntry m) => compatibleIds is null || compatibleIds.Contains(m.AssetId);
+
+        var ranked = Rank(entries, query)
+            .Select(m => new ModSearchResult(m, IsCompatible(m)))
+            // Usable first, and within each group the relevance order Rank already chose.
+            .OrderBy(r => r.Compatible ? 0 : 1)
+            .ToList();
 
         // A mod may exist under exactly this id and still be missing from the text
         // results, so confirm directly rather than reporting "no results".
-        if (!ranked.Any(r => HasExactId(r, query)))
+        if (!ranked.Any(r => HasExactId(r.Mod, query)))
         {
             try
             {
                 var mod = await GetModAsync(query, ct).ConfigureAwait(false);
-                ranked.Insert(0, AsSearchEntry(mod, query));
+                var compatible = gameVersion is null || HasReleaseFor(mod, gameVersion);
+
+                // Named directly, so it goes to the top of its group either way.
+                ranked.Insert(compatible ? 0 : ranked.Count,
+                    new ModSearchResult(AsSearchEntry(mod, query), compatible));
             }
             catch (Exception e) when (e is ModDbException or HttpRequestException)
             {
@@ -87,6 +185,10 @@ public sealed class ModDbClient(HttpClient http)
 
         return ranked;
     }
+
+    /// <summary>Whether any release of the mod is usable on that game version.</summary>
+    public static bool HasReleaseFor(ModDbMod mod, string gameVersion) =>
+        mod.Releases.Any(r => Classify(r, gameVersion) is not null);
 
     /// <summary>Best match first. Pure, so the ordering is testable without network.</summary>
     public static List<ModDbSearchEntry> Rank(IEnumerable<ModDbSearchEntry> results, string query) =>

@@ -13,21 +13,22 @@ using Cairn.Core.Packs;
 namespace Cairn.App.ViewModels;
 
 /// <summary>A ModDB search hit, offered for adding to the pack.</summary>
-public partial class SearchHitViewModel(ModDbSearchEntry entry) : ViewModelBase
+public partial class SearchHitViewModel(ModSearchResult result, string versionRange) : ViewModelBase
 {
-    public string ModId { get; } = entry.ModIdStrs.FirstOrDefault() ?? "";
-    public string Name { get; } = entry.Name;
-    public string Summary { get; } = entry.Summary ?? "";
-    public string Side { get; } = entry.Side ?? "";
-    public string Downloads { get; } = $"{entry.Downloads:N0} downloads";
-    public string Author { get; } = string.IsNullOrWhiteSpace(entry.Author) ? "" : $"by {entry.Author}";
-    public string Tags { get; } = string.Join(" · ", entry.Tags);
+    private static ModDbSearchEntry Entry(ModSearchResult r) => r.Mod;
+    public string ModId { get; } = Entry(result).ModIdStrs.FirstOrDefault() ?? "";
+    public string Name { get; } = Entry(result).Name;
+    public string Summary { get; } = Entry(result).Summary ?? "";
+    public string Side { get; } = Entry(result).Side ?? "";
+    public string Downloads { get; } = $"{Entry(result).Downloads:N0} downloads";
+    public string Author { get; } = string.IsNullOrWhiteSpace(Entry(result).Author) ? "" : $"by {Entry(result).Author}";
+    public string Tags { get; } = string.Join(" · ", Entry(result).Tags);
 
     /// <summary>Where the icon lives on the CDN; null for the roughly one mod in ten with none.</summary>
-    public string? LogoUrl { get; } = entry.Logo;
+    public string? LogoUrl { get; } = Entry(result).Logo;
 
     /// <summary>The mod's own page, for reading the description, screenshots and comments.</summary>
-    public string? PageUrl { get; } = ModDbUrls.Page(entry);
+    public string? PageUrl { get; } = ModDbUrls.Page(Entry(result));
 
     public bool HasPage => PageUrl is not null;
 
@@ -41,8 +42,23 @@ public partial class SearchHitViewModel(ModDbSearchEntry entry) : ViewModelBase
 
     public bool HasIcon => Icon is not null;
 
-    /// <summary>ModDB occasionally returns entries with no string id; those cannot be added.</summary>
-    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId);
+    /// <summary>
+    /// Whether this mod has a release the pack's game version can use. Shown rather than
+    /// hidden — knowing a mod exists but has not been updated yet is worth more than a
+    /// shorter list, and it explains why it cannot be added.
+    /// </summary>
+    public bool Compatible { get; } = result.Compatible;
+
+    public bool Incompatible => !Compatible;
+
+    /// <summary>Says which version it is missing, not just that something is wrong.</summary>
+    public string NoReleaseNote { get; } = $"no {versionRange} release";
+
+    /// <summary>
+    /// Addable only if ModDB gave it a string id — some entries have none — and it has a
+    /// release that would actually install.
+    /// </summary>
+    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && Compatible;
 }
 
 /// <summary>
@@ -125,6 +141,19 @@ public partial class PackDetailViewModel : ViewModelBase
     [ObservableProperty] public partial string EditConnect { get; set; }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
+
+    /// <summary>
+    /// The versions a mod may be marked for and still install here, e.g. "1.22.x" — the
+    /// whole minor, since that is what Cairn accepts when resolving a release.
+    /// </summary>
+    public string CompatibleVersionRange
+    {
+        get
+        {
+            var parts = Manifest.GameVersion.Split('.');
+            return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}.x" : Manifest.GameVersion;
+        }
+    }
 
     [ObservableProperty] public partial SearchHitViewModel? SelectedHit { get; set; }
     [ObservableProperty] public partial ModRowViewModel? SelectedMod { get; set; }
@@ -321,8 +350,9 @@ public partial class PackDetailViewModel : ViewModelBase
         try
         {
             var generation = ++_searchGeneration;
-            var hits = await _moddb.SearchRankedAsync(SearchText.Trim());
-            foreach (var h in hits.Take(60)) SearchHits.Add(new SearchHitViewModel(h));
+            var hits = await _moddb.SearchRankedAsync(SearchText.Trim(), Manifest.GameVersion);
+            foreach (var h in hits.Take(60))
+                SearchHits.Add(new SearchHitViewModel(h, CompatibleVersionRange));
 
             // Deliberately not awaited: the results should appear at once, with icons
             // filling in as they arrive rather than the list waiting on sixty downloads.

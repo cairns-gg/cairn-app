@@ -130,8 +130,13 @@ public class ThemeTests : IDisposable
     }
 
     private static SearchHitViewModel Hit(
-        string modId, string name, string summary, Avalonia.Media.Imaging.Bitmap? icon)
-        => new(Entry(modId, name, summary)) { Icon = icon };
+        string modId, string name, string summary, Avalonia.Media.Imaging.Bitmap? icon,
+        bool compatible = true)
+    {
+        var hit = new SearchHitViewModel(
+            new ModSearchResult(Entry(modId, name, summary), compatible), "1.22.x") { Icon = icon };
+        return hit;
+    }
 
     private static ModDbSearchEntry Entry(string modId, string name, string summary) => new()
     {
@@ -178,6 +183,7 @@ public class ThemeTests : IDisposable
                 Hit("olla", "Olla", "Ancient irrigation for your farmland", icon),
                 Hit("glassview", "Glassview", "See through your glass blocks", icon),
                 Hit("unchisel", "unchisel", "Put chiselled blocks back the way they were", null),
+                Hit("ancientmod", "Ancient Mod", "Not updated since 1.19", null, compatible: false),
             };
 
             var tabControl = window.GetVisualDescendants().OfType<TabControl>().First();

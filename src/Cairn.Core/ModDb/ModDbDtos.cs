@@ -52,6 +52,21 @@ public sealed class ModDbRelease
     [JsonPropertyName("tags")] public List<string> Tags { get; set; } = [];
 }
 
+/// <summary>One game version as ModDB knows it; searching by version needs its tag id.</summary>
+public sealed class ModDbGameVersion
+{
+    /// <summary>A large negative number in practice, hence long rather than int.</summary>
+    [JsonPropertyName("tagid")] public long TagId { get; set; }
+
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+}
+
+public sealed class ModDbGameVersionsResponse
+{
+    [JsonPropertyName("statuscode")] public string? StatusCode { get; set; }
+    [JsonPropertyName("gameversions")] public List<ModDbGameVersion> GameVersions { get; set; } = [];
+}
+
 public sealed class ModDbSearchResponse
 {
     [JsonPropertyName("statuscode")] public string? StatusCode { get; set; }

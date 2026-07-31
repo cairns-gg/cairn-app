@@ -420,6 +420,16 @@
                                                                VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Author}" FontSize="11" Opacity="0.5"
                                                                VerticalAlignment="Center" />
+                                                    <!-- Listed but not addable, so "why can
+                                                         I not find X" never comes up. -->
+                                                    <Border IsVisible="{Binding Incompatible}"
+                                                            Background="{DynamicResource VsWarningFillBrush}"
+                                                            BorderBrush="{DynamicResource VsWarningBrush}"
+                                                            BorderThickness="1" CornerRadius="1"
+                                                            Padding="5,1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding NoReleaseNote}" FontSize="10"
+                                                                   Foreground="{DynamicResource VsWarningBrush}" />
+                                                    </Border>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7"
                                                            TextTrimming="CharacterEllipsis" />

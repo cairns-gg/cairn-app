@@ -70,8 +70,11 @@ public class MainWindowTests : IDisposable
             .GroupBy(b => (string)b.Content!)
             .ToDictionary(g => g.Key, g => g.First());
 
-    private static SearchHitViewModel Hit(string modId, string name) =>
-        new(new ModDbSearchEntry { Name = name, ModIdStrs = [modId], Side = "client", Downloads = 1 });
+    private static SearchHitViewModel Hit(string modId, string name, bool compatible = true) =>
+        new(new ModSearchResult(
+                new ModDbSearchEntry { Name = name, ModIdStrs = [modId], Side = "client", Downloads = 1 },
+                compatible),
+            "1.22.x");
 
     // ---- listing ----
 
@@ -965,16 +968,66 @@ public class MainWindowTests : IDisposable
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
     }
 
+    // ---- searching for what will actually install ----
+
+    [AvaloniaFact]
+    public void The_range_that_counts_as_compatible_is_the_whole_minor()
+    {
+        var (_, vm) = Show();
+
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");        // 1.22.5
+        Assert.Equal("1.22.x", vm.Detail!.CompatibleVersionRange);
+
+        // A mod marked for 1.21.0 installs fine on 1.21.5, so the range says so.
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "old-pack");     // 1.21.5
+        Assert.Equal("1.21.x", vm.Detail!.CompatibleVersionRange);
+    }
+
+    [AvaloniaFact]
+    public void A_mod_with_no_usable_release_is_shown_but_cannot_be_added()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var stale = FullHit("ancientmod", "Ancient Mod", 999, compatible: false);
+
+        // Listed rather than hidden — "why can I not find X" is worse than seeing why.
+        Assert.True(stale.Incompatible);
+        Assert.False(stale.CanAdd);
+        Assert.Equal("no 1.22.x release", stale.NoReleaseNote);
+
+        detail.SelectedHit = stale;
+        Assert.False(detail.AddSelectedCommand.CanExecute(null));
+
+        // ...and one that is usable still can be.
+        detail.SelectedHit = FullHit("olla", "Olla", 34157, "olla");
+        Assert.True(detail.AddSelectedCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void An_incompatible_result_still_links_to_its_page()
+    {
+        // Following it to ModDB is exactly what you would want to do next.
+        var stale = FullHit("ancientmod", "Ancient Mod", 999, compatible: false);
+
+        Assert.True(stale.HasPage);
+        Assert.Equal("https://mods.vintagestory.at/show/mod/999", stale.PageUrl);
+    }
+
     // ---- browsing ModDB ----
 
     private static SearchHitViewModel FullHit(string modId, string name, int assetId,
-        string? alias = null, string? logo = null) =>
-        new(new ModDbSearchEntry
-        {
-            Name = name, ModIdStrs = [modId], Side = "client", Downloads = 2172,
-            Author = "dizzyd", AssetId = assetId, UrlAlias = alias, Logo = logo,
-            Tags = ["Technology", "QoL"], Summary = "Ancient irrigation technology",
-        });
+        string? alias = null, string? logo = null, bool compatible = true) =>
+        new(new ModSearchResult(
+                new ModDbSearchEntry
+                {
+                    Name = name, ModIdStrs = [modId], Side = "client", Downloads = 2172,
+                    Author = "dizzyd", AssetId = assetId, UrlAlias = alias, Logo = logo,
+                    Tags = ["Technology", "QoL"], Summary = "Ancient irrigation technology",
+                },
+                compatible),
+            "1.22.x");
 
     [AvaloniaFact]
     public void A_result_knows_where_its_page_and_icon_live()
