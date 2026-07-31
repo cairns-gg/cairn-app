@@ -69,7 +69,8 @@ required:
 - **Add mods** tab — search ModDB and add a result to the pack.
 - **Settings** tab — rename, retarget the game version, change or clear the server, or
   delete the pack.
-- **Play** syncs and launches; **Sync only** just reconciles the mod directory.
+- **Play** syncs the mod directory and then launches. It is the only button that
+  needs pressing; `cairn-cli sync` exists for reconciling without starting the game.
 
 ```bash
 dotnet run --project src/Cairn.App

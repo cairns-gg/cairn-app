@@ -132,7 +132,6 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(PlayLabel));
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
-        SyncCommand.NotifyCanExecuteChanged();
     }
 
     public bool HasExported => !string.IsNullOrEmpty(ExportedPath);
@@ -171,7 +170,6 @@ public partial class PackDetailViewModel : ViewModelBase
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(CanLaunch));
-        SyncCommand.NotifyCanExecuteChanged();
         PlayCommand.NotifyCanExecuteChanged();
         SearchCommand.NotifyCanExecuteChanged();
         AddSelectedCommand.NotifyCanExecuteChanged();
@@ -431,9 +429,6 @@ public partial class PackDetailViewModel : ViewModelBase
 
     // ---- sync / launch / delete ----
 
-    [RelayCommand(CanExecute = nameof(NotBusy))]
-    private async Task Sync() => await RunSyncAsync();
-
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     private async Task Play()
     {
@@ -592,6 +587,14 @@ public partial class PackDetailViewModel : ViewModelBase
         catch (InvalidOperationException) { return null; }
     }
 
+    /// <summary>
+    /// Resolves the pack against ModDB, downloads what is missing, removes what is no
+    /// longer wanted, and writes the lockfile.
+    ///
+    /// Play is its only caller now that the separate sync button is gone. It is not dead
+    /// code — it is the first half of launching, and dropping it would leave Play
+    /// starting the game with whatever happened to be on disk.
+    /// </summary>
     private async Task<SyncReport?> RunSyncAsync()
     {
         IsBusy = true;

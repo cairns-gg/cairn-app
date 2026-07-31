@@ -383,7 +383,7 @@ public class MainWindowTests : IDisposable
 
         foreach (var label in new[]
                  {
-                     "Play", "Sync only", "New pack",
+                     "Play", "New pack",
                      "Remove",
                      "Search", "Add selected", "Save", "Delete", "Clear",
                  })
