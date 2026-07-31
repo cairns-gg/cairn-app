@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
+using Cairn.Core.ModDb;
 using Cairn.App.Views;
 using Xunit;
 
@@ -128,6 +129,17 @@ public class ThemeTests : IDisposable
         Assert.Contains("Lora", heading.FontFamily.Name, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static SearchHitViewModel Hit(
+        string modId, string name, string summary, Avalonia.Media.Imaging.Bitmap? icon)
+        => new(Entry(modId, name, summary)) { Icon = icon };
+
+    private static ModDbSearchEntry Entry(string modId, string name, string summary) => new()
+    {
+        Name = name, ModIdStrs = [modId], Side = "client", Downloads = 2172,
+        Author = "dizzyd", AssetId = 34157, UrlAlias = modId, Summary = summary,
+        Tags = ["Technology", "QoL"],
+    };
+
     [AvaloniaFact]
     public void The_window_renders_a_frame()
     {
@@ -152,6 +164,37 @@ public class ThemeTests : IDisposable
 
         vm.SelectedPack = vm.Packs.First();
         Shot("01-pack");
+
+        // Search results, with icons standing in for ModDB's. Real ones are 480x480 PNGs
+        // decoded down on the way in; these come from the app's own icon so the shot shows
+        // the row as it renders rather than an empty well.
+        using (var iconStream = Avalonia.Platform.AssetLoader.Open(
+                   new Uri("avares://cairn/Assets/cairn.ico")))
+        {
+            var icon = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(iconStream, 96);
+
+            var hits = new[]
+            {
+                Hit("olla", "Olla", "Ancient irrigation for your farmland", icon),
+                Hit("glassview", "Glassview", "See through your glass blocks", icon),
+                Hit("unchisel", "unchisel", "Put chiselled blocks back the way they were", null),
+            };
+
+            var tabControl = window.GetVisualDescendants().OfType<TabControl>().First();
+            var addTab = tabControl.GetVisualDescendants().OfType<TabItem>()
+                .First(t => (t.Header as string) == "Add mods");
+            tabControl.SelectedItem = addTab;
+
+            vm.Detail!.SearchText = "farming";
+            foreach (var h in hits) vm.Detail.SearchHits.Add(h);
+            vm.Detail.SelectedHit = hits[0];
+
+            Shot("09-search");
+
+            vm.Detail.SearchHits.Clear();
+            tabControl.SelectedItem = tabControl.GetVisualDescendants().OfType<TabItem>()
+                .First(t => (t.Header as string) == "Mods");
+        }
 
         vm.Detail!.IsLaunching = true;
         vm.Detail.LaunchStage = "Mods: glassview 1.3.0";

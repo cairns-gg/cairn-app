@@ -384,7 +384,7 @@ public class MainWindowTests : IDisposable
         foreach (var label in new[]
                  {
                      "Play", "New pack",
-                     "Remove",
+                     "Remove", "View on ModDB",
                      "Search", "Add selected", "Save", "Delete", "Clear",
                  })
         {
@@ -963,6 +963,70 @@ public class MainWindowTests : IDisposable
         // Repopulating the dropdown must not be mistaken for the user choosing a version.
         Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+    }
+
+    // ---- browsing ModDB ----
+
+    private static SearchHitViewModel FullHit(string modId, string name, int assetId,
+        string? alias = null, string? logo = null) =>
+        new(new ModDbSearchEntry
+        {
+            Name = name, ModIdStrs = [modId], Side = "client", Downloads = 2172,
+            Author = "dizzyd", AssetId = assetId, UrlAlias = alias, Logo = logo,
+            Tags = ["Technology", "QoL"], Summary = "Ancient irrigation technology",
+        });
+
+    [AvaloniaFact]
+    public void A_result_knows_where_its_page_and_icon_live()
+    {
+        var hit = FullHit("olla", "Olla", 34157, "olla",
+            "https://moddbcdn.vintagestory.at/olla_9b063fc6.png");
+
+        Assert.True(hit.HasPage);
+        Assert.Equal("https://mods.vintagestory.at/olla", hit.PageUrl);
+        Assert.Equal("https://moddbcdn.vintagestory.at/olla_9b063fc6.png", hit.LogoUrl);
+        Assert.Equal("by dizzyd", hit.Author);
+        Assert.Equal("Technology · QoL", hit.Tags);
+    }
+
+    [AvaloniaFact]
+    public void A_result_with_no_alias_still_gets_a_page()
+    {
+        // About a quarter of mods have no url alias, so the link is keyed on asset id.
+        var hit = FullHit("telescopemod", "Furio's Telescope", 61959);
+
+        Assert.True(hit.HasPage);
+        Assert.Equal("https://mods.vintagestory.at/show/mod/61959", hit.PageUrl);
+    }
+
+    [AvaloniaFact]
+    public void A_row_starts_without_an_icon_and_is_not_broken_by_never_getting_one()
+    {
+        // Roughly one mod in ten has no icon at all, and the rest arrive after the row
+        // has already been drawn.
+        var hit = FullHit("nologo", "No Logo", 1);
+
+        Assert.Null(hit.Icon);
+        Assert.False(hit.HasIcon);
+        Assert.Null(hit.LogoUrl);
+    }
+
+    [AvaloniaFact]
+    public void Viewing_a_page_is_offered_only_once_something_is_selected()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        Assert.False(detail.OpenHitPageCommand.CanExecute(null));
+
+        detail.SelectedHit = FullHit("olla", "Olla", 34157, "olla");
+        Assert.True(detail.OpenHitPageCommand.CanExecute(null));
+
+        // And a mod already in the pack can be looked up too, from the Mods tab.
+        Assert.False(detail.OpenModPageCommand.CanExecute(null));
+        detail.SelectedMod = detail.Mods.First();
+        Assert.True(detail.OpenModPageCommand.CanExecute(null));
     }
 
     // ---- what "connect" actually means ----

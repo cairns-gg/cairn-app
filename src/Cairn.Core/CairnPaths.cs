@@ -21,6 +21,15 @@ public static class CairnPaths
     /// <summary>Shareable pack files written by export.</summary>
     public static string ExportsRoot => Path.Combine(Root, "exports");
 
+    /// <summary>
+    /// Things Cairn can always fetch again. Kept apart from packs, games and runtimes so
+    /// it can be deleted without losing anything that matters.
+    /// </summary>
+    public static string CacheRoot => Path.Combine(Root, "cache");
+
+    /// <summary>Mod icons from ModDB, so browsing does not re-download the same images.</summary>
+    public static string IconCacheRoot => Path.Combine(CacheRoot, "icons");
+
     public static string PackDir(string id) => Path.Combine(PacksRoot, id);
 
     public static string ManifestPath(string id) => Path.Combine(PackDir(id), "pack.json");

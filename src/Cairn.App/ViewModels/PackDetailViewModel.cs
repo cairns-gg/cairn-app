@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Cairn.Core;
 using Cairn.Core.Games;
@@ -12,13 +13,33 @@ using Cairn.Core.Packs;
 namespace Cairn.App.ViewModels;
 
 /// <summary>A ModDB search hit, offered for adding to the pack.</summary>
-public class SearchHitViewModel(ModDbSearchEntry entry) : ViewModelBase
+public partial class SearchHitViewModel(ModDbSearchEntry entry) : ViewModelBase
 {
     public string ModId { get; } = entry.ModIdStrs.FirstOrDefault() ?? "";
     public string Name { get; } = entry.Name;
     public string Summary { get; } = entry.Summary ?? "";
     public string Side { get; } = entry.Side ?? "";
     public string Downloads { get; } = $"{entry.Downloads:N0} downloads";
+    public string Author { get; } = string.IsNullOrWhiteSpace(entry.Author) ? "" : $"by {entry.Author}";
+    public string Tags { get; } = string.Join(" · ", entry.Tags);
+
+    /// <summary>Where the icon lives on the CDN; null for the roughly one mod in ten with none.</summary>
+    public string? LogoUrl { get; } = entry.Logo;
+
+    /// <summary>The mod's own page, for reading the description, screenshots and comments.</summary>
+    public string? PageUrl { get; } = ModDbUrls.Page(entry);
+
+    public bool HasPage => PageUrl is not null;
+
+    /// <summary>
+    /// Filled in after the row appears, so a search renders immediately and the icons
+    /// arrive as they are fetched rather than holding up the whole list.
+    /// </summary>
+    [ObservableProperty] public partial Bitmap? Icon { get; set; }
+
+    partial void OnIconChanged(Bitmap? value) => OnPropertyChanged(nameof(HasIcon));
+
+    public bool HasIcon => Icon is not null;
 
     /// <summary>ModDB occasionally returns entries with no string id; those cannot be added.</summary>
     public bool CanAdd => !string.IsNullOrWhiteSpace(ModId);
@@ -40,6 +61,10 @@ public partial class PackDetailViewModel : ViewModelBase
     private readonly Func<string, Task> _provision;
     private readonly Action<object?> _requestDelete;
     private readonly Func<string, bool> _isProvisioning;
+    private readonly ModIconCache _icons;
+
+    /// <summary>Bumped per search, so icons still arriving for an old one are dropped.</summary>
+    private int _searchGeneration;
 
     public PackDetailViewModel(
         PackManifest manifest,
@@ -67,6 +92,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _provision = provision;
         _requestDelete = requestDelete;
         _isProvisioning = isProvisioning;
+        _icons = new ModIconCache(http);
 
         EditName = manifest.Name ?? manifest.Id;
         EditGameVersion = manifest.GameVersion;
@@ -99,6 +125,7 @@ public partial class PackDetailViewModel : ViewModelBase
     [ObservableProperty] public partial string EditConnect { get; set; }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
+
     [ObservableProperty] public partial SearchHitViewModel? SelectedHit { get; set; }
     [ObservableProperty] public partial ModRowViewModel? SelectedMod { get; set; }
     [ObservableProperty] public partial string? SelectedRelease { get; set; }
@@ -182,6 +209,7 @@ public partial class PackDetailViewModel : ViewModelBase
     partial void OnSelectedModChanged(ModRowViewModel? value)
     {
         RemoveSelectedCommand.NotifyCanExecuteChanged();
+        OpenModPageCommand.NotifyCanExecuteChanged();
 
         if (value is null)
         {
@@ -197,7 +225,10 @@ public partial class PackDetailViewModel : ViewModelBase
     }
 
     partial void OnSelectedHitChanged(SearchHitViewModel? value)
-        => AddSelectedCommand.NotifyCanExecuteChanged();
+    {
+        AddSelectedCommand.NotifyCanExecuteChanged();
+        OpenHitPageCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnSelectedReleaseChanged(string? value)
     {
@@ -289,13 +320,19 @@ public partial class PackDetailViewModel : ViewModelBase
 
         try
         {
+            var generation = ++_searchGeneration;
             var hits = await _moddb.SearchRankedAsync(SearchText.Trim());
             foreach (var h in hits.Take(60)) SearchHits.Add(new SearchHitViewModel(h));
+
+            // Deliberately not awaited: the results should appear at once, with icons
+            // filling in as they arrive rather than the list waiting on sixty downloads.
+            _ = LoadIconsAsync([.. SearchHits], generation);
 
             _log(hits.Count > SearchHits.Count
                 ? $"{hits.Count} result(s) for '{SearchText.Trim()}' — showing the closest {SearchHits.Count}"
                 : $"{SearchHits.Count} result(s) for '{SearchText.Trim()}'");
-            if (SearchHits.Count == 0) Error = "No mods matched that search.";
+            if (SearchHits.Count == 0)
+                Error = "No mods matched that search.";
             else Error = null;
         }
         catch (Exception e)
@@ -311,6 +348,87 @@ public partial class PackDetailViewModel : ViewModelBase
     private bool CanSearch => !IsBusy && !string.IsNullOrWhiteSpace(SearchText);
 
     partial void OnSearchTextChanged(string value) => SearchCommand.NotifyCanExecuteChanged();
+
+    /// <summary>
+    /// Fetches the icons for a set of results and hands each one to its row as it lands.
+    ///
+    /// Bounded rather than unbounded: sixty simultaneous requests to the ModDB CDN is
+    /// impolite, and sequential would make the last icon appear a minute late. Anything
+    /// that fails simply leaves that row without one.
+    /// </summary>
+    private async Task LoadIconsAsync(IReadOnlyList<SearchHitViewModel> hits, int generation)
+    {
+        using var slots = new SemaphoreSlim(4);
+
+        await Task.WhenAll(hits.Select(async hit =>
+        {
+            if (hit.LogoUrl is null) return;
+
+            await slots.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                // A newer search has replaced these rows; its icons are the ones wanted.
+                if (generation != _searchGeneration) return;
+
+                var path = await _icons.GetAsync(hit.LogoUrl).ConfigureAwait(false);
+                if (path is null || generation != _searchGeneration) return;
+
+                await using var file = File.OpenRead(path);
+
+                // Decoded to roughly the size it is drawn at, off the UI thread. Sixty
+                // full-resolution icons held at once is a lot of memory for decoration.
+                var bitmap = Bitmap.DecodeToWidth(file, 96);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (generation == _searchGeneration) hit.Icon = bitmap;
+                });
+            }
+            catch (Exception e) when (e is IOException or ArgumentException or NotSupportedException)
+            {
+                // Not an image, or unreadable. The row is fine without one.
+            }
+            finally
+            {
+                slots.Release();
+            }
+        })).ConfigureAwait(false);
+    }
+
+    /// <summary>Opens the selected result's page on ModDB, for the description and screenshots.</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenHitPage))]
+    private void OpenHitPage()
+    {
+        if (!Browser.Open(SelectedHit?.PageUrl))
+            Error = "Could not open a browser for that link.";
+    }
+
+    private bool CanOpenHitPage => SelectedHit is { HasPage: true };
+
+    /// <summary>
+    /// Opens the page of a mod already in the pack. The manifest holds only the mod id,
+    /// and a page is addressed by asset id, so this costs one lookup — done on click
+    /// rather than for every row up front.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenModPage))]
+    private async Task OpenModPage()
+    {
+        var modId = SelectedMod?.ModId;
+        if (modId is null) return;
+
+        try
+        {
+            var mod = await _moddb.GetModAsync(modId);
+            if (!Browser.Open(ModDbUrls.Page(mod)))
+                Error = $"Could not open the ModDB page for {modId}.";
+        }
+        catch (Exception e) when (e is ModDbException or HttpRequestException)
+        {
+            Error = $"Could not find {modId} on ModDB: {e.Message}";
+        }
+    }
+
+    private bool CanOpenModPage => SelectedMod is not null;
 
     [RelayCommand(CanExecute = nameof(CanAddSelected))]
     private void AddSelected()
