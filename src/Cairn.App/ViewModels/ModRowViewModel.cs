@@ -19,6 +19,7 @@ public partial class ModRowViewModel : ViewModelBase
     private readonly Action<ModRowViewModel, string?>? _pin;
     private readonly Action<ModRowViewModel>? _remove;
     private readonly Action<ModRowViewModel>? _openPage;
+    private readonly Action<ModRowViewModel>? _armed;
 
     /// <summary>Tells "the list was refilled" apart from "the user chose something".</summary>
     private bool _settingProgrammatically;
@@ -29,7 +30,8 @@ public partial class ModRowViewModel : ViewModelBase
         Func<ModRowViewModel, Task>? loadReleases = null,
         Action<ModRowViewModel, string?>? pin = null,
         Action<ModRowViewModel>? remove = null,
-        Action<ModRowViewModel>? openPage = null)
+        Action<ModRowViewModel>? openPage = null,
+        Action<ModRowViewModel>? armed = null)
     {
         Mod = mod;
         Locked = locked;
@@ -37,6 +39,7 @@ public partial class ModRowViewModel : ViewModelBase
         _pin = pin;
         _remove = remove;
         _openPage = openPage;
+        _armed = armed;
 
         // Shown before the list is fetched, so the row reads correctly from the start.
         _settingProgrammatically = true;
@@ -109,8 +112,31 @@ public partial class ModRowViewModel : ViewModelBase
 
     // ---- actions ----
 
+    /// <summary>
+    /// Removing is destructive and the button is a single character next to a dropdown,
+    /// so it asks first — in the row, where it is obvious which mod is meant. The pack's
+    /// own Delete works the same way.
+    /// </summary>
+    [ObservableProperty] public partial bool ConfirmingRemove { get; set; }
+
+    public string RemovePrompt => $"Remove {ModId} from this pack?";
+
     [RelayCommand]
-    private void Remove() => _remove?.Invoke(this);
+    private void RequestRemove()
+    {
+        ConfirmingRemove = true;
+        _armed?.Invoke(this);
+    }
+
+    [RelayCommand]
+    private void CancelRemove() => ConfirmingRemove = false;
+
+    [RelayCommand]
+    private void ConfirmRemove()
+    {
+        ConfirmingRemove = false;
+        _remove?.Invoke(this);
+    }
 
     [RelayCommand]
     private void OpenPage() => _openPage?.Invoke(this);

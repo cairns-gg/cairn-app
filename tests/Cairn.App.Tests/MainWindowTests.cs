@@ -286,7 +286,9 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
-        detail.Mods.Single(m => m.ModId == "unchisel").RemoveCommand.Execute(null);
+        var row = detail.Mods.Single(m => m.ModId == "unchisel");
+        row.RequestRemoveCommand.Execute(null);
+        row.ConfirmRemoveCommand.Execute(null);
 
         Assert.DoesNotContain(detail.Mods, m => m.ModId == "unchisel");
         var onDisk = File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json"));
@@ -473,7 +475,9 @@ public class MainWindowTests : IDisposable
         detail.ShowResults("glass", [hit]);
         Assert.True(hit.AlreadyInPack);
 
-        detail.Mods.Single(m => m.ModId == "glassview").RemoveCommand.Execute(null);
+        var packRow = detail.Mods.Single(m => m.ModId == "glassview");
+        packRow.RequestRemoveCommand.Execute(null);
+        packRow.ConfirmRemoveCommand.Execute(null);
 
         // Both lists are the same screen now, so they cannot disagree.
         Assert.False(hit.AlreadyInPack);
@@ -1043,6 +1047,58 @@ public class MainWindowTests : IDisposable
 
         Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+    }
+
+    // ---- removing a mod ----
+
+    [AvaloniaFact]
+    public void Removing_a_mod_asks_before_doing_anything()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var row = detail.Mods.Single(m => m.ModId == "unchisel");
+        row.RequestRemoveCommand.Execute(null);
+
+        // Armed only — the button is one character next to a dropdown.
+        Assert.True(row.ConfirmingRemove);
+        Assert.Equal("Remove unchisel from this pack?", row.RemovePrompt);
+        Assert.Contains(detail.Mods, m => m.ModId == "unchisel");
+        Assert.Contains("unchisel", File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json")));
+    }
+
+    [AvaloniaFact]
+    public void Declining_keeps_the_mod()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var row = detail.Mods.Single(m => m.ModId == "unchisel");
+        row.RequestRemoveCommand.Execute(null);
+        row.CancelRemoveCommand.Execute(null);
+
+        Assert.False(row.ConfirmingRemove);
+        Assert.Contains(detail.Mods, m => m.ModId == "unchisel");
+    }
+
+    [AvaloniaFact]
+    public void Only_one_row_asks_at_a_time()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var first = detail.Mods.Single(m => m.ModId == "glassview");
+        var second = detail.Mods.Single(m => m.ModId == "unchisel");
+
+        first.RequestRemoveCommand.Execute(null);
+        second.RequestRemoveCommand.Execute(null);
+
+        // Otherwise two rows sit armed and a stray Enter could hit the wrong one.
+        Assert.False(first.ConfirmingRemove);
+        Assert.True(second.ConfirmingRemove);
     }
 
     // ---- searching for what will actually install ----

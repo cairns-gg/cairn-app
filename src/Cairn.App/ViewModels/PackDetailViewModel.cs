@@ -318,7 +318,8 @@ public partial class PackDetailViewModel : ViewModelBase
                 loadReleases: LoadReleasesForRowAsync,
                 pin: ApplyPin,
                 remove: RemoveRow,
-                openPage: OpenModPage));
+                openPage: OpenModPage,
+                armed: DisarmOtherRows));
         }
 
         OnPropertyChanged(nameof(Subtitle));
@@ -494,6 +495,13 @@ public partial class PackDetailViewModel : ViewModelBase
         // The row stays on screen, so it has to stop offering to add it again.
         hit.AlreadyInPack = true;
         _log($"added {hit.ModId}");
+    }
+
+    /// <summary>Only one row may be asking at a time, so a stray Enter cannot hit two.</summary>
+    private void DisarmOtherRows(ModRowViewModel armed)
+    {
+        foreach (var row in Mods.Where(r => !ReferenceEquals(r, armed)))
+            row.ConfirmingRemove = false;
     }
 
     private void RemoveRow(ModRowViewModel row)

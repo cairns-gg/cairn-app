@@ -194,6 +194,11 @@ public class ThemeTests : IDisposable
             detail.ClearSearchCommand.Execute(null);
         }
 
+        // Armed removal: only ever visible mid-interaction.
+        vm.Detail!.Mods.First().RequestRemoveCommand.Execute(null);
+        Shot("10-remove-confirm");
+        vm.Detail.Mods.First().CancelRemoveCommand.Execute(null);
+
         vm.Detail!.IsLaunching = true;
         vm.Detail.LaunchStage = "Mods: glassview 1.3.0";
         Shot("08-launching");
