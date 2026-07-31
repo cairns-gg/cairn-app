@@ -101,6 +101,10 @@ public partial class PackDetailViewModel : ViewModelBase
     private readonly Action<object?> _requestDelete;
     private readonly Func<string, bool> _isProvisioning;
     private readonly ModIconCache _icons;
+    private readonly ModInfoCache _modInfo;
+
+    /// <summary>Bumped per pack reload, so icons for rows that are gone are dropped.</summary>
+    private int _modIconGeneration;
 
     /// <summary>Bumped per search, so icons still arriving for an old one are dropped.</summary>
     private int _searchGeneration;
@@ -132,6 +136,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _requestDelete = requestDelete;
         _isProvisioning = isProvisioning;
         _icons = new ModIconCache(http);
+        _modInfo = new ModInfoCache(moddb);
 
         EditName = manifest.Name ?? manifest.Id;
         EditGameVersion = manifest.GameVersion;
@@ -325,6 +330,58 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(ListHeading));
 
+        // Not awaited: the pack list must draw immediately, with names and icons
+        // following as ModDB answers.
+        _ = LoadModDetailsAsync([.. Mods], ++_modIconGeneration);
+    }
+
+    /// <summary>
+    /// Fills in each pack row's name and icon. Two layers of cache make this quiet after
+    /// the first time: the mod's details, and the image itself.
+    /// </summary>
+    private async Task LoadModDetailsAsync(IReadOnlyList<ModRowViewModel> rows, int generation)
+    {
+        using var slots = new SemaphoreSlim(4);
+
+        await Task.WhenAll(rows.Select(async row =>
+        {
+            await slots.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (generation != _modIconGeneration) return;
+
+                var info = await _modInfo.GetAsync(row.ModId).ConfigureAwait(false);
+                if (info is null || generation != _modIconGeneration) return;
+
+                // The name is worth showing on its own, even for a mod with no icon.
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (generation == _modIconGeneration) row.Name = info.Name;
+                });
+
+                var path = await _icons.GetAsync(info.Logo).ConfigureAwait(false);
+                if (path is null || generation != _modIconGeneration) return;
+
+                await using var file = File.OpenRead(path);
+                var bitmap = Bitmap.DecodeToWidth(file, 96);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (generation == _modIconGeneration) row.Icon = bitmap;
+                });
+            }
+            // Deliberately everything: this is decoration, running on a background thread,
+            // landing after the row may already be gone. Nothing it can hit is worth
+            // surfacing, let alone failing over.
+            catch (Exception)
+            {
+                // Not an image, or unreadable. The row is fine without one.
+            }
+            finally
+            {
+                slots.Release();
+            }
+        })).ConfigureAwait(false);
     }
 
     private void Persist()
@@ -529,16 +586,17 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     private async void OpenModPage(ModRowViewModel row)
     {
-        try
+        // Usually already known, since drawing the row's icon asked the same question.
+        var info = await _modInfo.GetAsync(row.ModId);
+
+        if (info is null)
         {
-            var mod = await _moddb.GetModAsync(row.ModId);
-            if (!Browser.Open(ModDbUrls.Page(mod)))
-                Error = $"Could not open the ModDB page for {row.ModId}.";
+            Error = $"Could not find {row.ModId} on ModDB.";
+            return;
         }
-        catch (Exception e) when (e is ModDbException or HttpRequestException)
-        {
-            Error = $"Could not find {row.ModId} on ModDB: {e.Message}";
-        }
+
+        if (!Browser.Open(ModDbUrls.Page(info.AssetId, info.UrlAlias)))
+            Error = $"Could not open the ModDB page for {row.ModId}.";
     }
 
     /// <summary>

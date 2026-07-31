@@ -51,7 +51,8 @@ public class MainWindowTests : IDisposable
 
     private static (MainWindow Window, MainViewModel Vm) Show()
     {
-        var vm = new MainViewModel();
+        // Offline: showing a pack sends its rows to ModDB for names and icons.
+        var vm = new MainViewModel(new OfflineHandler());
         var window = new MainWindow { DataContext = vm };
         window.Show();
         return (window, vm);
@@ -1047,6 +1048,37 @@ public class MainWindowTests : IDisposable
 
         Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+    }
+
+    // ---- what a pack row calls its mod ----
+
+    [AvaloniaFact]
+    public void A_row_shows_the_mod_id_until_its_real_name_is_known()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var row = vm.Detail!.Mods.Single(m => m.ModId == "glassview");
+
+        // A manifest holds ids, so the id is all a row can honestly show at first.
+        Assert.Null(row.Name);
+        Assert.Equal("glassview", row.Title);
+
+        // The name arrives with the same lookup that fetches the icon.
+        row.Name = "Glassview";
+        Assert.Equal("Glassview", row.Title);
+    }
+
+    [AvaloniaFact]
+    public void A_mod_with_no_name_on_ModDB_still_reads_as_something()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var row = vm.Detail!.Mods.Single(m => m.ModId == "glassview");
+        row.Name = "   ";
+
+        Assert.Equal("glassview", row.Title);
     }
 
     // ---- removing a mod ----

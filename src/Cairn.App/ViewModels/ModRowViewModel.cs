@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cairn.Core.Packs;
@@ -54,12 +55,34 @@ public partial class ModRowViewModel : ViewModelBase
 
     public string ModId => Mod.ModId;
 
+    /// <summary>
+    /// The mod's own name, once ModDB has been asked. Null until then — a manifest holds
+    /// ids, so the id is all a row can honestly show at first.
+    /// </summary>
+    [ObservableProperty] public partial string? Name { get; set; }
+
+    partial void OnNameChanged(string? value) => OnPropertyChanged(nameof(Title));
+
+    /// <summary>What to call this mod: its name if known, otherwise its id.</summary>
+    public string Title => string.IsNullOrWhiteSpace(Name) ? ModId : Name!;
+
     /// <summary>"1.3.0" when pinned, otherwise "newest".</summary>
     public string PinDisplay => Mod.Version ?? "newest";
 
     public bool IsPinned => Mod.Version is not null;
 
     public string SideDisplay => Locked?.Side ?? "";
+
+    /// <summary>
+    /// Arrives after the row is drawn. A pack knows only mod ids, so finding an icon
+    /// means asking ModDB what the mod looks like — cached, but never instant the first
+    /// time, and never worth delaying the list for.
+    /// </summary>
+    [ObservableProperty] public partial Bitmap? Icon { get; set; }
+
+    partial void OnIconChanged(Bitmap? value) => OnPropertyChanged(nameof(HasIcon));
+
+    public bool HasIcon => Icon is not null;
 
     /// <summary>
     /// Flags a mod ModDB marks server-side, which in a client pack usually does nothing.

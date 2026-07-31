@@ -377,34 +377,47 @@
                                         <DataTemplate x:DataType="vm:ModRowViewModel">
                                         <Panel Margin="0,4" Background="Transparent"
                                                DoubleTapped="OnRowDoubleTapped">
-                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto"
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto"
                                                   ColumnSpacing="8"
                                                   IsVisible="{Binding !ConfirmingRemove}">
-                                                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                                <!-- Same fixed well as the results, so the
+                                                     two lists line up with each other. -->
+                                                <Border Grid.Column="0" Width="32" Height="32"
+                                                        Classes="sunken" VerticalAlignment="Center">
+                                                    <Image Source="{Binding Icon}"
+                                                           IsVisible="{Binding HasIcon}"
+                                                           Stretch="UniformToFill" />
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                             Spacing="8" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding ModId}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                                    <!-- Kept, quietly: the id is what the
+                                                         manifest and lockfile record. -->
+                                                    <TextBlock Text="{Binding ModId}" FontSize="11"
+                                                               Opacity="0.55" VerticalAlignment="Center" />
                                                     <TextBlock Text="server-side"
                                                                IsVisible="{Binding IsServerSide}"
                                                                FontSize="11" VerticalAlignment="Center"
                                                                Foreground="{DynamicResource VsWarningBrush}" />
                                                 </StackPanel>
 
-                                                <TextBlock Grid.Column="1" Text="loading…" FontSize="11"
+                                                <TextBlock Grid.Column="2" Text="loading…" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
                                                            IsVisible="{Binding LoadingReleases}" />
 
                                                 <!-- Its versions are fetched when this is opened,
                                                      not for every row up front. -->
-                                                <ComboBox Grid.Column="2" MinWidth="120"
+                                                <ComboBox Grid.Column="3" MinWidth="120"
                                                           ItemsSource="{Binding ReleaseChoices}"
                                                           SelectedItem="{Binding SelectedRelease}"
                                                           DropDownOpened="OnVersionDropDownOpened"
                                                           VerticalAlignment="Center" />
 
-                                                <Button Grid.Column="3" Content="View" Padding="10,4"
+                                                <Button Grid.Column="4" Content="View" Padding="10,4"
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
-                                                <Button Grid.Column="4" Content="✕" Padding="10,4"
+                                                <Button Grid.Column="5" Content="✕" Padding="10,4"
                                                         Command="{Binding RequestRemoveCommand}"
                                                         VerticalAlignment="Center" />
                                             </Grid>

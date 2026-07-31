@@ -61,9 +61,15 @@ public partial class MainViewModel : ViewModelBase
     private CancellationTokenSource? _provisionCts;
     private readonly GameInstall? _install;
 
-    public MainViewModel()
+    /// <summary>
+    /// <paramref name="handler"/> exists so tests can run offline. Pack rows fetch their
+    /// names and icons from ModDB as soon as a pack is shown, which would otherwise make
+    /// the whole app suite depend on the network being up.
+    /// </summary>
+    public MainViewModel(HttpMessageHandler? handler = null)
     {
-        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        _http = (handler is null ? new HttpClient() : new HttpClient(handler));
+        _http.Timeout = TimeSpan.FromMinutes(5);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1");
         _moddb = new ModDbClient(_http);
         _store = new PackStore();

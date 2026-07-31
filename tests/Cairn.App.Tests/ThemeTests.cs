@@ -46,7 +46,7 @@ public class ThemeTests : IDisposable
 
     private static MainWindow Show()
     {
-        var window = new MainWindow { DataContext = new MainViewModel() };
+        var window = new MainWindow { DataContext = new MainViewModel(new OfflineHandler()) };
         window.Show();
         return window;
     }
@@ -166,6 +166,23 @@ public class ThemeTests : IDisposable
 
         vm.SelectedPack = vm.Packs.First();
 
+        // Pack rows fetch their icons from ModDB, which the tests do not reach, so stand
+        // one in to show the row as it renders.
+        using (var packIcon = Avalonia.Platform.AssetLoader.Open(
+                   new Uri("avares://cairn/Assets/cairn.ico")))
+        {
+            var bitmap = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(packIcon, 96);
+            foreach (var row in vm.Detail!.Mods)
+            {
+                row.Icon = bitmap;
+                row.Name = row.ModId switch
+                {
+                    "glassview" => "Glassview",
+                    "unchisel" => "unchisel",
+                    _ => row.ModId,
+                };
+            }
+        }
 
         Shot("01-pack");
 
