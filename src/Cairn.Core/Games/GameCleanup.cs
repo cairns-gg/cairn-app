@@ -20,12 +20,20 @@ public sealed record CleanupPlan(
     IReadOnlyList<string> Kept,
     string? Blocked = null)
 {
-    public bool AnythingToDo => Versions.Count > 0 || Runtimes.Count > 0;
+    public bool AnythingToDo => Versions.Count > 0 || Runtimes.Count > 0 || Caches.Count > 0;
+
+    /// <summary>
+    /// Re-fetchable caches — icons, mod details. Not a game concern, so they are supplied
+    /// by the caller rather than discovered here, but they belong in the same sweep: two
+    /// buttons for "delete things that come back on their own" is one too many.
+    /// </summary>
+    public IReadOnlyList<CleanupTarget> Caches { get; init; } = [];
 
     /// <summary>Set when the question could not be answered, as distinct from "nothing to do".</summary>
     public bool IsBlocked => Blocked is not null;
 
-    public long TotalBytes => Versions.Sum(v => v.Bytes) + Runtimes.Sum(r => r.Bytes);
+    public long TotalBytes =>
+        Versions.Sum(v => v.Bytes) + Runtimes.Sum(r => r.Bytes) + Caches.Sum(c => c.Bytes);
 
     /// <summary>The lines a confirmation shows: every item, named, with its size.</summary>
     public IReadOnlyList<string> Describe()
@@ -37,6 +45,9 @@ public sealed record CleanupPlan(
 
         foreach (var r in Runtimes)
             lines.Add($".NET {r.Label} ({Bytes.Human(r.Bytes)}) — nothing left needs it");
+
+        foreach (var c in Caches)
+            lines.Add($"{c.Label} ({Bytes.Human(c.Bytes)})");
 
         return lines;
     }

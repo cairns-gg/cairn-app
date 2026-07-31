@@ -31,39 +31,55 @@
                             <Run Text="{Binding CairnHome}" />
                         </TextBlock>
 
-                        <Grid ColumnDefinitions="160,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
-                              ColumnSpacing="12" RowSpacing="6">
+                        <!--
+                            Every cell is centred in its row and the sizes share one font.
+                            Mixing a default-size label with a 12pt detail and letting the
+                            default vertical alignment (Stretch, so top) stand left the
+                            three columns visibly off each other's baseline.
+                        -->
+                        <Grid ColumnDefinitions="180,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+                              ColumnSpacing="12" RowSpacing="8">
+                            <Grid.Styles>
+                                <Style Selector="Grid > TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="FontSize" Value="13" />
+                                </Style>
+                                <Style Selector="Grid > TextBlock.size">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </Style>
+                                <Style Selector="Grid > TextBlock.detail">
+                                    <Setter Property="Opacity" Value="0.6" />
+                                </Style>
+                            </Grid.Styles>
+
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Game versions" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GamesSize}"
-                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding GamesDetail}"
-                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
-                            <!-- 600 MB a version, and a retargeted pack leaves its old one
-                                 behind with nothing pointing at it. -->
-                            <Button Grid.Row="0" Grid.Column="3" Content="Clean up" Padding="12,3"
-                                    IsEnabled="{Binding NotCleaningUp}"
-                                    Command="{Binding CleanUpCommand}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="size" Text="{Binding GamesSize}" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="detail" Text="{Binding GamesDetail}" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text=".NET runtimes" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimesSize}"
-                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding RuntimesDetail}"
-                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="size" Text="{Binding RuntimesSize}" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Classes="detail" Text="{Binding RuntimesDetail}" />
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Cached icons and details" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CacheSize}"
-                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Opacity="0.6"
-                                       VerticalAlignment="Center"
-                                       Text="re-fetched as needed; safe to empty" />
-                            <Button Grid.Row="2" Grid.Column="3" Content="Clear" Padding="12,3"
-                                    Command="{Binding ClearCacheCommand}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="size" Text="{Binding CacheSize}" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Classes="detail"
+                                       Text="re-fetched as needed" />
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Packs" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PacksSize}"
-                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding PacksDetail}"
-                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Classes="size" Text="{Binding PacksSize}" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Classes="detail" Text="{Binding PacksDetail}" />
+
+                            <!--
+                                One sweep for everything that comes back on its own: unused
+                                game versions, orphaned runtimes and the caches. Spans the
+                                rows it acts on rather than sitting on one of them.
+                            -->
+                            <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="3"
+                                    Content="Clean up" Padding="14,4"
+                                    VerticalAlignment="Center"
+                                    IsEnabled="{Binding NotCleaningUp}"
+                                    Command="{Binding CleanUpCommand}" />
                         </Grid>
 
                         <!-- Deleting gigabytes takes real time; without this the window

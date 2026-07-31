@@ -574,11 +574,15 @@ public class MainWindowTests : IDisposable
         window.Show();
 
         var buttons = Buttons(window);
-        foreach (var label in new[] { "Install", "Refresh list", "Remove", "Install its .NET", "Clear" })
+        foreach (var label in new[] { "Install", "Refresh list", "Remove", "Install its .NET", "Clean up" })
         {
             Assert.True(buttons.ContainsKey(label), $"no '{label}' button in preferences");
             Assert.NotNull(buttons[label].Command);
         }
+
+        // The caches are swept by Clean up now; a second button for the same idea was one
+        // too many for "delete things that come back on their own".
+        Assert.DoesNotContain("Clear", buttons.Keys);
     }
 
     [AvaloniaFact]
@@ -705,6 +709,29 @@ public class MainWindowTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.5")));
         Assert.False(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
         Assert.Contains("Removed", preferences.CleanupSummary);
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_empties_the_caches_too()
+    {
+        var (_, vm) = Show();
+
+        var icons = Path.Combine(_home, "cache", "icons");
+        Directory.CreateDirectory(icons);
+        File.WriteAllBytes(Path.Combine(icons, "abc.png"), new byte[4096]);
+
+        var preferences = OpenPreferences(vm);
+
+        ConfirmViewModel? asked = null;
+        preferences.Confirm = c => { asked = c; return Task.FromResult(true); };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        // Listed, so nothing is deleted that was not shown first.
+        Assert.Contains("cached icons and mod details", asked!.Message);
+
+        // Clear takes the directory with it, so the cached file is gone either way.
+        Assert.False(File.Exists(Path.Combine(icons, "abc.png")));
     }
 
     [AvaloniaFact]

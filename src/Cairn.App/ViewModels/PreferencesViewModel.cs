@@ -115,7 +115,14 @@ public partial class PreferencesViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(NotCleaningUp))]
     private async Task CleanUp()
     {
-        var plan = GameCleanup.Plan(_games, _runtimes, _store);
+        var cacheBytes = DirectorySize(CairnPaths.CacheRoot);
+
+        var plan = GameCleanup.Plan(_games, _runtimes, _store) with
+        {
+            Caches = cacheBytes > 0
+                ? [new CleanupTarget("cached icons and mod details", CairnPaths.CacheRoot, cacheBytes)]
+                : [],
+        };
 
         if (plan.IsBlocked)
         {
@@ -188,6 +195,21 @@ public partial class PreferencesViewModel : ViewModelBase
                         failures.Add($"{runtime.Label}: {e.Message}");
                     }
                 }
+
+                foreach (var cache in plan.Caches)
+                {
+                    report.Report("emptying caches…");
+                    try
+                    {
+                        _icons.Clear();
+                        _modInfo.Clear();
+                        removed++;
+                    }
+                    catch (Exception e)
+                    {
+                        failures.Add($"{cache.Label}: {e.Message}");
+                    }
+                }
             });
         }
         finally
@@ -202,18 +224,6 @@ public partial class PreferencesViewModel : ViewModelBase
         CleanupSummary = failures.Count > 0
             ? $"Removed {removed}; could not remove {string.Join("; ", failures)}."
             : $"Removed {removed} item{(removed == 1 ? "" : "s")}, freeing {Bytes.Human(plan.TotalBytes)}.";
-    }
-
-    /// <summary>
-    /// Empties the icon and mod-detail caches. Safe by construction — everything in there
-    /// is re-fetchable, which is why it lives apart from packs and games.
-    /// </summary>
-    [RelayCommand]
-    private void ClearCache()
-    {
-        _icons.Clear();
-        _modInfo.Clear();
-        Refresh();
     }
 
     private static string Count(int n, string noun) =>
