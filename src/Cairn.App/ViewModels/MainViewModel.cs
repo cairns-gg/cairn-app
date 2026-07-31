@@ -129,7 +129,6 @@ public partial class MainViewModel : ViewModelBase
 
     // ---- new-pack form ----
 
-    [ObservableProperty] public partial bool IsShowingGames { get; set; }
     [ObservableProperty] public partial bool IsImporting { get; set; }
 
     // ---- delete confirmation ----
@@ -255,12 +254,11 @@ public partial class MainViewModel : ViewModelBase
     // Provisioning takes over the pane: editing a pack whose game is mid-download invites
     // changes that the in-flight install knows nothing about.
     public bool ShowProvisioning => Provisioning;
-    public bool ShowGames => IsShowingGames && !IsImporting && !Provisioning;
     public bool ShowImport => IsImporting && !Provisioning;
-    public bool ShowCreate => IsCreating && !IsShowingGames && !IsImporting && !Provisioning;
-    public bool ShowDetail => Detail is not null && !IsCreating && !IsShowingGames
+    public bool ShowCreate => IsCreating && !IsImporting && !Provisioning;
+    public bool ShowDetail => Detail is not null && !IsCreating
                               && !IsImporting && !Provisioning;
-    public bool ShowEmpty => Detail is null && !IsCreating && !IsShowingGames
+    public bool ShowEmpty => Detail is null && !IsCreating
                              && !IsImporting && !Provisioning;
 
     /// <summary>Drives IsEnabled on the sidebar, so nothing can be started mid-download.</summary>
@@ -270,7 +268,6 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(ShowProvisioning));
         OnPropertyChanged(nameof(NotProvisioning));
-        OnPropertyChanged(nameof(ShowGames));
         OnPropertyChanged(nameof(ShowImport));
         OnPropertyChanged(nameof(ShowCreate));
         OnPropertyChanged(nameof(ShowDetail));
@@ -278,8 +275,6 @@ public partial class MainViewModel : ViewModelBase
     }
 
     partial void OnIsCreatingChanged(bool value) => RefreshPaneState();
-
-    partial void OnIsShowingGamesChanged(bool value) => RefreshPaneState();
 
     // A pack whose version is mid-download should not also be told it is missing.
     partial void OnProvisioningChanged(bool value)
@@ -385,7 +380,6 @@ public partial class MainViewModel : ViewModelBase
         ImportAsId = "";
         ImportError = null;
         IsCreating = false;
-        IsShowingGames = false;
         IsImporting = true;
     }
 
@@ -448,22 +442,33 @@ public partial class MainViewModel : ViewModelBase
 
     private bool CanImport => !ImportBusy && !string.IsNullOrWhiteSpace(ImportText);
 
-    [RelayCommand]
-    private void ShowGameVersions()
-    {
-        IsCreating = false;
-        IsImporting = false;
-        IsShowingGames = true;
-        if (!Games.CatalogLoaded) Games.RefreshCatalogCommand.Execute(null);
-    }
+    /// <summary>
+    /// Opens application settings.
+    ///
+    /// A window rather than a pane: none of it is about the pack you have selected, and
+    /// putting it in the pack area is what made "Game versions" read as a pack action.
+    /// The view supplies the opener, since Core knows nothing about windows.
+    /// </summary>
+    public Func<PreferencesViewModel, Task>? OpenPreferences { get; set; }
 
     [RelayCommand]
-    private void ShowPacks() => IsShowingGames = false;
+    private async Task ShowPreferences()
+    {
+        if (OpenPreferences is null) return;
+
+        if (!Games.CatalogLoaded) Games.RefreshCatalogCommand.Execute(null);
+
+        await OpenPreferences(new PreferencesViewModel(
+            Games, _store, _gameStore, _runtimes, new ModIconCache(_http), new ModInfoCache(_moddb)));
+
+        // Removing a game version from in there changes what every pack can launch.
+        Games.RefreshInstalled();
+        OnLibraryChanged();
+    }
 
     [RelayCommand]
     private async Task BeginCreate()
     {
-        IsShowingGames = false;
         IsImporting = false;
         NewPackName = "";
         NewPackConnect = "";

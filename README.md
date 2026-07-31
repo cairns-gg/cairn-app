@@ -207,9 +207,10 @@ cairn-cli games install 1.22.5      download, verify md5, unpack
 cairn-cli games remove 1.22.5
 ```
 
-or the **Game versions** pane in the launcher, which is where installed versions are
-removed and private runtimes managed. Nothing nags about a missing version: pressing
-**Play** fetches whatever the pack needs.
+or **Preferences → Storage** in the launcher, which is where installed versions are removed
+and private runtimes managed. Nothing nags about a missing version: pressing **Play** fetches
+whatever the pack needs, so that screen exists mainly to give the disk space back — it also
+reports what Cairn is using and can empty its caches.
 
 Versions land in `~/.cairn/games/<version>/`, so several can coexist and each pack
 launches the one its `gameVersion` names:

@@ -1,0 +1,186 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="620"
+        x:Class="Cairn.App.Views.PreferencesWindow"
+        x:DataType="vm:PreferencesViewModel"
+        Width="880" Height="620" MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/cairn.ico"
+        Title="Cairn Preferences">
+
+    <DockPanel LastChildFill="True" Margin="16">
+
+        <TabControl>
+
+            <!--
+                Storage is what this pane is really about: Play only ever adds game
+                versions and runtimes, so this is the one place that takes them back.
+            -->
+            <TabItem Header="Storage">
+                <DockPanel LastChildFill="True" Margin="0,10,0,0">
+
+                    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,14">
+                        <TextBlock FontSize="13">
+                            <Run Text="Cairn is using" />
+                            <Run Text="{Binding TotalSize}" FontWeight="SemiBold"
+                                 Foreground="{DynamicResource VsParchmentBrush}" />
+                            <Run Text="in" />
+                            <Run Text="{Binding CairnHome}" />
+                        </TextBlock>
+
+                        <Grid ColumnDefinitions="160,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+                              ColumnSpacing="12" RowSpacing="6">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Game versions" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GamesSize}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding GamesDetail}"
+                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text=".NET runtimes" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimesSize}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding RuntimesDetail}"
+                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cached icons and details" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CacheSize}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Opacity="0.6"
+                                       VerticalAlignment="Center"
+                                       Text="re-fetched as needed; safe to empty" />
+                            <Button Grid.Row="2" Grid.Column="3" Content="Clear" Padding="12,3"
+                                    Command="{Binding ClearCacheCommand}" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Packs" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PacksSize}"
+                                       HorizontalAlignment="Right" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding PacksDetail}"
+                                       Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Margin="0,4" />
+
+                        <TextBlock Text="Installed game versions" FontWeight="SemiBold" FontSize="13" />
+                    </StackPanel>
+
+                        <Border DockPanel.Dock="Top" Margin="0,0,0,10" Padding="10,8" CornerRadius="1"
+                                IsVisible="{Binding Games.HasError}"
+                                Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                            <TextBlock Text="{Binding Games.Error}" TextWrapping="Wrap" FontSize="12" />
+                        </Border>
+
+                        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
+                            <ProgressBar x:Name="GamesProgress"
+                                         Maximum="1" Value="{Binding Games.ProgressFraction}"
+                                         IsIndeterminate="{Binding Games.ProgressIndeterminate}"
+                                         IsVisible="{Binding Games.IsBusy}" Height="6" />
+                            <TextBlock Text="{Binding Games.Progress}" FontSize="12" Opacity="0.75" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,16,*">
+
+                            <DockPanel Grid.Column="0" LastChildFill="True">
+                                <TextBlock DockPanel.Dock="Top" Text="Installed" FontWeight="SemiBold"
+                                           Margin="0,0,0,6" />
+                                <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,6,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Button Content="Remove"
+                                                Command="{Binding Games.RemoveSelectedCommand}" />
+                                        <Button Content="Install its .NET"
+                                                Command="{Binding Games.InstallRuntimeCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="private .NET runtimes" FontSize="11" Opacity="0.6" />
+                                    <ItemsControl ItemsSource="{Binding Games.ManagedRuntimes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{Binding}" FontSize="11" Opacity="0.7" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                                <ListBox ItemsSource="{Binding Games.Installed}"
+                                         SelectedItem="{Binding Games.SelectedInstalled}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:InstalledGameViewModel">
+                                            <StackPanel Spacing="2" Margin="0,3">
+                                                <TextBlock Text="{Binding Version}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Needs}" FontSize="11" Opacity="0.7" />
+                                                <TextBlock Text="{Binding RuntimeLine}" FontSize="11"
+                                                           Opacity="0.6" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="no matching .NET runtime — cannot start"
+                                                           IsVisible="{Binding RuntimeMissing}"
+                                                           FontSize="11" Foreground="{DynamicResource VsErrorBrush}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+
+                            <DockPanel Grid.Column="2" LastChildFill="True">
+                                <TextBlock DockPanel.Dock="Top" Text="Available" FontWeight="SemiBold"
+                                           Margin="0,0,0,6" />
+                                <!-- Wraps rather than spills: these three together are wider than
+                                     half the pane at the window's minimum width. -->
+                                <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                           ItemSpacing="6" LineSpacing="6" Margin="0,6,0,0">
+                                    <Button Content="Install" Classes="accent"
+                                            Command="{Binding Games.InstallSelectedCommand}" />
+                                    <Button Content="Refresh list"
+                                            Command="{Binding Games.RefreshCatalogCommand}" />
+                                    <CheckBox Content="pre-releases"
+                                              IsChecked="{Binding Games.IncludePreReleases}" />
+                                </WrapPanel>
+                                <ListBox ItemsSource="{Binding Games.Available}"
+                                         SelectedItem="{Binding Games.SelectedAvailable}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AvailableGameViewModel">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                                                <TextBlock Grid.Column="0" Text="{Binding Version}"
+                                                           FontWeight="SemiBold" Width="90" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Note}"
+                                                           FontSize="11" Opacity="0.65"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Size}"
+                                                           FontSize="11" Opacity="0.6"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Locations">
+                <StackPanel Margin="0,14,0,0" Spacing="12">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Cairn home" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding CairnHome}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   Text="Packs, game versions, runtimes and caches. Set CAIRN_HOME to move it." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Game install" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding GameInstallPath}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Shared data path" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding SharedDataPath}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   Text="Vintage Story's own folder. Packs made before packs had their own data still use it, and Cairn only ever reads it." />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>

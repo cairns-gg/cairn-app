@@ -34,45 +34,27 @@
                 IsEnabled="{Binding NotProvisioning}">
             <DockPanel LastChildFill="True">
                 <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="8">
-                    <!-- Deleting is destructive, so it asks before doing anything. -->
-                    <Border IsVisible="{Binding ConfirmingDelete}" Padding="8" CornerRadius="1"
-                            Background="{DynamicResource VsErrorFillBrush}"
-                            BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
-                        <StackPanel Spacing="6">
-                            <TextBlock FontSize="12" TextWrapping="Wrap"
-                                       Text="{Binding DeleteTargetName, StringFormat='Delete “{0}”…'}" />
-                            <TextBlock FontSize="12" TextWrapping="Wrap"
-                                       Text="{Binding DeleteConsequence}" />
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="Delete" Classes="accent"
-                                        Command="{Binding ConfirmDeleteCommand}" />
-                                <Button Content="Keep" Command="{Binding CancelDeleteCommand}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
                     <!-- A horizontal StackPanel lays these out at their desired width and
                          lets them spill past the 250px sidebar into the detail pane. The
                          grid makes each button share the column instead. -->
-                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto"
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
                           ColumnSpacing="6" RowSpacing="6">
-                        <!-- Buttons default to centring in their cell, which leaves the
+                        <!-- Buttons size to their content by default, which leaves the
                              two columns visibly ragged. -->
                         <Grid.Styles>
                             <Style Selector="Button">
                                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                <Setter Property="HorizontalContentAlignment" Value="Center" />
                             </Style>
                         </Grid.Styles>
                         <Button Grid.Row="0" Grid.Column="0" Content="New pack"
                                 Command="{Binding BeginCreateCommand}" />
                         <Button Grid.Row="0" Grid.Column="1" Content="Import…"
                                 Command="{Binding BeginImportCommand}" />
+                        <!-- Application-level, so it is separated from the pack actions
+                             above rather than sitting among them. -->
                         <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                Content="Game versions"
-                                Command="{Binding ShowGameVersionsCommand}" />
-                        <Button Grid.Row="2" Grid.Column="0" Content="Delete"
-                                Command="{Binding RequestDeleteCommand}" />
+                                Content="Preferences"
+                                Command="{Binding ShowPreferencesCommand}" />
                     </Grid>
                 </StackPanel>
 
@@ -146,107 +128,6 @@
                 <TextBox Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="NoWrap"
                          FontFamily="monospace" FontSize="12"
                          PlaceholderText="Paste the pack JSON here, or a https:// URL" />
-            </DockPanel>
-
-            <!-- Game versions -->
-            <DockPanel IsVisible="{Binding ShowGames}" LastChildFill="True" Margin="16">
-
-                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
-                    <StackPanel Grid.Column="0" Spacing="2">
-                        <TextBlock Text="Game versions" Classes="heading" FontSize="22" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding Games.StoreRoot}" FontSize="11" Opacity="0.6"
-                                   TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="Back to packs" VerticalAlignment="Top"
-                            Command="{Binding ShowPacksCommand}" />
-                </Grid>
-
-                <Border DockPanel.Dock="Top" Margin="0,0,0,10" Padding="10,8" CornerRadius="1"
-                        IsVisible="{Binding Games.HasError}"
-                        Background="{DynamicResource VsErrorFillBrush}" BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
-                    <TextBlock Text="{Binding Games.Error}" TextWrapping="Wrap" FontSize="12" />
-                </Border>
-
-                <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
-                    <ProgressBar x:Name="GamesProgress"
-                                 Maximum="1" Value="{Binding Games.ProgressFraction}"
-                                 IsIndeterminate="{Binding Games.ProgressIndeterminate}"
-                                 IsVisible="{Binding Games.IsBusy}" Height="6" />
-                    <TextBlock Text="{Binding Games.Progress}" FontSize="12" Opacity="0.75" />
-                </StackPanel>
-
-                <Grid ColumnDefinitions="*,16,*">
-
-                    <DockPanel Grid.Column="0" LastChildFill="True">
-                        <TextBlock DockPanel.Dock="Top" Text="Installed" FontWeight="SemiBold"
-                                   Margin="0,0,0,6" />
-                        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,6,0,0">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="Remove"
-                                        Command="{Binding Games.RemoveSelectedCommand}" />
-                                <Button Content="Install its .NET"
-                                        Command="{Binding Games.InstallRuntimeCommand}" />
-                            </StackPanel>
-                            <TextBlock Text="private .NET runtimes" FontSize="11" Opacity="0.6" />
-                            <ItemsControl ItemsSource="{Binding Games.ManagedRuntimes}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <TextBlock Text="{Binding}" FontSize="11" Opacity="0.7" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                        <ListBox ItemsSource="{Binding Games.Installed}"
-                                 SelectedItem="{Binding Games.SelectedInstalled}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:InstalledGameViewModel">
-                                    <StackPanel Spacing="2" Margin="0,3">
-                                        <TextBlock Text="{Binding Version}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Needs}" FontSize="11" Opacity="0.7" />
-                                        <TextBlock Text="{Binding RuntimeLine}" FontSize="11"
-                                                   Opacity="0.6" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="no matching .NET runtime — cannot start"
-                                                   IsVisible="{Binding RuntimeMissing}"
-                                                   FontSize="11" Foreground="{DynamicResource VsErrorBrush}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </DockPanel>
-
-                    <DockPanel Grid.Column="2" LastChildFill="True">
-                        <TextBlock DockPanel.Dock="Top" Text="Available" FontWeight="SemiBold"
-                                   Margin="0,0,0,6" />
-                        <!-- Wraps rather than spills: these three together are wider than
-                             half the pane at the window's minimum width. -->
-                        <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                                   ItemSpacing="6" LineSpacing="6" Margin="0,6,0,0">
-                            <Button Content="Install" Classes="accent"
-                                    Command="{Binding Games.InstallSelectedCommand}" />
-                            <Button Content="Refresh list"
-                                    Command="{Binding Games.RefreshCatalogCommand}" />
-                            <CheckBox Content="pre-releases"
-                                      IsChecked="{Binding Games.IncludePreReleases}" />
-                        </WrapPanel>
-                        <ListBox ItemsSource="{Binding Games.Available}"
-                                 SelectedItem="{Binding Games.SelectedAvailable}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:AvailableGameViewModel">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                                        <TextBlock Grid.Column="0" Text="{Binding Version}"
-                                                   FontWeight="SemiBold" Width="90" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Note}"
-                                                   FontSize="11" Opacity="0.65"
-                                                   VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Size}"
-                                                   FontSize="11" Opacity="0.6"
-                                                   VerticalAlignment="Center" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </DockPanel>
-                </Grid>
             </DockPanel>
 
             <!-- Nothing selected -->
@@ -605,6 +486,38 @@
                                          IsVisible="{Binding Detail.HasExported}"
                                          IsReadOnly="True" AcceptsReturn="True" Height="120"
                                          FontFamily="monospace" FontSize="11" />
+                            </StackPanel>
+
+                            <Separator Margin="0,4" />
+
+                            <!--
+                                Deleting lives with the pack it deletes, at the end of its
+                                own settings. It asks first, and says what goes: a pack with
+                                its own data path takes its worlds with it.
+                            -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Delete this pack" FontWeight="SemiBold" FontSize="13" />
+
+                                <Button Content="Delete pack" HorizontalAlignment="Left" Padding="14,5"
+                                        IsVisible="{Binding !ConfirmingDelete}"
+                                        Command="{Binding RequestDeleteCommand}" />
+
+                                <Border IsVisible="{Binding ConfirmingDelete}" Padding="10,8" CornerRadius="1"
+                                        Background="{DynamicResource VsErrorFillBrush}"
+                                        BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock FontSize="12" TextWrapping="Wrap"
+                                                   Text="{Binding DeleteTargetName, StringFormat='Delete “{0}”…'}" />
+                                        <TextBlock FontSize="12" TextWrapping="Wrap"
+                                                   Text="{Binding DeleteConsequence}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button Content="Delete" Classes="accent" Padding="14,4"
+                                                    Command="{Binding ConfirmDeleteCommand}" />
+                                            <Button Content="Keep" Padding="14,4"
+                                                    Command="{Binding CancelDeleteCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </StackPanel>
                     </TabItem>

@@ -489,35 +489,89 @@ public class MainWindowTests : IDisposable
 
 
 
-    [AvaloniaFact]
-    public void The_games_pane_can_be_opened_and_closed()
+    /// <summary>
+    /// Opens preferences the way the button does, and hands back the view model the app
+    /// really builds — the window itself is the view's job, so tests supply the opener.
+    /// </summary>
+    private static PreferencesViewModel OpenPreferences(MainViewModel vm)
     {
-        var (window, vm) = Show();
+        PreferencesViewModel? captured = null;
+        vm.OpenPreferences = p => { captured = p; return Task.CompletedTask; };
 
-        vm.ShowGameVersionsCommand.Execute(null);
-        Assert.True(vm.ShowGames);
+        vm.ShowPreferencesCommand.Execute(null);
 
-        var text = VisibleText(window).ToList();
-        Assert.Contains("Game versions", text);
-        Assert.Contains("Installed", text);
-        Assert.Contains("Available", text);
-
-        vm.ShowPacksCommand.Execute(null);
-        Assert.False(vm.ShowGames);
+        Assert.NotNull(captured);
+        return captured!;
     }
 
     [AvaloniaFact]
-    public void Games_pane_buttons_are_bound()
+    public void Game_versions_are_no_longer_a_pack_action()
     {
         var (window, vm) = Show();
-        vm.ShowGameVersionsCommand.Execute(null);
+        vm.SelectedPack = vm.Packs.First();
+
+        // They moved into preferences: nothing about them is about the selected pack.
+        Assert.DoesNotContain("Game versions", Buttons(window).Keys);
+        Assert.Contains("Preferences", Buttons(window).Keys);
+    }
+
+    [AvaloniaFact]
+    public void Preferences_opens_a_window_of_its_own()
+    {
+        var (_, vm) = Show();
+
+        var preferences = OpenPreferences(vm);
+
+        var window = new PreferencesWindow { DataContext = preferences };
+        window.Show();
+
+        var text = VisibleText(window).ToList();
+        Assert.Contains("Storage", text);
+        Assert.Contains("Installed", text);
+        Assert.Contains("Available", text);
+    }
+
+    [AvaloniaFact]
+    public void Preferences_still_manages_game_versions_and_runtimes()
+    {
+        var (_, vm) = Show();
+        var window = new PreferencesWindow { DataContext = OpenPreferences(vm) };
+        window.Show();
 
         var buttons = Buttons(window);
-        foreach (var label in new[] { "Install", "Refresh list", "Remove", "Back to packs" })
+        foreach (var label in new[] { "Install", "Refresh list", "Remove", "Install its .NET", "Clear" })
         {
-            Assert.True(buttons.ContainsKey(label), $"no '{label}' button in the games pane");
+            Assert.True(buttons.ContainsKey(label), $"no '{label}' button in preferences");
             Assert.NotNull(buttons[label].Command);
         }
+    }
+
+    [AvaloniaFact]
+    public void Preferences_reports_what_Cairn_is_using()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+
+        // A fresh store, so the numbers are small — but they must be present and readable,
+        // because "where did my disk go" is the reason this screen exists.
+        Assert.False(string.IsNullOrWhiteSpace(preferences.TotalSize));
+        Assert.False(string.IsNullOrWhiteSpace(preferences.GamesSize));
+        Assert.False(string.IsNullOrWhiteSpace(preferences.CacheSize));
+        Assert.Equal("no versions", preferences.GamesDetail);
+        Assert.Contains("pack", preferences.PacksDetail);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(0, "0 B")]
+    [InlineData(900, "900 B")]
+    [InlineData(2048, "2 KB")]
+    [InlineData(29L * 1024 * 1024, "29 MB")]
+    [InlineData(6_334_115_840L, "5.9 GB")]
+    public void Sizes_are_reported_the_way_people_read_them(long bytes, string expected)
+    {
+        // A game version is gigabytes and a cache is kilobytes, so one unit will not do —
+        // and "6334115840" answers nobody's question about where their disk went.
+        Assert.Equal(expected, PreferencesViewModel.Human(bytes));
     }
 
     [AvaloniaFact]
@@ -525,20 +579,6 @@ public class MainWindowTests : IDisposable
     {
         var (_, vm) = Show();
         Assert.Empty(vm.Games.Installed);
-    }
-
-    [AvaloniaFact]
-    public void The_games_pane_exposes_private_runtime_management()
-    {
-        var (window, vm) = Show();
-        vm.ShowGameVersionsCommand.Execute(null);
-
-        var buttons = Buttons(window);
-        Assert.True(buttons.ContainsKey("Install its .NET"), "no runtime install button");
-        Assert.NotNull(buttons["Install its .NET"].Command);
-
-        // Nothing managed in a fresh store.
-        Assert.Empty(vm.Games.ManagedRuntimes);
     }
 
     // ---- sharing ----
@@ -651,15 +691,29 @@ public class MainWindowTests : IDisposable
     // ---- deleting ----
 
     [AvaloniaFact]
-    public void Delete_is_reachable_from_the_sidebar_not_buried_in_a_tab()
+    public void Delete_lives_with_the_pack_it_deletes()
     {
         var (window, vm) = Show();
         vm.SelectedPack = vm.Packs.First();
 
-        // No tab switching required: it sits with New pack and Import.
+        // Not in the sidebar: that is for choosing a pack and app-level actions, and a
+        // destructive button sitting beside "New pack" was one slip from a bad day.
+        Assert.DoesNotContain("Delete", Buttons(window).Keys);
+
+        ShowSettingsTab(window);
+
         var buttons = Buttons(window);
-        Assert.True(buttons.ContainsKey("Delete"), "no Delete button in the sidebar");
-        Assert.NotNull(buttons["Delete"].Command);
+        Assert.True(buttons.ContainsKey("Delete pack"), "no Delete pack button in Settings");
+        Assert.NotNull(buttons["Delete pack"].Command);
+    }
+
+    /// <summary>A TabControl only realises the selected tab, so its contents need showing.</summary>
+    private static void ShowSettingsTab(Visual window)
+    {
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+        tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
+            .Single(t => (t.Header as string) == "Settings");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]
@@ -668,13 +722,18 @@ public class MainWindowTests : IDisposable
         var (window, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
 
+        ShowSettingsTab(window);
         vm.RequestDeleteCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         // Nothing is gone yet — it only armed the confirmation.
         Assert.True(vm.ConfirmingDelete);
         Assert.Equal(3, vm.Packs.Count);
         Assert.True(Directory.Exists(Path.Combine(_home, "packs", "anego")));
-        Assert.Contains(VisibleText(window), t => t.Contains("Anego Server") && t.Contains("Delete"));
+
+        // And it says what would go, not just that something would.
+        Assert.Contains(VisibleText(window), t => t.Contains("Anego Server"));
+        Assert.Contains(VisibleText(window), t => t.Contains("downloaded mods"));
     }
 
     [AvaloniaFact]
@@ -747,7 +806,6 @@ public class MainWindowTests : IDisposable
         Assert.True(vm.ShowProvisioning);
         Assert.False(vm.ShowDetail);
         Assert.False(vm.ShowCreate);
-        Assert.False(vm.ShowGames);
         Assert.False(vm.ShowImport);
         Assert.False(vm.ShowEmpty);
 
@@ -824,10 +882,12 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void The_games_pane_bar_animates_on_the_same_rule()
+    public void The_preferences_bar_animates_on_the_same_rule()
     {
-        var (window, vm) = Show();
-        vm.ShowGameVersionsCommand.Execute(null);
+        var (_, vm) = Show();
+        var window = new PreferencesWindow { DataContext = OpenPreferences(vm) };
+        window.Show();
+
         vm.Games.IsBusy = true;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 

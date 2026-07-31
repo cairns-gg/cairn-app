@@ -14,6 +14,20 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Hands the view model a way to open the preferences window. Knowing how to show a
+    /// window is the view's job; the view model only decides when.
+    /// </summary>
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+
+        if (DataContext is MainViewModel vm) vm.OpenPreferences = ShowPreferencesAsync;
+    }
+
+    private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
+        new PreferencesWindow { DataContext = preferences }.ShowDialog(this);
+
+    /// <summary>
     /// Fetches a mod's versions the moment its dropdown is opened.
     ///
     /// In code-behind because DropDownOpened is an event with no command to bind to, and

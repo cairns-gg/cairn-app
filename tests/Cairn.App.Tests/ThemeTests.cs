@@ -242,10 +242,28 @@ public class ThemeTests : IDisposable
         Shot("02-new-pack");
 
         vm.CancelCreateCommand.Execute(null);
-        vm.ShowGameVersionsCommand.Execute(null);
-        Shot("03-games");
 
-        vm.ShowPacksCommand.Execute(null);
+        // Preferences is its own window now, so it needs its own shot.
+        PreferencesViewModel? preferences = null;
+        vm.OpenPreferences = pref => { preferences = pref; return System.Threading.Tasks.Task.CompletedTask; };
+        vm.ShowPreferencesCommand.Execute(null);
+
+        if (preferences is not null)
+        {
+            var prefs = new PreferencesWindow { DataContext = preferences };
+            prefs.Show();
+
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            using (var frame = prefs.CaptureRenderedFrame())
+            {
+                using var file = File.Create(Path.Combine(outDir, "03-preferences.png"));
+                frame!.Save(file, new PngBitmapEncoderOptions());
+            }
+
+            prefs.Close();
+        }
+
         vm.BeginImportCommand.Execute(null);
         Shot("04-import");
 
