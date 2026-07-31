@@ -58,21 +58,19 @@ public sealed class PackBundle
     }
 
     /// <summary>
-    /// Rewrites the manifest so every mod is pinned to the version in the lock. This is
-    /// how an imported pack reproduces the author's set: sync resolves manifest pins, so
-    /// carrying the lock alone would not constrain anything.
+    /// Drops every manifest pin, including ones the author set deliberately, so the pack
+    /// resolves newest-compatible instead of reproducing what the author had.
+    ///
+    /// This is the whole of a loose import. Reproduction needs no counterpart: the
+    /// author's lock constrains sync on its own — <c>PackSyncer</c> applies a lock entry
+    /// whenever the manifest asks for no particular version — and the download is checked
+    /// against the author's SHA-256 either way.
     /// </summary>
-    public void PinToLock()
+    public void ClearPins()
     {
-        if (Pack is null || Lock is null) return;
+        if (Pack is null) return;
 
         foreach (var mod in Pack.Mods)
-        {
-            var locked = Lock.Mods.FirstOrDefault(
-                m => string.Equals(m.ModId, mod.ModId, StringComparison.OrdinalIgnoreCase));
-
-            if (locked is not null && GameVersions.IsPlausibleVersion(locked.Version))
-                mod.Version = locked.Version;
-        }
+            mod.Version = null;
     }
 }

@@ -113,11 +113,12 @@ public sealed class PackStore
     /// Creates a pack from a shared bundle.
     /// </summary>
     /// <param name="asId">Override the author's id, e.g. when it collides with an existing pack.</param>
-    /// <param name="pinToLock">
-    /// Pin every mod to the version the author had installed, so the pack reproduces
-    /// exactly. Set false to track newest-compatible instead.
+    /// <param name="reproduce">
+    /// Keep the author's lock, so the first sync installs their exact versions and
+    /// verifies the bytes. Set false for a loose import: the lock is discarded and every
+    /// pin dropped, so the pack resolves newest-compatible instead.
     /// </param>
-    public PackManifest Import(PackBundle bundle, string? asId = null, bool pinToLock = true)
+    public PackManifest Import(PackBundle bundle, string? asId = null, bool reproduce = true)
     {
         var manifest = bundle.Pack
                        ?? throw new InvalidDataException("The bundle has no pack.");
@@ -127,13 +128,16 @@ public sealed class PackStore
         var problem = DescribeIdProblem(manifest.Id);
         if (problem is not null) throw new InvalidOperationException(problem);
 
-        if (pinToLock) bundle.PinToLock();
+        if (!reproduce) bundle.ClearPins();
 
         Save(manifest);
         Directory.CreateDirectory(DataDir(manifest.Id));
 
-        // Keep the author's lock so the first sync can verify it got identical files.
-        bundle.Lock?.Save(LockPath(manifest.Id));
+        // The author's lock is what reproduces their set: sync installs from it and checks
+        // the download against their SHA-256. Their manifest travels unchanged alongside
+        // it, so mods they deliberately pinned stay pinned and the rest stay followed —
+        // the recipient gets identical bytes now and is still offered updates later.
+        if (reproduce) bundle.Lock?.Save(LockPath(manifest.Id));
 
         return manifest;
     }

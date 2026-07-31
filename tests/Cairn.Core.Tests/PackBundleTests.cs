@@ -65,31 +65,63 @@ public class PackBundleTests : IDisposable
     }
 
     [Fact]
-    public void Importing_with_the_lock_pins_the_authors_exact_versions()
+    public void Importing_reproduces_the_authors_versions_through_the_lock()
     {
         AuthorPack();
 
         var imported = _recipient.Import(PackBundle.Parse(_author.Export("anego")));
 
-        // Pinning is what makes a shared pack reproducible: without it the recipient
-        // would resolve newest-compatible, which may not be what the author tested.
-        Assert.Equal("1.3.0", imported.Mods.Single(m => m.ModId == "glassview").Version);
-        Assert.Equal("1.2.0", imported.Mods.Single(m => m.ModId == "unchisel").Version);
-
-        // The author's lock travels too, so the first sync can verify the bytes.
+        // The lock is what reproduces the set — PackSyncer applies a lock entry whenever
+        // the manifest asks for no particular version, and checks the bytes against the
+        // author's hash.
         var lockFile = _recipient.LoadLock("anego");
         Assert.NotNull(lockFile);
-        Assert.Equal(new string('a', 64), lockFile!.Mods.Single(m => m.ModId == "glassview").Sha256);
+        Assert.Equal("1.3.0", lockFile!.Mods.Single(m => m.ModId == "glassview").Version);
+        Assert.Equal(new string('a', 64), lockFile.Mods.Single(m => m.ModId == "glassview").Sha256);
     }
 
     [Fact]
-    public void Importing_loose_tracks_newest_instead_of_pinning()
+    public void Importing_leaves_the_authors_unpinned_mods_followed()
     {
         AuthorPack();
 
-        var imported = _recipient.Import(PackBundle.Parse(_author.Export("anego")), pinToLock: false);
+        var imported = _recipient.Import(PackBundle.Parse(_author.Export("anego")));
 
+        // Writing the lock's versions into the manifest would pin them, and a pinned mod
+        // is never offered an update — freezing every imported pack forever. The recipient
+        // gets identical bytes from the lock and stays able to update afterwards.
         Assert.All(imported.Mods, m => Assert.Null(m.Version));
+    }
+
+    [Fact]
+    public void Importing_keeps_the_pins_the_author_set_deliberately()
+    {
+        var authored = AuthorPack();
+        authored.Mods.Single(m => m.ModId == "unchisel").Version = "1.2.0";
+        _author.Save(authored);
+
+        var imported = _recipient.Import(PackBundle.Parse(_author.Export("anego")));
+
+        // A pin is transmitted intent, not an artefact of installing: it survives the
+        // handoff while the mods the author merely followed arrive followed.
+        Assert.Equal("1.2.0", imported.Mods.Single(m => m.ModId == "unchisel").Version);
+        Assert.Null(imported.Mods.Single(m => m.ModId == "glassview").Version);
+    }
+
+    [Fact]
+    public void Importing_loose_tracks_newest_instead_of_reproducing()
+    {
+        var authored = AuthorPack();
+        authored.Mods.Single(m => m.ModId == "unchisel").Version = "1.2.0";
+        _author.Save(authored);
+
+        var imported = _recipient.Import(
+            PackBundle.Parse(_author.Export("anego")), reproduce: false);
+
+        // Loose discards the lock as well as the pins — keeping the lock would reproduce
+        // the author's versions regardless of what the manifest says.
+        Assert.All(imported.Mods, m => Assert.Null(m.Version));
+        Assert.Null(_recipient.LoadLock("anego"));
     }
 
     [Fact]

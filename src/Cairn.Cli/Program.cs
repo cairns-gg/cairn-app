@@ -517,11 +517,15 @@ internal static class Program
         var bundle = PackBundle.Parse(json);
 
         // --loose tracks newest-compatible instead of reproducing the author's versions.
-        var manifest = store.Import(bundle, ArgValue(args, "--id"), pinToLock: !args.Contains("--loose"));
+        var reproduce = !args.Contains("--loose");
+        var manifest = store.Import(bundle, ArgValue(args, "--id"), reproduce);
 
         var pinned = manifest.Mods.Count(m => m.Version is not null);
+        var how = reproduce && bundle.Lock is not null
+            ? "reproducing the author's versions"
+            : "tracking newest-compatible";
         Console.WriteLine($"imported '{manifest.Id}' for game {manifest.GameVersion} "
-                          + $"({manifest.Mods.Count} mods, {pinned} pinned)");
+                          + $"({manifest.Mods.Count} mods, {pinned} pinned, {how})");
         Console.WriteLine($"  sync it with: cairn-cli sync {manifest.Id}");
         return 0;
     }
