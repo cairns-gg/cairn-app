@@ -446,10 +446,16 @@ public partial class PackDetailViewModel : ViewModelBase
     [ObservableProperty] public partial string CheckingMod { get; set; } = "";
 
     /// <summary>
-    /// The last completed check. Non-null means the confirmation is on screen; nothing has
-    /// been written at that point, which is the entire purpose of the step.
+    /// The last completed check. Nothing has been written while it is set, which is the
+    /// entire purpose of the step.
     /// </summary>
     [ObservableProperty] public partial VersionChangeViewModel? VersionChange { get; set; }
+
+    /// <summary>
+    /// Shows the check and returns whether to go ahead. Supplied by the view; when absent
+    /// — headless tests — the result simply stays on VersionChange for Apply or Cancel.
+    /// </summary>
+    public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange { get; set; }
 
     public bool CanCheckVersion =>
         !IsCheckingVersion
@@ -512,8 +518,15 @@ public partial class PackDetailViewModel : ViewModelBase
                 progress: new Progress<string>(m => CheckingMod = m),
                 ct: ct);
 
-            VersionChange = new VersionChangeViewModel(plan);
+            var change = new VersionChangeViewModel(plan);
+            VersionChange = change;
             _log($"checked {Manifest.GameVersion} -> {target}: {plan.Summary()}");
+
+            if (ConfirmVersionChange is not null)
+            {
+                if (await ConfirmVersionChange(change)) ApplyVersionChange();
+                else CancelVersionChange();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -536,7 +549,7 @@ public partial class PackDetailViewModel : ViewModelBase
     /// in step. The mods on disk stay as they are until then.
     /// </summary>
     [RelayCommand]
-    private void ApplyVersionChange()
+    public void ApplyVersionChange()
     {
         if (VersionChange is null) return;
 
@@ -557,7 +570,7 @@ public partial class PackDetailViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelVersionChange() => VersionChange = null;
+    public void CancelVersionChange() => VersionChange = null;
 
     public bool NotBusy => !IsBusy;
 

@@ -250,8 +250,25 @@ public class ThemeTests : IDisposable
 
             if (vm.Detail.TargetGameVersion is not null)
             {
+                // The check opens a modal dialog in the real app, which would block here.
+                vm.Detail.ConfirmVersionChange = null;
                 vm.Detail.CheckVersionCommand.Execute(null);
-                Shot("05b-version-change");
+
+                if (vm.Detail.VersionChange is not null)
+                {
+                    var dialog = new VersionChangeWindow { DataContext = vm.Detail.VersionChange };
+                    dialog.Show();
+
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                    using (var frame = dialog.CaptureRenderedFrame())
+                    {
+                        using var file = File.Create(Path.Combine(outDir, "05b-version-change.png"));
+                        frame!.Save(file, new PngBitmapEncoderOptions());
+                    }
+
+                    dialog.Close();
+                }
             }
         }
 

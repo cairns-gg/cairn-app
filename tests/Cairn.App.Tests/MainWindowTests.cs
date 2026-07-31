@@ -797,6 +797,13 @@ public class MainWindowTests : IDisposable
         var vm = new MainViewModel(new RetargetHandler());
         var window = new MainWindow { DataContext = vm };
         window.Show();
+
+        // The real window hands the view model a modal dialog to confirm with, which would
+        // block a headless run forever. These tests inspect the result and drive Apply or
+        // Cancel themselves; the dialog itself is covered by VersionChangeWindowTests.
+        vm.ConfirmVersionChange = null;
+        if (vm.Detail is not null) vm.Detail.ConfirmVersionChange = null;
+
         return (window, vm);
     }
 
@@ -809,6 +816,7 @@ public class MainWindowTests : IDisposable
     {
         vm.SelectedPack = vm.Packs.Single(p => p.Id == id);
         var detail = vm.Detail!;
+        detail.ConfirmVersionChange = null;
 
         await detail.LoadGameVersionsAsync();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -948,18 +956,17 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task The_confirmation_appears_on_screen_not_just_in_the_view_model()
+    public async Task The_picker_and_its_check_button_sit_in_the_settings_tab()
     {
         var (window, vm) = ShowWithModDb();
         var detail = await Retargetable(vm);
 
         detail.TargetGameVersion = "1.22.6";
-        await detail.CheckVersionCommand.ExecuteAsync(null);
-
         ShowSettingsTab(window);
 
-        Assert.Contains(VisibleText(window), t => t.Contains("Upgrade 1.22.5 → 1.22.6"));
-        Assert.True(Buttons(window).ContainsKey("Change to 1.22.6"));
+        // The verdicts themselves are a dialog now; see VersionChangeWindowTests.
+        Assert.True(Buttons(window).ContainsKey("Check…"));
+        Assert.Contains(VisibleText(window), t => t.Contains("Game version"));
     }
 
     // ---- sharing ----

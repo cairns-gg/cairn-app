@@ -339,6 +339,8 @@ public partial class MainViewModel : ViewModelBase
             requestDelete: RequestDeleteCommand.Execute,
             knownGameVersions: KnownGameVersionsAsync);
 
+        Detail.ConfirmVersionChange = ConfirmVersionChange;
+
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
     }
@@ -491,6 +493,9 @@ public partial class MainViewModel : ViewModelBase
     /// The view supplies the opener, since Core knows nothing about windows.
     /// </summary>
     public Func<PreferencesViewModel, Task>? OpenPreferences { get; set; }
+
+    /// <summary>Set by the view; see PackDetailViewModel.ConfirmVersionChange.</summary>
+    public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange { get; set; }
 
     [RelayCommand]
     private async Task ShowPreferences()

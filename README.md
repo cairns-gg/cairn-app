@@ -106,10 +106,12 @@ required:
 - **Add mods** tab — search ModDB and add a result to the pack.
 - **Settings** tab — rename, change or clear the server, export, or delete the pack.
 - **Changing the game version** is its own step, in Settings: pick a target from the
-  versions ModDB publishes and press **Check…**. Nothing is written yet. The answer lists
+  versions ModDB publishes and press **Check…**. Nothing is written yet. A dialog lists
   every mod and what would happen to it — `keeps`, `updates`, `untested`, `breaks`,
   `pin fails` — worst first, because the reason to say no should not need scrolling to.
-  Only **Change to X** commits it. Retargeting invalidates the lockfile for every mod, so
+  The list scrolls and the buttons stay put, so a forty-mod pack reads the same as a
+  three-mod one. Only **Change to X** commits it; closing the dialog any other way does
+  not. Retargeting invalidates the lockfile for every mod, so
   this is a bigger change than it looks: it can move several mods at once, or leave one
   behind entirely.
 

@@ -145,12 +145,16 @@ public static class GameVersionChange
                     e.Message));
                 continue;
             }
-            catch (HttpRequestException e)
+            catch (HttpRequestException)
             {
                 // Not reaching ModDB says nothing about the mod. Reporting that as "breaks"
                 // would be a guess presented as a finding.
+                //
+                // The exception's own text ("Response status code does not indicate
+                // success: 404 (Not Found)") is transport detail in a row about a mod, so
+                // it goes to the log instead.
                 verdicts.Add(new ModVerdict(want.ModId, installed, null, ModOutcome.Unknown,
-                    $"could not be checked: {e.Message}"));
+                    "could not be checked — ModDB did not answer"));
                 continue;
             }
 
