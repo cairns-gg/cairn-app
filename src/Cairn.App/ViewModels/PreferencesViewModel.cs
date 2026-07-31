@@ -98,27 +98,8 @@ public partial class PreferencesViewModel : ViewModelBase
     private static string Count(int n, string noun) =>
         n == 0 ? $"no {noun}s" : $"{n} {noun}{(n == 1 ? "" : "s")}";
 
-    private static long DirectorySize(string path)
-    {
-        try
-        {
-            if (!Directory.Exists(path)) return 0;
-
-            return new DirectoryInfo(path).EnumerateFiles("*", SearchOption.AllDirectories)
-                .Sum(f => { try { return f.Length; } catch (IOException) { return 0L; } });
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return 0;
-        }
-    }
+    private static long DirectorySize(string path) => DirectoryGrowth.Measure(path);
 
     /// <summary>Sizes people can read: a game version is gigabytes, a cache is kilobytes.</summary>
-    public static string Human(long bytes) => bytes switch
-    {
-        >= 1L << 30 => $"{bytes / (double)(1L << 30):F1} GB",
-        >= 1L << 20 => $"{bytes / (double)(1L << 20):F0} MB",
-        >= 1L << 10 => $"{bytes / (double)(1L << 10):F0} KB",
-        _ => $"{bytes} B",
-    };
+    public static string Human(long bytes) => Bytes.Human(bytes);
 }

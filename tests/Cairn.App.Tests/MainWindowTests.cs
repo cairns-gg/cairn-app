@@ -1177,9 +1177,10 @@ public class MainWindowTests : IDisposable
         Assert.Equal(3, vm.Packs.Count);
         Assert.True(Directory.Exists(Path.Combine(_home, "packs", "anego")));
 
-        // And it says what would go, not just that something would.
+        // And it itemises what would go, with what the disk gets back.
         Assert.Equal("Anego Server", vm.DeleteTargetName);
-        Assert.Contains("downloaded mods", vm.DeleteConsequence);
+        Assert.Contains("Frees", vm.DeleteConsequence);
+        Assert.Contains("cannot be undone", vm.DeleteConsequence);
     }
 
     [AvaloniaFact]

@@ -148,11 +148,11 @@ public partial class MainViewModel : ViewModelBase
     public string DeleteTargetName => SelectedPack?.Display ?? "";
 
     /// <summary>
-    /// What deleting this pack actually destroys.
+    /// What deleting this pack actually destroys, itemised, with what the disk gets back.
     ///
-    /// A pack with its own data path takes its worlds with it, which is a different order
-    /// of loss from "and its downloaded mods" — so the prompt names them, and only gets
-    /// heavier when there is something to lose.
+    /// Measured rather than described: this is the last thing read before something
+    /// irreversible, and "and its downloaded mods?" is not enough to decide on when the
+    /// answer might be several gigabytes and a world someone has played for a month.
     /// </summary>
     public string DeleteConsequence
     {
@@ -160,14 +160,14 @@ public partial class MainViewModel : ViewModelBase
         {
             if (SelectedPack is null) return "";
 
-            var worlds = _packData.Worlds(SelectedPack.Id).Count;
-            if (worlds == 0) return "and its downloaded mods?";
+            var contents = PackContents.Of(_store, SelectedPack.Id);
+            var lines = contents.Describe();
 
-            var size = _packData.DataSize(SelectedPack.Id);
-            var mb = size / 1024d / 1024d;
+            var body = lines.Count == 0
+                ? "There is nothing downloaded under it yet."
+                : "This deletes:\n" + string.Join("\n", lines.Select(l => "  • " + l));
 
-            return $"its downloaded mods, and {worlds} world{(worlds == 1 ? "" : "s")} "
-                   + $"({mb:F0} MB)? This cannot be undone.";
+            return $"{body}\n\nFrees {Bytes.Human(contents.TotalBytes)}. This cannot be undone.";
         }
     }
 
@@ -199,9 +199,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         var confirmed = await Confirm(new ConfirmViewModel(
-            $"Delete “{DeleteTargetName}”?",
-            $"This deletes the pack, {DeleteConsequence}",
-            "Delete pack"));
+            $"Delete “{DeleteTargetName}”?", DeleteConsequence, "Delete pack"));
 
         if (confirmed) ConfirmDelete();
     }

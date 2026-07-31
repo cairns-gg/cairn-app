@@ -35,6 +35,14 @@ public class ThemeTests : IDisposable
             connect = "host:42420", mods = new[] { new { modid = "glassview" } },
         }));
 
+        // A downloaded mod and a couple of worlds, so the delete prompt shows the case
+        // worth seeing rather than an empty pack.
+        File.WriteAllBytes(Path.Combine(dir, "Mods", "glassview_1.3.0.zip"), new byte[86_000]);
+        var saves = Path.Combine(dir, "data", "Saves");
+        Directory.CreateDirectory(saves);
+        File.WriteAllBytes(Path.Combine(saves, "Homestead.vcdbs"), new byte[412 * 1024 * 1024 / 2]);
+        File.WriteAllBytes(Path.Combine(saves, "Test Flats.vcdbs"), new byte[9_000_000]);
+
         // Two versions to move between, so the screenshots show a real picker.
         Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"));
         Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"));
@@ -225,10 +233,9 @@ public class ThemeTests : IDisposable
         {
             var confirm = new ConfirmWindow
             {
+                // The real strings, so this cannot drift from what the app says.
                 DataContext = new ConfirmViewModel(
-                    "Delete \u201cAnego Server\u201d?",
-                    "This deletes the pack, its downloaded mods, and 3 worlds (412 MB). This cannot be undone.",
-                    "Delete pack"),
+                    $"Delete \u201c{vm.DeleteTargetName}\u201d?", vm.DeleteConsequence, "Delete pack"),
             };
             confirm.Show();
 

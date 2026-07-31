@@ -83,7 +83,8 @@ others, and a session the game rotates mid-play is not lost. Cairn only ever **r
 own Vintage Story data path — it seeds from it and never writes to it.
 
 Because a pack's data is inside the pack, **deleting a pack deletes its worlds**. The
-confirmation says so and names them. A world made under a pack's mod set generally cannot be
+confirmation itemises what goes — worlds by name and size, mods by count and size — and
+says how much disk it hands back. A world made under a pack's mod set generally cannot be
 opened without it, so leaving one behind would strand data nothing can read.
 
 This applies to every pack, with no way to turn it off. Sharing a data path was briefly a
