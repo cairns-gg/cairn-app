@@ -28,7 +28,12 @@ public class PackSyncPinningTests : IDisposable
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
     }
 
-    /// <summary>Serves one mod whose newest release is configurable, and counts lookups.</summary>
+    /// <summary>
+    /// Serves one mod whose newest release is configurable, and counts lookups.
+    ///
+    /// Download URLs use ModDB's real CDN host because the syncer will not follow a
+    /// locked URL pointing anywhere else — see UntrustedLockTests.
+    /// </summary>
     private sealed class Stub(string newest) : HttpMessageHandler
     {
         public int Lookups { get; private set; }
@@ -47,11 +52,11 @@ public class PackSyncPinningTests : IDisposable
                   "releases":[
                     {"releaseid":1,"fileid":1,"modidstr":"olla","modversion":"{{newest}}",
                      "filename":"olla_{{newest}}.zip",
-                     "mainfile":"https://example.test/olla_{{newest}}.zip",
+                     "mainfile":"https://moddbcdn.vintagestory.at/olla_{{newest}}.zip",
                      "tags":["1.22.5"]},
                     {"releaseid":2,"fileid":2,"modidstr":"olla","modversion":"1.0.0",
                      "filename":"olla_1.0.0.zip",
-                     "mainfile":"https://example.test/olla_1.0.0.zip",
+                     "mainfile":"https://moddbcdn.vintagestory.at/olla_1.0.0.zip",
                      "tags":["1.22.5"]}
                   ]
                 }

@@ -383,8 +383,15 @@ public partial class MainViewModel : ViewModelBase
         {
             var source = ImportText.Trim();
 
-            var json = source.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                       || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            // https only: a pack decides which mods get installed, so it must not
+            // arrive over a connection anyone on the path can rewrite.
+            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                ImportError = "Refusing to import over http — use an https:// address.";
+                return;
+            }
+
+            var json = source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
                 ? await _http.GetStringAsync(source)
                 : File.Exists(source) ? File.ReadAllText(source) : source;
 

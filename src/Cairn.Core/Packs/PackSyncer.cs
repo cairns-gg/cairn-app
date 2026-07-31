@@ -73,17 +73,28 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                                   StringComparison.OrdinalIgnoreCase)
                               && (want.Version is null || want.Version == prior.Version);
 
+            // A lock may say WHAT to install, but only ModDB says WHERE it comes from.
+            // An imported pack carries its author's lock, so a URL taken out of one is
+            // attacker-supplied. Falling back to a fresh resolve rather than refusing
+            // keeps a pack with an unfamiliar URL installable — and still reproducible,
+            // because the download is verified against the locked hash either way.
+            var lockUrlUsable = prior is not null && ModDbUrls.IsKnownDownloadHost(prior.Url);
+
             ResolvedRelease? release;
 
-            if (lockApplies)
+            if (lockApplies && lockUrlUsable)
             {
                 release = FromLock(prior!);
             }
             else
             {
+                // Pinned to what the lock already chose when the lock still applies, so
+                // an untrusted URL costs a lookup rather than a different mod version.
+                var wanted = lockApplies ? prior!.Version : want.Version;
+
                 try
                 {
-                    release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, want.Version, ct).ConfigureAwait(false);
+                    release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, wanted, ct).ConfigureAwait(false);
                 }
                 catch (Exception e) when (e is ModDbException or HttpRequestException)
                 {
@@ -108,13 +119,24 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
                     "ModDB marks this as server-side; installing it client-side may do nothing"));
 
-            var target = Path.Combine(modsDir, release.FileName);
+            // Reduced to a bare filename before it touches the filesystem: this can come
+            // from an imported lock, and Path.Combine with "../../evil.zip" would happily
+            // escape the pack. PackStore.PackDir guards ids for exactly this reason.
+            var safeName = SafeFileName(release.FileName);
+            if (safeName is null)
+            {
+                Record(new SyncStep(SyncAction.Failed, release.ModId,
+                    $"refusing a mod filename that is not a plain file name: '{release.FileName}'"));
+                continue;
+            }
+
+            var target = Path.Combine(modsDir, safeName);
 
             var locked = new LockedMod
             {
                 ModId = release.ModId,
                 Version = release.ModVersion,
-                FileName = release.FileName,
+                FileName = safeName,
                 Url = release.Url,
                 ReleaseId = release.ReleaseId,
                 FileId = release.FileId,
@@ -180,6 +202,25 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
         newLock.Save(lockPath);
         return new SyncReport(steps, newLock);
+    }
+
+    /// <summary>
+    /// The bare filename, or null if it is not one. Rejects rather than sanitises, so a
+    /// name that tries to escape is reported instead of quietly becoming something else.
+    /// </summary>
+    private static string? SafeFileName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        // GetFileName strips any directory part; if that changed the string, the original
+        // was trying to carry one. Also catches "..", rooted paths and both separators.
+        var bare = Path.GetFileName(name);
+
+        if (bare != name || bare is "." or "..") return null;
+        if (bare.AsSpan().IndexOfAny('/', '\\') >= 0) return null;
+        if (Path.IsPathRooted(bare)) return null;
+
+        return bare;
     }
 
     /// <summary>

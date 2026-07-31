@@ -488,8 +488,12 @@ internal static class Program
 
         try
         {
-            json = source.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                   || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            // https only: a pack decides which mods get installed, so it must not
+            // arrive over a connection anyone on the path can rewrite.
+            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                return Fail("refusing to import over http; use https");
+
+            json = source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
                 ? await http.GetStringAsync(source)
                 : File.ReadAllText(source);
         }

@@ -23,4 +23,30 @@ public static class ModDbUrls
     public static string? Page(ModDbSearchEntry entry) => Page(entry.AssetId, entry.UrlAlias);
 
     public static string? Page(ModDbMod mod) => Page(mod.AssetId, mod.UrlAlias);
+
+    /// <summary>Hosts ModDB is known to serve mod downloads from.</summary>
+    private static readonly string[] DownloadHosts =
+    [
+        "moddbcdn.vintagestory.at",   // the CDN every release URL currently points at
+        "mods.vintagestory.at",       // download.php, which redirects to the CDN
+    ];
+
+    /// <summary>
+    /// Whether a download URL points somewhere ModDB actually serves files from.
+    ///
+    /// This gates attacker-supplied input. A shared pack carries its own lockfile, and
+    /// following a URL out of one would let the pack choose where a mod is fetched from,
+    /// into the directory handed to the game. Mods are code.
+    ///
+    /// Deliberately not the only defence: ModDB's CDN host is a config value in its own
+    /// source rather than a constant, so this list can go stale. A caller that fails this
+    /// check should resolve the mod again rather than refuse it.
+    /// </summary>
+    public static bool IsKnownDownloadHost(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttps) return false;
+
+        return DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+    }
 }

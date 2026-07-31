@@ -104,8 +104,8 @@ public class ModSearchFilterTests
         // one lookup per result.
         var searches = handler.Requests.Where(r => r.Contains("/mods?")).ToList();
         Assert.Equal(2, searches.Count);
-        Assert.Single(searches.Where(r => r.Contains("gameversions")));
-        Assert.Single(searches.Where(r => !r.Contains("gameversions")));
+        Assert.Single(searches, r => r.Contains("gameversions"));
+        Assert.Single(searches, r => !r.Contains("gameversions"));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public class ModSearchFilterTests
 
         var results = await client.SearchRankedAsync("olla");
 
-        Assert.Single(handler.Requests.Where(r => r.Contains("/mods?")));
+        Assert.Single(handler.Requests, r => r.Contains("/mods?"));
         Assert.All(results, r => Assert.True(r.Compatible));
     }
 
@@ -143,7 +143,7 @@ public class ModSearchFilterTests
         await client.SearchAsync("c", "1.22.0");
 
         // It changes only when the game ships a release; re-fetching per search is waste.
-        Assert.Single(handler.Requests.Where(r => r.Contains("/gameversions")));
+        Assert.Single(handler.Requests, r => r.Contains("/gameversions"));
     }
 
     [Fact]
