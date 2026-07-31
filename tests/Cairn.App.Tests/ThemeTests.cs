@@ -364,6 +364,20 @@ public class ThemeTests : IDisposable
             preferences.CleanUpCommand.Execute(null);
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
+            // Mid-cleanup: the bar that shows it is working rather than hung.
+            preferences.IsCleaningUp = true;
+            preferences.CleanupStage = "removing Vintage Story 1.22.6…";
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            using (var frame = prefs.CaptureRenderedFrame())
+            {
+                using var file = File.Create(Path.Combine(outDir, "14-cleaning-up.png"));
+                frame!.Save(file, new PngBitmapEncoderOptions());
+            }
+
+            preferences.IsCleaningUp = false;
+            preferences.CleanupStage = "";
+
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             using (var frame = prefs.CaptureRenderedFrame())

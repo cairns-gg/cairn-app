@@ -41,6 +41,7 @@
                             <!-- 600 MB a version, and a retargeted pack leaves its old one
                                  behind with nothing pointing at it. -->
                             <Button Grid.Row="0" Grid.Column="3" Content="Clean up" Padding="12,3"
+                                    IsEnabled="{Binding NotCleaningUp}"
                                     Command="{Binding CleanUpCommand}" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text=".NET runtimes" />
@@ -64,6 +65,13 @@
                             <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding PacksDetail}"
                                        Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
                         </Grid>
+
+                        <!-- Deleting gigabytes takes real time; without this the window
+                             just stops, which reads as a hang rather than as work. -->
+                        <StackPanel Spacing="4" IsVisible="{Binding IsCleaningUp}">
+                            <ProgressBar IsIndeterminate="True" Height="6" />
+                            <TextBlock Text="{Binding CleanupStage}" FontSize="11" Opacity="0.75" />
+                        </StackPanel>
 
                         <TextBlock Text="{Binding CleanupSummary}" FontSize="11" Opacity="0.75"
                                    TextWrapping="Wrap"

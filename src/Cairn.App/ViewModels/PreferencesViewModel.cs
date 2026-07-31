@@ -89,6 +89,22 @@ public partial class PreferencesViewModel : ViewModelBase
     [ObservableProperty] public partial string CleanupSummary { get; set; } = "";
 
     /// <summary>
+    /// True while files are being deleted. Removing several gigabytes takes real time, and
+    /// doing it on the UI thread froze the window — which reads as a hang, not as work.
+    /// </summary>
+    [ObservableProperty] public partial bool IsCleaningUp { get; set; }
+
+    [ObservableProperty] public partial string CleanupStage { get; set; } = "";
+
+    public bool NotCleaningUp => !IsCleaningUp;
+
+    partial void OnIsCleaningUpChanged(bool value)
+    {
+        OnPropertyChanged(nameof(NotCleaningUp));
+        CleanUpCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
     /// Removes game versions no pack targets, and any private .NET runtime left with
     /// nothing to run.
     ///
@@ -96,7 +112,7 @@ public partial class PreferencesViewModel : ViewModelBase
     /// re-downloadable and Play fetches whatever a pack needs — but it is still shown in
     /// full first, because "600 MB is gone" is not something to discover afterwards.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(NotCleaningUp))]
     private async Task CleanUp()
     {
         var plan = GameCleanup.Plan(_games, _runtimes, _store);
@@ -128,42 +144,64 @@ public partial class PreferencesViewModel : ViewModelBase
             && !await Confirm(new ConfirmViewModel("Clean up unused downloads?", message, "Clean up")))
             return;
 
+        IsCleaningUp = true;
+        CleanupSummary = "";
+
         var removed = 0;
+        var failures = new List<string>();
+        var stage = new Progress<string>(s => CleanupStage = s);
 
-        foreach (var version in plan.Versions)
+        try
         {
-            try
+            // Off the UI thread: this is gigabytes of file deletion, and the window has to
+            // stay responsive enough to show that it is working.
+            await Task.Run(() =>
             {
-                _games.Remove(GameInstall.TryAt(version.Directory)
-                              ?? throw new InvalidOperationException($"{version.Label} vanished"));
-                removed++;
-            }
-            catch (Exception e)
-            {
-                CleanupSummary = $"Could not remove {version.Label}: {e.Message}";
-            }
+                var report = (IProgress<string>)stage;
+
+                foreach (var version in plan.Versions)
+                {
+                    report.Report($"removing Vintage Story {version.Label}…");
+                    try
+                    {
+                        _games.Remove(GameInstall.TryAt(version.Directory)
+                                      ?? throw new InvalidOperationException("it is no longer there"));
+                        removed++;
+                    }
+                    catch (Exception e)
+                    {
+                        failures.Add($"{version.Label}: {e.Message}");
+                    }
+                }
+
+                foreach (var runtime in plan.Runtimes)
+                {
+                    report.Report($"removing .NET {runtime.Label}…");
+                    try
+                    {
+                        _runtimes.Remove(DotnetRuntimeLocator.Inspect(runtime.Directory)
+                                         ?? throw new InvalidOperationException("it is no longer there"));
+                        removed++;
+                    }
+                    catch (Exception e)
+                    {
+                        failures.Add($"{runtime.Label}: {e.Message}");
+                    }
+                }
+            });
         }
-
-        foreach (var runtime in plan.Runtimes)
+        finally
         {
-            try
-            {
-                _runtimes.Remove(DotnetRuntimeLocator.Inspect(runtime.Directory)
-                                 ?? throw new InvalidOperationException($"{runtime.Label} vanished"));
-                removed++;
-            }
-            catch (Exception e)
-            {
-                CleanupSummary = $"Could not remove {runtime.Label}: {e.Message}";
-            }
+            IsCleaningUp = false;
+            CleanupStage = "";
         }
 
         Games.RefreshInstalled();
         Refresh();
 
-        if (removed > 0)
-            CleanupSummary = $"Removed {removed} item{(removed == 1 ? "" : "s")}, "
-                             + $"freeing {Bytes.Human(plan.TotalBytes)}.";
+        CleanupSummary = failures.Count > 0
+            ? $"Removed {removed}; could not remove {string.Join("; ", failures)}."
+            : $"Removed {removed} item{(removed == 1 ? "" : "s")}, freeing {Bytes.Human(plan.TotalBytes)}.";
     }
 
     /// <summary>

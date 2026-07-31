@@ -619,6 +619,80 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void A_prompt_raised_from_Preferences_belongs_to_that_window()
+    {
+        // MainWindow's confirmer is parented to MainWindow, so using it from Preferences
+        // dismissed Preferences and brought the main window forward mid-operation.
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+        preferences.Confirm = null;
+
+        var window = new PreferencesWindow { DataContext = preferences };
+
+        Assert.NotNull(preferences.Confirm);
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_reports_progress_and_stops_when_done()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+        preferences.Confirm = _ => Task.FromResult(true);
+
+        var wasBusy = false;
+        var stages = new List<string>();
+        preferences.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(preferences.IsCleaningUp) && preferences.IsCleaningUp)
+                wasBusy = true;
+            if (e.PropertyName == nameof(preferences.CleanupStage) && preferences.CleanupStage.Length > 0)
+                stages.Add(preferences.CleanupStage);
+        };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        // It said it was working — deleting gigabytes on the UI thread reads as a hang.
+        Assert.True(wasBusy, "never reported itself busy");
+        Assert.Contains(stages, s => s.Contains("1.22.6"));
+
+        // ...and stopped saying so.
+        Assert.False(preferences.IsCleaningUp);
+        Assert.Equal("", preferences.CleanupStage);
+        Assert.True(preferences.CleanUpCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void Cleaning_up_cannot_be_started_twice()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+
+        preferences.IsCleaningUp = true;
+
+        Assert.False(preferences.NotCleaningUp);
+        Assert.False(preferences.CleanUpCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_reports_what_it_could_not_remove()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+        // The confirmation sits between planning and doing, which is exactly the window in
+        // which something can disappear. Removing it there must be reported, not thrown.
+        preferences.Confirm = _ =>
+        {
+            Directory.Delete(Path.Combine(_home, "games", "1.22.6"), recursive: true);
+            return Task.FromResult(true);
+        };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        Assert.Contains("could not remove", preferences.CleanupSummary);
+        Assert.Contains("1.22.6", preferences.CleanupSummary);
+    }
+
+    [AvaloniaFact]
     public async Task Cleaning_up_keeps_what_packs_target()
     {
         var (_, vm) = Show();
