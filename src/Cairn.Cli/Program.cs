@@ -398,9 +398,13 @@ internal static class Program
         if (action == "remove")
         {
             if (args.Length < 3) return Fail("usage: cairn-cli games remove <version>");
-            if (!games.IsInstalled(args[2])) return Fail($"{args[2]} is not installed by Cairn");
 
-            games.Remove(args[2]);
+            // By the install rather than the version, so a directory whose name differs
+            // from the version its assembly reports is still the one that goes.
+            var found = games.Find(args[2]);
+            if (found is null) return Fail($"{args[2]} is not installed by Cairn");
+
+            games.Remove(found);
             Console.WriteLine($"removed game {args[2]}");
             return 0;
         }

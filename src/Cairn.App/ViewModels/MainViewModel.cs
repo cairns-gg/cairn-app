@@ -81,7 +81,15 @@ public partial class MainViewModel : ViewModelBase
         _runtimes = new RuntimeStore();
         _provisioner = new GameProvisioner(_http, _gameStore, _runtimes);
 
-        Games = new GamesViewModel(_http, _gameStore, _runtimes, Note, onLibraryChanged: OnLibraryChanged);
+        Games = new GamesViewModel(
+            _http, _gameStore, _runtimes, Note, onLibraryChanged: OnLibraryChanged,
+            system: _install,
+            // Removing a version a pack targets is allowed — it is disk space, and Play
+            // fetches it again — but it should say so first.
+            packsUsing: version => Packs
+                .Where(p => p.Manifest.GameVersion == version)
+                .Select(p => p.Display)
+                .ToList());
 
         NewPackGameVersion = _install?.Version is { } v and not "unknown" ? v : "1.22.5";
 

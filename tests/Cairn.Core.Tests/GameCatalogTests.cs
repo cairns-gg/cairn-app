@@ -186,6 +186,41 @@ public class GameStoreTests : IDisposable
         Assert.Empty(_store.ListInstalled());
         Assert.False(_store.IsInstalled("1.22.5"));
     }
+
+    [Fact]
+    public void An_install_is_removed_by_the_directory_it_was_found_in()
+    {
+        // Find already tolerates a directory name that differs from the version the
+        // assembly reports. Deriving the path back from that version deletes nothing and
+        // reports success, leaving a version that looks removed and goes on working.
+        var dir = Path.Combine(_root, "vintagestory-1.22.5");
+        Directory.CreateDirectory(dir);
+
+        _store.Remove(Fake("1.22.5", dir));
+
+        Assert.False(Directory.Exists(dir));
+    }
+
+    [Theory]
+    [InlineData("/somewhere/else")]
+    [InlineData("")]          // the store root itself
+    public void Only_installs_inside_the_store_can_be_removed(string relative)
+    {
+        var dir = relative.Length == 0 ? _root : relative;
+        Directory.CreateDirectory(_root);
+
+        Assert.Throws<InvalidOperationException>(() => _store.Remove(Fake("1.22.5", dir)));
+        Assert.True(Directory.Exists(_root));
+    }
+
+    internal static GameInstall Fake(string version, string dir) => new()
+    {
+        Directory = dir,
+        Executable = Path.Combine(dir, "Vintagestory"),
+        Version = version,
+        Architecture = Cairn.Core.Runtime.ExecutableArch.X64,
+        RequiredFramework = new Version(10, 0, 0),
+    };
 }
 
 public class GameLibraryTests

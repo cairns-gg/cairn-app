@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
+using Cairn.Core;
 using Cairn.App.Views;
 using Cairn.Core.ModDb;
 using Xunit;
@@ -575,10 +576,144 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Nothing_is_installed_in_a_fresh_store()
+    public void A_fresh_store_has_installed_nothing_of_its_own()
     {
         var (_, vm) = Show();
-        Assert.Empty(vm.Games.Installed);
+
+        // The machine's own install may well be listed — that is deliberate — but nothing
+        // here was installed by Cairn.
+        Assert.DoesNotContain(vm.Games.Installed, g => g.IsManaged);
+    }
+
+    /// <summary>A GamesViewModel with a made-up system install, and no network.</summary>
+    private Games.Fixture NewGames(GameInstall? system, params string[] packsUsingIt) =>
+        new(_home, system, packsUsingIt);
+
+    [AvaloniaFact]
+    public void The_machines_own_install_is_listed_next_to_Cairns()
+    {
+        // The bug this pins: removing a managed 1.22.5 while a system 1.22.5 existed made
+        // the version vanish from this list, even though packs went on launching from it —
+        // GameLibrary.ForVersion falls back to the system install. A list that disagrees
+        // with what actually runs is worse than no list.
+        using var games = NewGames(Games.FakeInstall("1.22.5", Path.Combine(_home, "elsewhere")));
+
+        var listed = games.Vm.Installed.Single();
+
+        Assert.Equal("1.22.5", listed.Version);
+        Assert.False(listed.IsManaged);
+        Assert.Equal("found on this machine", listed.Origin);
+    }
+
+    [AvaloniaFact]
+    public void Cairn_will_not_delete_an_install_it_did_not_make()
+    {
+        using var games = NewGames(Games.FakeInstall("1.22.5", Path.Combine(_home, "elsewhere")));
+        games.Vm.SelectedInstalled = games.Vm.Installed.Single();
+
+        Assert.False(games.Vm.RequestRemoveCommand.CanExecute(null));
+
+        // And calling it anyway is a no-op rather than a deletion.
+        games.Vm.RemoveSelectedCommand.Execute(null);
+        Assert.True(Directory.Exists(Path.Combine(_home, "elsewhere")));
+    }
+
+    [AvaloniaFact]
+    public void A_system_install_is_not_listed_twice_when_Cairn_manages_the_same_directory()
+    {
+        var root = Path.Combine(_home, "shared-games");
+        var dir = Path.Combine(root, "1.21.7");
+
+        // The same directory reached two ways: as a managed install, and as "the system one".
+        using var games = new Games.Fixture(_home, Games.FakeInstall("1.21.7", dir), [], storeRoot: root);
+        games.AddManaged("1.21.7");
+
+        Assert.Single(games.Vm.Installed);
+        Assert.True(games.Vm.Installed.Single().IsManaged);
+    }
+
+    [AvaloniaFact]
+    public void Removing_a_version_a_pack_uses_names_the_pack()
+    {
+        using var games = NewGames(system: null, "Anego Server");
+        var dir = games.AddManaged("1.21.7");
+        games.Vm.SelectedInstalled = games.Managed(dir);
+
+        games.Vm.RequestRemoveCommand.Execute(null);
+
+        // Armed, not done: the files are still there.
+        Assert.True(games.Vm.ConfirmingRemove);
+        Assert.True(Directory.Exists(dir));
+
+        // Named, not counted — which pack is the actual question.
+        Assert.Contains("Anego Server", games.Vm.RemoveConsequence);
+        Assert.Contains("download it again", games.Vm.RemoveConsequence);
+
+        games.Vm.RemoveSelectedCommand.Execute(null);
+
+        Assert.False(games.Vm.ConfirmingRemove);
+        Assert.False(Directory.Exists(dir));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(new[] { "A" }, "“A” targets")]
+    [InlineData(new[] { "A", "B" }, "“A” and “B” target")]
+    [InlineData(new[] { "A", "B", "C", "D" }, "“A”, “B” and 2 more target")]
+    public void The_prompt_names_a_few_packs_and_counts_the_rest(string[] packs, string expected)
+    {
+        using var games = NewGames(system: null, packs);
+        games.Vm.SelectedInstalled = games.Managed(games.AddManaged("1.21.7"));
+
+        games.Vm.RequestRemoveCommand.Execute(null);
+
+        Assert.Contains(expected, games.Vm.RemoveConsequence);
+    }
+
+    [AvaloniaFact]
+    public void Removing_a_version_nothing_uses_says_so_plainly()
+    {
+        using var games = NewGames(system: null);
+        games.Vm.SelectedInstalled = games.Managed(games.AddManaged("1.21.7"));
+
+        games.Vm.RequestRemoveCommand.Execute(null);
+
+        // The prompt gets heavier only when the cost is real.
+        Assert.Contains("No pack targets it", games.Vm.RemoveConsequence);
+    }
+
+    [AvaloniaFact]
+    public void Removal_deletes_the_directory_it_listed_not_one_named_after_the_version()
+    {
+        // The fake install reports no version at all, so deriving the path back from
+        // "unknown" would delete nothing — and still log that it had.
+        using var games = NewGames(system: null);
+        var dir = games.AddManaged("1.21.7");
+        var listed = games.Managed(dir);
+
+        Assert.NotEqual("1.21.7", listed.Version);
+
+        games.Vm.SelectedInstalled = listed;
+        games.Vm.RequestRemoveCommand.Execute(null);
+        games.Vm.RemoveSelectedCommand.Execute(null);
+
+        Assert.False(Directory.Exists(dir));
+        Assert.Empty(games.Vm.Installed);
+    }
+
+    [AvaloniaFact]
+    public void Changing_the_selection_disarms_the_confirmation()
+    {
+        using var games = NewGames(system: null);
+        games.AddManaged("1.21.7");
+        var second = games.AddManaged("1.22.5");
+
+        games.Vm.SelectedInstalled = games.Vm.Installed[0];
+        games.Vm.RequestRemoveCommand.Execute(null);
+        Assert.True(games.Vm.ConfirmingRemove);
+
+        // Otherwise the armed prompt would carry over onto a version nobody chose.
+        games.Vm.SelectedInstalled = games.Managed(second);
+        Assert.False(games.Vm.ConfirmingRemove);
     }
 
     // ---- sharing ----

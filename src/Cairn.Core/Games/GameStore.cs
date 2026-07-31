@@ -63,6 +63,31 @@ public sealed class GameStore
         var dir = InstallDir(version);
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
+
+    /// <summary>
+    /// Removes an install this store listed, by the directory it was found in.
+    ///
+    /// Not by its version: Find already allows for a version whose directory name differs
+    /// from the version its assembly reports, and deriving the path back from the reported
+    /// version in that case deletes nothing while reporting success — leaving a version
+    /// that looks removed and goes on working.
+    /// </summary>
+    public void Remove(GameInstall install)
+    {
+        var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(install.Directory));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_root));
+
+        // Only ever inside the store, and never the store itself: this deletes recursively,
+        // and an install Cairn merely found is not Cairn's to delete.
+        if (!dir.StartsWith(root + Path.DirectorySeparatorChar, PathComparison) || dir == root)
+            throw new InvalidOperationException($"'{install.Directory}' is not a managed install.");
+
+        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+    }
+
+    /// <summary>Linux file systems are case-sensitive; macOS and Windows are not.</summary>
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 }
 
 /// <summary>

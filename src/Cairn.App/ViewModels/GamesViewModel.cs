@@ -12,10 +12,23 @@ using Cairn.Core.Runtime;
 
 namespace Cairn.App.ViewModels;
 
-/// <summary>A game version Cairn has installed.</summary>
-public class InstalledGameViewModel(GameInstall install, RuntimeResolution runtime) : ViewModelBase
+/// <summary>A game version Cairn can launch: one it installed, or the machine's own.</summary>
+public class InstalledGameViewModel(
+    GameInstall install, RuntimeResolution runtime, bool managed = true) : ViewModelBase
 {
     public GameInstall Install { get; } = install;
+
+    /// <summary>
+    /// False for an install Cairn merely found. Listing it matters because a pack will
+    /// happily launch from it — leaving it out is what made removing a managed 1.22.5 look
+    /// like the version had vanished while the pack kept working.
+    /// </summary>
+    public bool IsManaged { get; } = managed;
+
+    /// <summary>Cairn only deletes what Cairn installed.</summary>
+    public bool CanRemove => IsManaged;
+
+    public string Origin => IsManaged ? "installed by Cairn" : "found on this machine";
 
     public string Version => Install.Version;
     public string Directory => Install.Directory;
@@ -59,10 +72,14 @@ public partial class GamesViewModel : ViewModelBase
     private readonly GameCatalog _catalog;
     private readonly Action<string> _log;
     private readonly Action _onLibraryChanged;
+    private readonly GameInstall? _system;
+    private readonly Func<string, IReadOnlyList<string>> _packsUsing;
 
     public GamesViewModel(
         HttpClient http, GameStore store, RuntimeStore runtimes,
-        Action<string> log, Action onLibraryChanged)
+        Action<string> log, Action onLibraryChanged,
+        GameInstall? system = null,
+        Func<string, IReadOnlyList<string>>? packsUsing = null)
     {
         _http = http;
         _store = store;
@@ -70,6 +87,8 @@ public partial class GamesViewModel : ViewModelBase
         _catalog = new GameCatalog(http);
         _log = log;
         _onLibraryChanged = onLibraryChanged;
+        _system = system;
+        _packsUsing = packsUsing ?? (_ => []);
 
         RefreshInstalled();
     }
@@ -105,7 +124,7 @@ public partial class GamesViewModel : ViewModelBase
         OnPropertyChanged(nameof(NotBusy));
         RefreshCatalogCommand.NotifyCanExecuteChanged();
         InstallSelectedCommand.NotifyCanExecuteChanged();
-        RemoveSelectedCommand.NotifyCanExecuteChanged();
+        RequestRemoveCommand.NotifyCanExecuteChanged();
         InstallRuntimeCommand.NotifyCanExecuteChanged();
     }
 
@@ -114,7 +133,8 @@ public partial class GamesViewModel : ViewModelBase
 
     partial void OnSelectedInstalledChanged(InstalledGameViewModel? value)
     {
-        RemoveSelectedCommand.NotifyCanExecuteChanged();
+        ConfirmingRemove = false;
+        RequestRemoveCommand.NotifyCanExecuteChanged();
         InstallRuntimeCommand.NotifyCanExecuteChanged();
     }
 
@@ -170,13 +190,13 @@ public partial class GamesViewModel : ViewModelBase
         Installed.Clear();
 
         foreach (var install in _store.ListInstalled())
-        {
-            // Resolve against a managed runtime too, otherwise a game we can already run
-            // would be reported as unusable.
-            var options = new LaunchOptions { PreferredDotnetRoot = _runtimes.RootFor(install) };
-            var runtime = new GameLauncher(install).ResolveRuntime(options);
-            Installed.Add(new InstalledGameViewModel(install, runtime));
-        }
+            Installed.Add(Describe(install, managed: true));
+
+        // The machine's own install, if it is not the same directory as a managed one. A
+        // pack launches from it whenever its version matches (GameLibrary.ForVersion), so
+        // this list would otherwise disagree with what actually runs.
+        if (_system is not null && !Installed.Any(i => SamePath(i.Directory, _system.Directory)))
+            Installed.Add(Describe(_system, managed: false));
 
         ManagedRuntimes.Clear();
         foreach (var r in _runtimes.ListInstalled())
@@ -184,6 +204,20 @@ public partial class GamesViewModel : ViewModelBase
 
         foreach (var a in Available) a.IsInstalled = _store.IsInstalled(a.Version);
     }
+
+    private InstalledGameViewModel Describe(GameInstall install, bool managed)
+    {
+        // Resolve against a managed runtime too, otherwise a game we can already run
+        // would be reported as unusable.
+        var options = new LaunchOptions { PreferredDotnetRoot = _runtimes.RootFor(install) };
+        return new InstalledGameViewModel(install, new GameLauncher(install).ResolveRuntime(options), managed);
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
+            OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Preselects a version, so "install the version this pack needs" can jump here.</summary>
     public void Preselect(string version)
@@ -271,14 +305,48 @@ public partial class GamesViewModel : ViewModelBase
 
     private bool CanInstall => !IsBusy && SelectedAvailable is { CanInstall: true, IsInstalled: false };
 
+    /// <summary>
+    /// Armed by Remove, so a version in use is not deleted on one click. Mirrors the pack
+    /// delete flow rather than inventing a second confirmation style.
+    /// </summary>
+    [ObservableProperty] public partial bool ConfirmingRemove { get; set; }
+    [ObservableProperty] public partial string RemoveConsequence { get; set; } = "";
+
     [RelayCommand(CanExecute = nameof(CanRemove))]
-    private void RemoveSelected()
+    private void RequestRemove()
     {
         var chosen = SelectedInstalled!;
+        var packs = _packsUsing(chosen.Version);
+
+        RemoveConsequence = packs.Count == 0
+            ? $"Delete {chosen.Version} from disk. No pack targets it."
+            : $"{Listed(packs)} {(packs.Count == 1 ? "targets" : "target")} {chosen.Version}. "
+              + "Playing will download it again; worlds and mods are untouched.";
+
+        ConfirmingRemove = true;
+    }
+
+    [RelayCommand]
+    private void CancelRemove() => ConfirmingRemove = false;
+
+    /// <summary>Names them rather than counting them: which packs is the actual question.</summary>
+    private static string Listed(IReadOnlyList<string> names) => names.Count switch
+    {
+        1 => $"“{names[0]}”",
+        2 => $"“{names[0]}” and “{names[1]}”",
+        _ => $"“{names[0]}”, “{names[1]}” and {names.Count - 2} more",
+    };
+
+    [RelayCommand]
+    private void RemoveSelected()
+    {
+        ConfirmingRemove = false;
+
+        if (SelectedInstalled is not { CanRemove: true } chosen) return;
 
         try
         {
-            _store.Remove(chosen.Version);
+            _store.Remove(chosen.Install);
             _log($"removed game {chosen.Version}");
 
             RefreshInstalled();
@@ -290,5 +358,6 @@ public partial class GamesViewModel : ViewModelBase
         }
     }
 
-    private bool CanRemove => !IsBusy && SelectedInstalled is not null;
+    // An install Cairn merely found on the machine is not Cairn's to delete.
+    private bool CanRemove => !IsBusy && SelectedInstalled is { CanRemove: true };
 }

@@ -212,6 +212,10 @@ and private runtimes managed. Nothing nags about a missing version: pressing **P
 whatever the pack needs, so that screen exists mainly to give the disk space back — it also
 reports what Cairn is using and can empty its caches.
 
+Both list the machine's own install alongside Cairn's, because a pack launches from it
+whenever the version matches — a list that omitted it would disagree with what actually
+runs. Cairn will not remove one it did not install.
+
 Versions land in `~/.cairn/games/<version>/`, so several can coexist and each pack
 launches the one its `gameVersion` names:
 
@@ -273,7 +277,7 @@ cairn-cli runtimes install 8        fetch a private .NET 8 (sha512-verified)
 cairn-cli runtimes remove 8.0.29
 ```
 
-or **Install its .NET** in the Game versions pane, enabled for an installed game whose
+or **Install its .NET** in Preferences → Storage, enabled for an installed game whose
 runtime is missing.
 
 They live in `~/.cairn/runtimes/<version>-<rid>/` and are selected automatically at
