@@ -1,8 +1,12 @@
 namespace Cairn.Core;
 
 /// <summary>
-/// Where Cairn keeps its own state. Kept well away from the game's data path so a
-/// pack directory can be deleted without touching saves or settings.
+/// Where Cairn keeps its own state.
+///
+/// A pack's game data — its worlds, its mod configs, its settings — lives inside that
+/// pack's directory, because the pack is the instance. Deleting a pack therefore deletes
+/// its worlds, which is what people expect: a world made under a pack's mod set usually
+/// cannot be opened without it, so keeping one behind would strand data nothing can read.
 /// </summary>
 public static class CairnPaths
 {
@@ -29,6 +33,15 @@ public static class CairnPaths
 
     /// <summary>Mod icons from ModDB, so browsing does not re-download the same images.</summary>
     public static string IconCacheRoot => Path.Combine(CacheRoot, "icons");
+
+    /// <summary>
+    /// Cairn's record of the Vintage Story login, shared by every pack so that having
+    /// separate data paths does not mean signing in separately.
+    /// </summary>
+    public static string SessionPath => Path.Combine(Root, "session.json");
+
+    /// <summary>This pack's game data path — worlds, mod configs and settings.</summary>
+    public static string DataDir(string id) => Path.Combine(PackDir(id), "data");
 
     public static string PackDir(string id) => Path.Combine(PacksRoot, id);
 

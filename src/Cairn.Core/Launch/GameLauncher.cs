@@ -6,17 +6,20 @@ namespace Cairn.Core.Launch;
 public sealed class LaunchOptions
 {
     /// <summary>
-    /// Shared across packs on purpose. Login state lives in clientsettings.json inside
-    /// the data path (Sessionkey, SessionSignature, MpToken, PlayerUID), along with
-    /// keybinds, graphics settings and saves. Giving each pack its own data path would
-    /// force a separate login per pack, so packs differ by mod path instead.
+    /// Normally a pack's own directory, so its worlds and mod configs stay apart from
+    /// every other pack's — Saves, ModConfig, Playerdata and ModsByServer all live under
+    /// here, and the game gives no way to relocate them individually.
+    ///
+    /// Login lives here too, which is why packs once shared one path. PackData carries the
+    /// session between packs instead, so separate data paths do not mean separate logins.
     /// </summary>
     public string? DataPath { get; set; }
 
     /// <summary>
     /// Mod directories to stack, in order. --addModPath is additive: the game always
     /// also searches &lt;install&gt;/Mods and &lt;dataPath&gt;/Mods, and there is no way to
-    /// switch those off, so keep dataPath/Mods empty or treat it as an always-on layer.
+    /// switch those off. With a per-pack data path that is harmless — those directories
+    /// are the pack's own — but a pack still sharing one inherits whatever is in it.
     /// </summary>
     public List<string> ModPaths { get; set; } = [];
 

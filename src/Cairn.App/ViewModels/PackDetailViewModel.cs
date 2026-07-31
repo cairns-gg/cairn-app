@@ -101,6 +101,7 @@ public partial class PackDetailViewModel : ViewModelBase
     private readonly Action<object?> _requestDelete;
     private readonly Func<string, bool> _isProvisioning;
     private readonly ModIconCache _icons;
+    private readonly PackData _packData;
     private readonly ModInfoCache _modInfo;
 
     /// <summary>Bumped per pack reload, so icons for rows that are gone are dropped.</summary>
@@ -137,6 +138,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _isProvisioning = isProvisioning;
         _icons = new ModIconCache(http);
         _modInfo = new ModInfoCache(moddb);
+        _packData = new PackData(store);
 
         EditName = manifest.Name ?? manifest.Id;
         EditGameVersion = manifest.GameVersion;
@@ -830,9 +832,11 @@ public partial class PackDetailViewModel : ViewModelBase
 
             // Prefer a runtime Cairn manages: for an older game version it may be the
             // only .NET of the right major on the machine.
+            _packData.BeforeLaunch(Id);
+
             var options = new LaunchOptions
             {
-                DataPath = GameInstall.DefaultDataPath,
+                DataPath = _packData.DataPathFor(Id),
                 ModPaths = { _store.ModsDir(Id) },
                 Connect = Manifest.Connect,
                 PreferredDotnetRoot = _runtimes.RootFor(install),
@@ -902,6 +906,27 @@ public partial class PackDetailViewModel : ViewModelBase
     private void DeletePack() => _requestDelete(null);
 
     /// <summary>Re-enables Play when the game exits, and reports a non-zero exit.</summary>
+    /// <summary>
+    /// Where the pack's worlds, mod configs and settings live, or the shared path for a
+    /// pack that has not been given its own.
+    /// </summary>
+    public string DataDirectory => _packData.DataPathFor(Id);
+
+    public bool HasOwnData => _packData.HasOwnData(Id);
+
+    /// <summary>
+    /// Gives this pack its own worlds and configs. Existing worlds are not moved — they
+    /// belong to whoever made them, under a mod set Cairn cannot vouch for.
+    /// </summary>
+    [RelayCommand]
+    private void UseOwnData()
+    {
+        _packData.EnableOwnData(Id);
+        OnPropertyChanged(nameof(DataDirectory));
+        OnPropertyChanged(nameof(HasOwnData));
+        _log($"'{Id}' now has its own worlds and settings at {DataDirectory}");
+    }
+
     private async Task WatchAsync(System.Diagnostics.Process proc)
     {
         try
@@ -914,6 +939,10 @@ public partial class PackDetailViewModel : ViewModelBase
         }
 
         var code = TryExitCode(proc);
+
+        // A login made inside the pack, or a session the game rotated while playing,
+        // becomes the one every other pack uses next.
+        _packData.AfterExit(Id);
 
         Dispatcher.UIThread.Post(() =>
         {

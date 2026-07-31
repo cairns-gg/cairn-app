@@ -16,6 +16,12 @@ public sealed class PackStore
     public string LockPath(string id) => Path.Combine(PackDir(id), "pack.lock.json");
     public string ModsDir(string id) => Path.Combine(PackDir(id), "Mods");
 
+    /// <summary>
+    /// This pack's game data path — its worlds, mod configs and settings. Inside the pack
+    /// because the pack is the instance: see PackData for why they are no longer shared.
+    /// </summary>
+    public string DataDir(string id) => Path.Combine(PackDir(id), "data");
+
     public string PackDir(string id)
     {
         // A pack id becomes a directory name and now arrives from a text box, so it is
@@ -90,6 +96,12 @@ public sealed class PackStore
         };
 
         Save(manifest);
+
+        // Only new packs get their own data path. Doing this in Save would flip every
+        // existing pack the first time its settings were edited, silently moving people
+        // off the worlds they already have — the directory is the flag.
+        Directory.CreateDirectory(DataDir(id));
+
         return manifest;
     }
 
@@ -118,6 +130,7 @@ public sealed class PackStore
         if (pinToLock) bundle.PinToLock();
 
         Save(manifest);
+        Directory.CreateDirectory(DataDir(manifest.Id));
 
         // Keep the author's lock so the first sync can verify it got identical files.
         bundle.Lock?.Save(LockPath(manifest.Id));
@@ -125,7 +138,14 @@ public sealed class PackStore
         return manifest;
     }
 
-    /// <summary>Removes the pack and its downloaded mods. The game's data path is untouched.</summary>
+    /// <summary>
+    /// Removes the pack, its downloaded mods, and — for a pack with its own data path —
+    /// its worlds, configs and settings.
+    ///
+    /// That last part is why callers must say what is about to go: a world made under this
+    /// pack's mod set generally cannot be opened without it, so there is nothing kind about
+    /// leaving it behind, but there is nothing recoverable about removing it either.
+    /// </summary>
     public void Delete(string id)
     {
         var dir = PackDir(id);

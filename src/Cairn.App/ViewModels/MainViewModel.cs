@@ -54,6 +54,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly HttpClient _http;
     private readonly ModDbClient _moddb;
     private readonly PackStore _store;
+    private readonly PackData _packData;
     private readonly GameStore _gameStore;
     private readonly GameLibrary _library;
     private readonly RuntimeStore _runtimes;
@@ -73,6 +74,7 @@ public partial class MainViewModel : ViewModelBase
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1");
         _moddb = new ModDbClient(_http);
         _store = new PackStore();
+        _packData = new PackData(_store);
         _gameStore = new GameStore();
         _install = GameInstall.TryLocate();
         _library = new GameLibrary(_gameStore, _install);
@@ -137,6 +139,30 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>Named in the prompt so it is obvious which pack is about to go.</summary>
     public string DeleteTargetName => SelectedPack?.Display ?? "";
 
+    /// <summary>
+    /// What deleting this pack actually destroys.
+    ///
+    /// A pack with its own data path takes its worlds with it, which is a different order
+    /// of loss from "and its downloaded mods" — so the prompt names them, and only gets
+    /// heavier when there is something to lose.
+    /// </summary>
+    public string DeleteConsequence
+    {
+        get
+        {
+            if (SelectedPack is null) return "";
+
+            var worlds = _packData.Worlds(SelectedPack.Id).Count;
+            if (worlds == 0) return "and its downloaded mods?";
+
+            var size = _packData.DataSize(SelectedPack.Id);
+            var mb = size / 1024d / 1024d;
+
+            return $"its downloaded mods, and {worlds} world{(worlds == 1 ? "" : "s")} "
+                   + $"({mb:F0} MB)? This cannot be undone.";
+        }
+    }
+
     public bool CanDeleteSelected => SelectedPack is not null;
 
     /// <summary>
@@ -147,6 +173,7 @@ public partial class MainViewModel : ViewModelBase
     private void RequestDelete()
     {
         OnPropertyChanged(nameof(DeleteTargetName));
+        OnPropertyChanged(nameof(DeleteConsequence));
         ConfirmingDelete = true;
     }
 

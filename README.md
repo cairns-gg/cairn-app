@@ -56,21 +56,43 @@ is an instruction to stay put.
 `launch` syncs and then starts the game with the pack stacked on:
 
 ```
-Vintagestory --dataPath <shared> --addModPath ~/.cairn/packs/anego/Mods \
+Vintagestory --dataPath ~/.cairn/packs/anego/data \
+             --addModPath ~/.cairn/packs/anego/Mods \
              --connect anego.example.com:42420
 ```
 
-### Packs share one data path, deliberately
+### Each pack has its own worlds, but you only log in once
 
-Login state lives in `clientsettings.json` *inside* the data path (`Sessionkey`,
-`SessionSignature`, `MpToken`, `PlayerUID`), along with keybinds, graphics settings and
-saves. Giving each pack its own `--dataPath` would mean a separate login per pack. So
-packs differ by **mod path**, not data path.
+`Saves/`, `ModConfig/`, `Playerdata/` and `ModsByServer/` all live under the data path, and
+the game gives no way to relocate them individually — only `Logs` has an override. So packs
+share a data path or they share nothing.
 
-Consequence worth knowing: `--addModPath` is *additive*. The game always also searches
-`<install>/Mods` and `<dataPath>/Mods`, and there is no flag to switch those off. Keep
-`<dataPath>/Mods` empty, or treat it as an always-on layer — anything you drop there
-joins every pack.
+Sharing one meant every world was reachable from every pack whatever its mods, and opening a
+save against a different mod set is a leading way to ruin it. Packs therefore get their own
+data path at `packs/<id>/data`.
+
+Login lives under the data path too, which is why packs used to share one. Cairn carries the
+session instead: seven keys inside `clientsettings.json` — `sessionkey`, `sessionsignature`,
+`playeruid`, `mptoken`, `entitlements`, `useremail`, `playername` — are recorded in
+`~/.cairn/session.json` and merged into each pack before it launches. Merging *named keys*
+rather than copying the file is the point: the login follows you, while keybinds, graphics
+settings and dialog positions stay per-pack.
+
+Whichever copy was written most recently wins, so signing in inside any pack reaches the
+others, and a session the game rotates mid-play is not lost. Cairn only ever **reads** your
+own Vintage Story data path — it seeds from it and never writes to it.
+
+Because a pack's data is inside the pack, **deleting a pack deletes its worlds**. The
+confirmation says so and names them. A world made under a pack's mod set generally cannot be
+opened without it, so leaving one behind would strand data nothing can read.
+
+Packs made before this change keep using the shared data path until you ask otherwise —
+nobody's worlds move on their own. **Settings → Give this pack its own worlds** switches one
+over; existing worlds stay where they are and remain reachable by launching the game normally.
+
+`--addModPath` is still *additive* — the game always also searches `<install>/Mods` and
+`<dataPath>/Mods` — but with a per-pack data path that second directory is the pack's own, so
+nothing leaks between packs. A pack still on the shared path inherits whatever is in it.
 
 ## Usage
 

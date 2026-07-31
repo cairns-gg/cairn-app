@@ -40,7 +40,9 @@
                             BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
                         <StackPanel Spacing="6">
                             <TextBlock FontSize="12" TextWrapping="Wrap"
-                                       Text="{Binding DeleteTargetName, StringFormat='Delete “{0}” and its downloaded mods?'}" />
+                                       Text="{Binding DeleteTargetName, StringFormat='Delete “{0}”…'}" />
+                            <TextBlock FontSize="12" TextWrapping="Wrap"
+                                       Text="{Binding DeleteConsequence}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Button Content="Delete" Classes="accent"
                                         Command="{Binding ConfirmDeleteCommand}" />
@@ -567,6 +569,22 @@
                                 <TextBlock Text="Mods directory" FontSize="12" Opacity="0.7" />
                                 <TextBlock Text="{Binding Detail.ModsDirectory}" FontSize="11" Opacity="0.6"
                                            TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Worlds and settings" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{Binding Detail.DataDirectory}" FontSize="11" Opacity="0.6"
+                                           TextWrapping="Wrap" />
+
+                                <!-- Older packs stay on the shared path until asked, so
+                                     nobody's worlds move without them saying so. -->
+                                <StackPanel IsVisible="{Binding !Detail.HasOwnData}" Spacing="6">
+                                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                                               Text="This pack shares its worlds and settings with every other pack that does. Giving it its own keeps its saves and mod configs apart — existing worlds stay where they are." />
+                                    <Button Content="Give this pack its own worlds"
+                                            HorizontalAlignment="Left" Padding="12,4"
+                                            Command="{Binding Detail.UseOwnDataCommand}" />
+                                </StackPanel>
                             </StackPanel>
 
                             <Separator Margin="0,4" />
