@@ -956,6 +956,57 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void The_pack_selected_at_startup_can_still_open_the_confirmation()
+    {
+        // The regression that shipped: MainViewModel's constructor selects a pack, so the
+        // first PackDetailViewModel is built before the window assigns its dialog hook.
+        // Copying the hook once at construction left that pack — the one you land on —
+        // silently unable to confirm anything, and Check just wrote a log line.
+        var vm = new MainViewModel(new RetargetHandler());
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+
+        Assert.NotNull(vm.SelectedPack);
+        Assert.NotNull(vm.Detail);
+        Assert.NotNull(vm.Detail!.ConfirmVersionChange);
+    }
+
+    [AvaloniaFact]
+    public async Task Checking_asks_the_view_to_confirm_rather_than_applying_by_itself()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        VersionChangeViewModel? shown = null;
+        detail.ConfirmVersionChange = change => { shown = change; return Task.FromResult(true); };
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        // It was handed the plan...
+        Assert.NotNull(shown);
+        Assert.Equal("1.22.6", shown!.Plan.To);
+
+        // ...and only the "yes" applied it.
+        Assert.Equal("1.22.6", detail.Manifest.GameVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task Saying_no_to_the_confirmation_changes_nothing()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.ConfirmVersionChange = _ => Task.FromResult(false);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        Assert.Equal("1.22.5", detail.Manifest.GameVersion);
+        Assert.Null(detail.VersionChange);
+    }
+
+    [AvaloniaFact]
     public async Task The_picker_and_its_check_button_sit_in_the_settings_tab()
     {
         var (window, vm) = ShowWithModDb();

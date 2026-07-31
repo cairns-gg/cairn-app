@@ -494,8 +494,25 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     public Func<PreferencesViewModel, Task>? OpenPreferences { get; set; }
 
-    /// <summary>Set by the view; see PackDetailViewModel.ConfirmVersionChange.</summary>
-    public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange { get; set; }
+    private Func<VersionChangeViewModel, Task<bool>>? _confirmVersionChange;
+
+    /// <summary>
+    /// Set by the view; see PackDetailViewModel.ConfirmVersionChange.
+    ///
+    /// Assigning it reaches the current pack as well as later ones. The constructor selects
+    /// a pack, so the first PackDetailViewModel exists before the view has had a chance to
+    /// supply this — and a plain auto-property left that one holding a null it never
+    /// revisited, which meant Check silently did nothing for the pack you start on.
+    /// </summary>
+    public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange
+    {
+        get => _confirmVersionChange;
+        set
+        {
+            _confirmVersionChange = value;
+            if (Detail is not null) Detail.ConfirmVersionChange = value;
+        }
+    }
 
     [RelayCommand]
     private async Task ShowPreferences()
