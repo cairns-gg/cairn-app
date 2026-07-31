@@ -337,109 +337,144 @@
 
                 <TabControl Margin="0,14,0,0">
 
-                    <!-- Mods in this pack -->
+                    <!--
+                        One list for both the pack and the results you build it from.
+                        They used to be separate tabs, which made them look like peers
+                        and hid each from the other: adding a mod gave no sign of where
+                        it went, and the pack was invisible while searching.
+                    -->
                     <TabItem Header="Mods">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
-                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                                        Spacing="8" Margin="0,10,0,0" VerticalAlignment="Center">
-                                <Button Content="Remove" Command="{Binding Detail.RemoveSelectedCommand}" />
-                                <Button Content="View on ModDB"
-                                        Command="{Binding Detail.OpenModPageCommand}" />
 
-                                <!-- Versions load on selection and apply on choice; this
-                                     used to be Versions… then Pin, three clicks deep. -->
-                                <TextBlock Text="Version" VerticalAlignment="Center"
-                                           FontSize="12" Opacity="0.7" />
-                                <ComboBox ItemsSource="{Binding Detail.ReleaseChoices}"
-                                          SelectedItem="{Binding Detail.SelectedRelease}"
-                                          MinWidth="150" PlaceholderText="select a mod" />
-                                <TextBlock Text="loading…" VerticalAlignment="Center"
-                                           FontSize="11" Opacity="0.6"
-                                           IsVisible="{Binding Detail.LoadingReleases, FallbackValue=False}" />
-                            </StackPanel>
-
-                            <ListBox ItemsSource="{Binding Detail.Mods}"
-                                     SelectedItem="{Binding Detail.SelectedMod}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ModRowViewModel">
-                                        <Grid ColumnDefinitions="2*,*,*,Auto" Margin="0,3">
-                                            <TextBlock Grid.Column="0" Text="{Binding ModId}"
-                                                       FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding PinDisplay}"
-                                                       FontSize="12" Opacity="0.75" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="2" Text="{Binding InstalledDisplay}"
-                                                       FontSize="12" Opacity="0.75" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="3" Text="server-side"
-                                                       IsVisible="{Binding IsServerSide}"
-                                                       FontSize="11" Foreground="{DynamicResource VsWarningBrush}"
-                                                       VerticalAlignment="Center" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </DockPanel>
-                    </TabItem>
-
-                    <!-- ModDB search -->
-                    <TabItem Header="Add mods">
-                        <DockPanel LastChildFill="True" Margin="0,8,0,0">
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                                 <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
-                                         PlaceholderText="Search ModDB…" />
+                                         PlaceholderText="Search ModDB to add a mod…" />
                                 <Button Grid.Column="1" Content="Search"
-                                        Command="{Binding Detail.SearchCommand}" />
-                                <Button Grid.Column="2" Content="View on ModDB"
-                                        Command="{Binding Detail.OpenHitPageCommand}" />
-                                <Button Grid.Column="3" Content="Add selected" Classes="accent"
-                                        Command="{Binding Detail.AddSelectedCommand}" />
+                                        Command="{Binding Detail.SearchCommand}"
+                                        IsDefault="{Binding Detail.ShowingSearch, Converter={x:Static BoolConverters.Not}}" />
+                                <Button Grid.Column="2" Content="Clear"
+                                        IsVisible="{Binding Detail.ShowingSearch}"
+                                        Command="{Binding Detail.ClearSearchCommand}" />
                             </Grid>
 
-                            <ListBox Margin="0,10,0,0" ItemsSource="{Binding Detail.SearchHits}"
-                                     SelectedItem="{Binding Detail.SelectedHit}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:SearchHitViewModel">
-                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,4">
-                                            <!-- Fixed-size well so rows stay aligned whether or
-                                                 not the mod has an icon, and whether or not it
-                                                 has arrived yet. -->
-                                            <Border Grid.Column="0" Width="40" Height="40"
-                                                    Classes="sunken" VerticalAlignment="Top">
-                                                <Image Source="{Binding Icon}"
-                                                       IsVisible="{Binding HasIcon}"
-                                                       Stretch="UniformToFill" />
-                                            </Border>
+                            <Grid DockPanel.Dock="Top" Margin="0,10,0,6"
+                                  ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding Detail.ListHeading}"
+                                           FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Content="← back to the pack"
+                                        IsVisible="{Binding Detail.ShowingSearch}"
+                                        Command="{Binding Detail.ClearSearchCommand}"
+                                        Padding="10,3" FontSize="11" />
+                            </Grid>
 
-                                            <StackPanel Grid.Column="1" Spacing="2">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding ModId}" FontSize="11" Opacity="0.6"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Side}" FontSize="11" Opacity="0.6"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Downloads}" FontSize="11" Opacity="0.5"
-                                                               VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding Author}" FontSize="11" Opacity="0.5"
-                                                               VerticalAlignment="Center" />
-                                                    <!-- Listed but not addable, so "why can
-                                                         I not find X" never comes up. -->
-                                                    <Border IsVisible="{Binding Incompatible}"
-                                                            Background="{DynamicResource VsWarningFillBrush}"
-                                                            BorderBrush="{DynamicResource VsWarningBrush}"
-                                                            BorderThickness="1" CornerRadius="1"
-                                                            Padding="5,1" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding NoReleaseNote}" FontSize="10"
-                                                                   Foreground="{DynamicResource VsWarningBrush}" />
-                                                    </Border>
-                                                </StackPanel>
-                                                <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding Tags}" FontSize="10" Opacity="0.45"
-                                                           TextTrimming="CharacterEllipsis" />
+                            <!-- Both lists fill the same space; a DockPanel would
+                                 dock the first one to the left at content width. -->
+                            <Panel>
+                                <!-- The pack -->
+                                <ListBox IsVisible="{Binding !Detail.ShowingSearch}"
+                                         ItemsSource="{Binding Detail.Mods}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ModRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto"
+                                              ColumnSpacing="8" Margin="0,4"
+                                              Background="Transparent"
+                                              DoubleTapped="OnRowDoubleTapped">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                                        Spacing="8" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding ModId}" FontWeight="SemiBold" />
+                                                <TextBlock Text="server-side"
+                                                           IsVisible="{Binding IsServerSide}"
+                                                           FontSize="11" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource VsWarningBrush}" />
                                             </StackPanel>
+
+                                            <TextBlock Grid.Column="1" Text="loading…" FontSize="11"
+                                                       Opacity="0.6" VerticalAlignment="Center"
+                                                       IsVisible="{Binding LoadingReleases}" />
+
+                                            <!-- Its versions are fetched when this is opened,
+                                                 not for every row up front. -->
+                                            <ComboBox Grid.Column="2" MinWidth="120"
+                                                      ItemsSource="{Binding ReleaseChoices}"
+                                                      SelectedItem="{Binding SelectedRelease}"
+                                                      DropDownOpened="OnVersionDropDownOpened"
+                                                      VerticalAlignment="Center" />
+
+                                            <Button Grid.Column="3" Content="View" Padding="10,4"
+                                                    Command="{Binding OpenPageCommand}"
+                                                    VerticalAlignment="Center" />
+                                            <Button Grid.Column="4" Content="✕" Padding="10,4"
+                                                    Command="{Binding RemoveCommand}"
+                                                    VerticalAlignment="Center" />
                                         </Grid>
                                     </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- The results -->
+                                <ListBox IsVisible="{Binding Detail.ShowingSearch}"
+                                         ItemsSource="{Binding Detail.SearchHits}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SearchHitViewModel">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10"
+                                                  Margin="0,4">
+                                                <!-- Fixed-size well so rows stay aligned whether
+                                                     or not the mod has an icon, and whether or
+                                                     not it has arrived yet. -->
+                                                <Border Grid.Column="0" Width="40" Height="40"
+                                                        Classes="sunken" VerticalAlignment="Top">
+                                                    <Image Source="{Binding Icon}"
+                                                           IsVisible="{Binding HasIcon}"
+                                                           Stretch="UniformToFill" />
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding ModId}" FontSize="11" Opacity="0.6"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Side}" FontSize="11" Opacity="0.6"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Downloads}" FontSize="11" Opacity="0.5"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Author}" FontSize="11" Opacity="0.5"
+                                                                   VerticalAlignment="Center" />
+                                                        <!-- Listed but not addable, so "why can
+                                                             I not find X" never comes up. -->
+                                                        <Border IsVisible="{Binding Incompatible}"
+                                                                Background="{DynamicResource VsWarningFillBrush}"
+                                                                BorderBrush="{DynamicResource VsWarningBrush}"
+                                                                BorderThickness="1" CornerRadius="1"
+                                                                Padding="5,1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding NoReleaseNote}" FontSize="10"
+                                                                       Foreground="{DynamicResource VsWarningBrush}" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Tags}" FontSize="10" Opacity="0.45"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <Button Grid.Column="2" Content="View" Padding="10,4"
+                                                        Command="{Binding OpenPageCommand}"
+                                                        VerticalAlignment="Center" />
+
+                                                <Button Grid.Column="3" Content="Add" Classes="accent"
+                                                        Padding="14,4" MinWidth="64"
+                                                        IsVisible="{Binding !AlreadyInPack}"
+                                                        Command="{Binding AddCommand}"
+                                                        VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="✓ in pack" FontSize="11"
+                                                           IsVisible="{Binding AlreadyInPack}"
+                                                           Foreground="{DynamicResource VsParchmentBrush}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Panel>
                         </DockPanel>
                     </TabItem>
 

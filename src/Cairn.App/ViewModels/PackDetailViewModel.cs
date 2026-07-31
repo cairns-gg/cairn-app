@@ -13,7 +13,12 @@ using Cairn.Core.Packs;
 namespace Cairn.App.ViewModels;
 
 /// <summary>A ModDB search hit, offered for adding to the pack.</summary>
-public partial class SearchHitViewModel(ModSearchResult result, string versionRange) : ViewModelBase
+public partial class SearchHitViewModel(
+    ModSearchResult result,
+    string versionRange,
+    bool alreadyInPack = false,
+    Action<SearchHitViewModel>? add = null,
+    Action<SearchHitViewModel>? openPage = null) : ViewModelBase
 {
     private static ModDbSearchEntry Entry(ModSearchResult r) => r.Mod;
     public string ModId { get; } = Entry(result).ModIdStrs.FirstOrDefault() ?? "";
@@ -55,10 +60,28 @@ public partial class SearchHitViewModel(ModSearchResult result, string versionRa
     public string NoReleaseNote { get; } = $"no {versionRange} release";
 
     /// <summary>
-    /// Addable only if ModDB gave it a string id — some entries have none — and it has a
-    /// release that would actually install.
+    /// Already part of this pack. Shown on the row so a search never offers to add
+    /// something twice, and so it is obvious what you already have.
     /// </summary>
-    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && Compatible;
+    [ObservableProperty] public partial bool AlreadyInPack { get; set; } = alreadyInPack;
+
+    partial void OnAlreadyInPackChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanAdd));
+        AddCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Addable only if ModDB gave it a string id — some entries have none — it has a
+    /// release that would actually install, and the pack does not already have it.
+    /// </summary>
+    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && Compatible && !AlreadyInPack;
+
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private void Add() => add?.Invoke(this);
+
+    [RelayCommand]
+    private void OpenPage() => openPage?.Invoke(this);
 }
 
 /// <summary>
@@ -141,6 +164,47 @@ public partial class PackDetailViewModel : ViewModelBase
     [ObservableProperty] public partial string EditConnect { get; set; }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
+
+    /// <summary>
+    /// True once a search has run, until it is cleared. One list serves both purposes:
+    /// the pack you are building, and the results you are building it from. Separate tabs
+    /// made them look like peers and hid each from the other.
+    /// </summary>
+    [ObservableProperty] public partial bool ShowingSearch { get; set; }
+
+    partial void OnShowingSearchChanged(bool value) => OnPropertyChanged(nameof(ListHeading));
+
+    /// <summary>Says which of the two lists is on screen, and how big it is.</summary>
+    public string ListHeading => ShowingSearch
+        ? $"{SearchHits.Count} result{(SearchHits.Count == 1 ? "" : "s")} for “{_searchedFor}”"
+        : $"{Mods.Count} mod{(Mods.Count == 1 ? "" : "s")} in this pack";
+
+    private string _searchedFor = "";
+
+    /// <summary>
+    /// Puts a set of results on screen, as a completed search does. One entry point, so
+    /// what a search leaves behind and what a test sets up cannot drift apart.
+    /// </summary>
+    public void ShowResults(string query, IEnumerable<SearchHitViewModel> hits)
+    {
+        _searchedFor = query;
+
+        SearchHits.Clear();
+        foreach (var h in hits) SearchHits.Add(h);
+
+        ShowingSearch = true;
+        OnPropertyChanged(nameof(ListHeading));
+    }
+
+    /// <summary>Puts the pack back, without discarding what was typed.</summary>
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        SearchHits.Clear();
+        ShowingSearch = false;
+        SearchText = "";
+        Error = null;
+    }
 
     /// <summary>
     /// The versions a mod may be marked for and still install here, e.g. "1.22.x" — the
@@ -228,51 +292,19 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
         SearchCommand.NotifyCanExecuteChanged();
-        AddSelectedCommand.NotifyCanExecuteChanged();
-        RemoveSelectedCommand.NotifyCanExecuteChanged();
         SaveSettingsCommand.NotifyCanExecuteChanged();
         DeletePackCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnSelectedModChanged(ModRowViewModel? value)
-    {
-        RemoveSelectedCommand.NotifyCanExecuteChanged();
-        OpenModPageCommand.NotifyCanExecuteChanged();
-
-        if (value is null)
-        {
-            _settingReleaseProgrammatically = true;
-            ReleaseChoices.Clear();
-            SelectedRelease = null;
-            _settingReleaseProgrammatically = false;
-            return;
-        }
-
-        // Loading versions used to need a separate "Versions…" click.
-        _ = LoadReleasesForAsync(value.ModId, value.Mod.Version);
-    }
-
-    partial void OnSelectedHitChanged(SearchHitViewModel? value)
-    {
-        AddSelectedCommand.NotifyCanExecuteChanged();
-        OpenHitPageCommand.NotifyCanExecuteChanged();
-    }
-
-    partial void OnSelectedReleaseChanged(string? value)
-    {
-        if (_settingReleaseProgrammatically || value is null) return;
-        if (SelectedMod is not { } row) return;
-
-        ApplyPin(row.ModId, value == TrackNewest ? null : value);
-    }
-
+    /// <summary>
+    /// Rebuilds the pack's rows from the manifest and lockfile.
+    ///
+    /// The rows carry their own actions, so each is handed the callbacks it needs rather
+    /// than the pane reaching back for "the selected one".
+    /// </summary>
     private void ReloadMods()
     {
-        // Clearing the collection drops the ListBox selection, so remember it and put it
-        // back. Callers must not read SelectedMod across a reload.
-        var previous = SelectedMod?.ModId;
-
         var locks = _store.LoadLock(Id);
         Mods.Clear();
 
@@ -280,14 +312,18 @@ public partial class PackDetailViewModel : ViewModelBase
         {
             var locked = locks?.Mods.FirstOrDefault(
                 m => string.Equals(m.ModId, mod.ModId, StringComparison.OrdinalIgnoreCase));
-            Mods.Add(new ModRowViewModel(mod, locked));
+
+            Mods.Add(new ModRowViewModel(
+                mod, locked,
+                loadReleases: LoadReleasesForRowAsync,
+                pin: ApplyPin,
+                remove: RemoveRow,
+                openPage: OpenModPage));
         }
 
-        if (previous is not null)
-            SelectedMod = Mods.FirstOrDefault(
-                m => string.Equals(m.ModId, previous, StringComparison.OrdinalIgnoreCase));
-
         OnPropertyChanged(nameof(Subtitle));
+        OnPropertyChanged(nameof(ListHeading));
+
     }
 
     private void Persist()
@@ -350,17 +386,27 @@ public partial class PackDetailViewModel : ViewModelBase
         try
         {
             var generation = ++_searchGeneration;
-            var hits = await _moddb.SearchRankedAsync(SearchText.Trim(), Manifest.GameVersion);
-            foreach (var h in hits.Take(60))
-                SearchHits.Add(new SearchHitViewModel(h, CompatibleVersionRange));
+            _searchedFor = SearchText.Trim();
+
+            var hits = await _moddb.SearchRankedAsync(_searchedFor, Manifest.GameVersion);
+
+            ShowResults(_searchedFor, hits.Take(60).Select(h => new SearchHitViewModel(
+                h,
+                CompatibleVersionRange,
+                // Marked up front, so a search never offers to add what you have.
+                alreadyInPack: Manifest.Mods.Any(m =>
+                    string.Equals(m.ModId, h.Mod.ModIdStrs.FirstOrDefault(),
+                        StringComparison.OrdinalIgnoreCase)),
+                add: AddHit,
+                openPage: OpenHitPage)));
 
             // Deliberately not awaited: the results should appear at once, with icons
             // filling in as they arrive rather than the list waiting on sixty downloads.
             _ = LoadIconsAsync([.. SearchHits], generation);
 
             _log(hits.Count > SearchHits.Count
-                ? $"{hits.Count} result(s) for '{SearchText.Trim()}' — showing the closest {SearchHits.Count}"
-                : $"{SearchHits.Count} result(s) for '{SearchText.Trim()}'");
+                ? $"{hits.Count} result(s) for '{_searchedFor}' — showing the closest {SearchHits.Count}"
+                : $"{SearchHits.Count} result(s) for '{_searchedFor}'");
             if (SearchHits.Count == 0)
                 Error = "No mods matched that search.";
             else Error = null;
@@ -414,7 +460,10 @@ public partial class PackDetailViewModel : ViewModelBase
                     if (generation == _searchGeneration) hit.Icon = bitmap;
                 });
             }
-            catch (Exception e) when (e is IOException or ArgumentException or NotSupportedException)
+            // Deliberately everything: this is decoration, running on a background thread,
+            // landing after the row may already be gone. Nothing it can hit is worth
+            // surfacing, let alone failing over.
+            catch (Exception)
             {
                 // Not an image, or unreadable. The row is fine without one.
             }
@@ -425,81 +474,86 @@ public partial class PackDetailViewModel : ViewModelBase
         })).ConfigureAwait(false);
     }
 
-    /// <summary>Opens the selected result's page on ModDB, for the description and screenshots.</summary>
-    [RelayCommand(CanExecute = nameof(CanOpenHitPage))]
-    private void OpenHitPage()
+    // ---- row actions ----
+    //
+    // Invoked by the rows themselves rather than acting on a selection. A pane-level
+    // "Add selected" meant picking a row, moving to a button, and hoping it still meant
+    // what you thought.
+
+    private void AddHit(SearchHitViewModel hit)
     {
-        if (!Browser.Open(SelectedHit?.PageUrl))
-            Error = "Could not open a browser for that link.";
+        if (Manifest.Mods.Any(m => string.Equals(m.ModId, hit.ModId, StringComparison.OrdinalIgnoreCase)))
+        {
+            hit.AlreadyInPack = true;
+            return;
+        }
+
+        Manifest.Mods.Add(new PackMod { ModId = hit.ModId });
+        Persist();
+
+        // The row stays on screen, so it has to stop offering to add it again.
+        hit.AlreadyInPack = true;
+        _log($"added {hit.ModId}");
     }
 
-    private bool CanOpenHitPage => SelectedHit is { HasPage: true };
+    private void RemoveRow(ModRowViewModel row)
+    {
+        Manifest.Mods.RemoveAll(m => string.Equals(m.ModId, row.ModId, StringComparison.OrdinalIgnoreCase));
+        Persist();
+        _log($"removed {row.ModId} (its zip goes away on the next sync)");
+
+        // If it is also on screen as a search result, offer it again.
+        foreach (var hit in SearchHits.Where(
+                     h => string.Equals(h.ModId, row.ModId, StringComparison.OrdinalIgnoreCase)))
+            hit.AlreadyInPack = false;
+    }
+
+    private void OpenHitPage(SearchHitViewModel hit)
+    {
+        if (!Browser.Open(hit.PageUrl))
+            Error = "Could not open a browser for that link.";
+    }
 
     /// <summary>
     /// Opens the page of a mod already in the pack. The manifest holds only the mod id,
     /// and a page is addressed by asset id, so this costs one lookup — done on click
     /// rather than for every row up front.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanOpenModPage))]
-    private async Task OpenModPage()
+    private async void OpenModPage(ModRowViewModel row)
     {
-        var modId = SelectedMod?.ModId;
-        if (modId is null) return;
-
         try
         {
-            var mod = await _moddb.GetModAsync(modId);
+            var mod = await _moddb.GetModAsync(row.ModId);
             if (!Browser.Open(ModDbUrls.Page(mod)))
-                Error = $"Could not open the ModDB page for {modId}.";
+                Error = $"Could not open the ModDB page for {row.ModId}.";
         }
         catch (Exception e) when (e is ModDbException or HttpRequestException)
         {
-            Error = $"Could not find {modId} on ModDB: {e.Message}";
+            Error = $"Could not find {row.ModId} on ModDB: {e.Message}";
         }
     }
-
-    private bool CanOpenModPage => SelectedMod is not null;
-
-    [RelayCommand(CanExecute = nameof(CanAddSelected))]
-    private void AddSelected()
-    {
-        var hit = SelectedHit!;
-
-        if (Manifest.Mods.Any(m => string.Equals(m.ModId, hit.ModId, StringComparison.OrdinalIgnoreCase)))
-        {
-            Error = $"'{hit.ModId}' is already in this pack.";
-            return;
-        }
-
-        Manifest.Mods.Add(new PackMod { ModId = hit.ModId });
-        Persist();
-        _log($"added {hit.ModId}");
-    }
-
-    private bool CanAddSelected => !IsBusy && SelectedHit is { CanAdd: true };
-
-    [RelayCommand(CanExecute = nameof(CanActOnMod))]
-    private void RemoveSelected()
-    {
-        var row = SelectedMod!;
-        Manifest.Mods.RemoveAll(m => string.Equals(m.ModId, row.ModId, StringComparison.OrdinalIgnoreCase));
-        Persist();
-        _log($"removed {row.ModId} (its zip goes away on the next sync)");
-    }
-
-    private bool CanActOnMod => !IsBusy && SelectedMod is not null;
 
     /// <summary>
-    /// Compatible versions per mod, so re-selecting a mod — including the reload that
-    /// follows pinning — costs nothing and cannot loop back into the network.
+    /// Compatible versions per mod, so opening a dropdown twice — including after the
+    /// reload that follows pinning — costs nothing and cannot loop back into the network.
     /// </summary>
     private readonly Dictionary<string, List<string>> _releaseCache = new(StringComparer.OrdinalIgnoreCase);
 
-    private int _releaseGeneration;
-    private bool _settingReleaseProgrammatically;
-
     /// <summary>The choice that means "do not pin; take whatever is newest".</summary>
     public const string TrackNewest = "newest";
+
+    /// <summary>
+    /// Builds a result row wired to this pack, exactly as a search does. Exists so tests
+    /// exercise the real wiring rather than a hand-assembled imitation of it.
+    /// </summary>
+    public SearchHitViewModel MakeHitForTest(string modId, string name) =>
+        new(new ModSearchResult(
+                new ModDbSearchEntry { Name = name, ModIdStrs = [modId], Side = "client" }, true),
+            CompatibleVersionRange,
+            alreadyInPack: Manifest.Mods.Any(m =>
+                string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase)),
+            add: AddHit,
+            openPage: OpenHitPage);
 
     /// <summary>Pre-populates the cache, e.g. from a test or a warm-up.</summary>
     public void CacheReleaseChoices(string modId, IEnumerable<string> versions) =>
@@ -507,62 +561,48 @@ public partial class PackDetailViewModel : ViewModelBase
 
     private string CacheKey(string modId) => $"{modId}|{Manifest.GameVersion}";
 
-    private void ShowReleaseChoices(IReadOnlyList<string> choices, string? pinned)
+    /// <summary>
+    /// Fills one row's version dropdown. Called when that dropdown is opened rather than
+    /// when the pack is shown, so a twenty-mod pack does not make twenty ModDB calls to
+    /// answer a question nobody asked.
+    /// </summary>
+    private async Task LoadReleasesForRowAsync(ModRowViewModel row)
     {
-        // Populate before selecting: a ComboBox bound to an empty collection discards a
-        // selection it cannot match, and re-assigning the same value raises no change.
-        _settingReleaseProgrammatically = true;
-
-        ReleaseChoices.Clear();
-        foreach (var c in choices) ReleaseChoices.Add(c);
-
-        SelectedRelease = pinned is not null && ReleaseChoices.Contains(pinned)
-            ? pinned
-            : TrackNewest;
-
-        _settingReleaseProgrammatically = false;
-    }
-
-    private async Task LoadReleasesForAsync(string modId, string? pinned)
-    {
-        if (_releaseCache.TryGetValue(CacheKey(modId), out var cached))
+        if (_releaseCache.TryGetValue(CacheKey(row.ModId), out var cached))
         {
-            ShowReleaseChoices(cached, pinned);
+            row.ShowChoices(cached);
             return;
         }
 
-        var generation = ++_releaseGeneration;
-        LoadingReleases = true;
+        row.LoadingReleases = true;
 
         try
         {
-            var releases = await _moddb.ListCompatibleReleasesAsync(modId, Manifest.GameVersion);
-
-            // The selection may have moved on while this was in flight.
-            if (generation != _releaseGeneration) return;
+            var releases = await _moddb.ListCompatibleReleasesAsync(row.ModId, Manifest.GameVersion);
 
             var choices = new List<string> { TrackNewest };
             choices.AddRange(releases.Select(r => r.ModVersion));
 
-            _releaseCache[CacheKey(modId)] = choices;
-            ShowReleaseChoices(choices, pinned);
+            _releaseCache[CacheKey(row.ModId)] = choices;
+            row.ShowChoices(choices);
 
             if (releases.Count == 0)
-                Error = $"No release of {modId} is marked for game {Manifest.GameVersion}.";
+                Error = $"No release of {row.ModId} is marked for game {Manifest.GameVersion}.";
         }
         catch (Exception e)
         {
-            if (generation == _releaseGeneration) Error = e.Message;
+            Error = e.Message;
         }
         finally
         {
-            if (generation == _releaseGeneration) LoadingReleases = false;
+            row.LoadingReleases = false;
         }
     }
 
     /// <summary>Applies the pin as soon as a version is chosen — no separate button.</summary>
-    private void ApplyPin(string modId, string? version)
+    private void ApplyPin(ModRowViewModel row, string? version)
     {
+        var modId = row.ModId;
         var entry = Manifest.Mods.FirstOrDefault(m =>
             string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase));
         if (entry is null || entry.Version == version) return;

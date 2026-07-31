@@ -131,12 +131,9 @@ public class ThemeTests : IDisposable
 
     private static SearchHitViewModel Hit(
         string modId, string name, string summary, Avalonia.Media.Imaging.Bitmap? icon,
-        bool compatible = true)
-    {
-        var hit = new SearchHitViewModel(
-            new ModSearchResult(Entry(modId, name, summary), compatible), "1.22.x") { Icon = icon };
-        return hit;
-    }
+        bool compatible = true, bool alreadyInPack = false)
+        => new(new ModSearchResult(Entry(modId, name, summary), compatible),
+               "1.22.x", alreadyInPack) { Icon = icon };
 
     private static ModDbSearchEntry Entry(string modId, string name, string summary) => new()
     {
@@ -168,38 +165,33 @@ public class ThemeTests : IDisposable
         }
 
         vm.SelectedPack = vm.Packs.First();
+
+
         Shot("01-pack");
+
 
         // Search results, with icons standing in for ModDB's. Real ones are 480x480 PNGs
         // decoded down on the way in; these come from the app's own icon so the shot shows
-        // the row as it renders rather than an empty well.
+        // rows as they render rather than empty wells.
         using (var iconStream = Avalonia.Platform.AssetLoader.Open(
                    new Uri("avares://cairn/Assets/cairn.ico")))
         {
             var icon = Avalonia.Media.Imaging.Bitmap.DecodeToWidth(iconStream, 96);
+            var detail = vm.Detail!;
 
-            var hits = new[]
-            {
+            detail.SearchText = "farming";
+            detail.ShowResults("farming",
+            [
                 Hit("olla", "Olla", "Ancient irrigation for your farmland", icon),
-                Hit("glassview", "Glassview", "See through your glass blocks", icon),
-                Hit("unchisel", "unchisel", "Put chiselled blocks back the way they were", null),
-                Hit("ancientmod", "Ancient Mod", "Not updated since 1.19", null, compatible: false),
-            };
-
-            var tabControl = window.GetVisualDescendants().OfType<TabControl>().First();
-            var addTab = tabControl.GetVisualDescendants().OfType<TabItem>()
-                .First(t => (t.Header as string) == "Add mods");
-            tabControl.SelectedItem = addTab;
-
-            vm.Detail!.SearchText = "farming";
-            foreach (var h in hits) vm.Detail.SearchHits.Add(h);
-            vm.Detail.SelectedHit = hits[0];
+                Hit("glassview", "Glassview", "See through your glass blocks", icon,
+                    alreadyInPack: true),
+                Hit("ancientmod", "Ancient Mod", "Not updated since 1.19", null,
+                    compatible: false),
+            ]);
 
             Shot("09-search");
 
-            vm.Detail.SearchHits.Clear();
-            tabControl.SelectedItem = tabControl.GetVisualDescendants().OfType<TabItem>()
-                .First(t => (t.Header as string) == "Mods");
+            detail.ClearSearchCommand.Execute(null);
         }
 
         vm.Detail!.IsLaunching = true;

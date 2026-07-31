@@ -70,6 +70,10 @@ public class MainWindowTests : IDisposable
             .GroupBy(b => (string)b.Content!)
             .ToDictionary(g => g.Key, g => g.First());
 
+    /// <summary>A result as the pane builds it: wired to the pack, not free-floating.</summary>
+    private static SearchHitViewModel HitFor(PackDetailViewModel detail, string modId, string name) =>
+        detail.MakeHitForTest(modId, name);
+
     private static SearchHitViewModel Hit(string modId, string name, bool compatible = true) =>
         new(new ModSearchResult(
                 new ModDbSearchEntry { Name = name, ModIdStrs = [modId], Side = "client", Downloads = 1 },
@@ -105,9 +109,9 @@ public class MainWindowTests : IDisposable
         Assert.Contains("glassview", text);
         Assert.Contains("unchisel", text);
 
-        // Nothing is installed in the fixture, so every row reports that.
-        Assert.All(vm.Detail.Mods, m => Assert.False(m.IsInstalled));
-        Assert.Contains("not installed", text);
+        // Whether a mod is downloaded yet is Play's business, not something to caption
+        // every row with.
+        Assert.DoesNotContain(text, t => t.Contains("not installed"));
     }
 
 
@@ -249,8 +253,8 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
         var detail = vm.Detail!;
 
-        detail.SelectedHit = Hit("olla", "Olla");
-        detail.AddSelectedCommand.Execute(null);
+        // The row adds itself; there is no separate "Add selected" button to aim at.
+        HitFor(detail, "olla", "Olla").AddCommand.Execute(null);
 
         Assert.Null(detail.Error);
         Assert.Contains(detail.Mods, m => m.ModId == "olla");
@@ -266,10 +270,12 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
         var detail = vm.Detail!;
 
-        detail.SelectedHit = Hit("glassview", "Glassview");
-        detail.AddSelectedCommand.Execute(null);
+        var hit = HitFor(detail, "glassview", "Glassview");
 
-        Assert.NotNull(detail.Error);
+        // It is already in the pack, so the row says so instead of offering to add it.
+        Assert.True(hit.AlreadyInPack);
+        Assert.False(hit.CanAdd);
+        Assert.False(hit.AddCommand.CanExecute(null));
         Assert.Single(detail.Mods, m => m.ModId == "glassview");
     }
 
@@ -280,8 +286,7 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "unchisel");
-        detail.RemoveSelectedCommand.Execute(null);
+        detail.Mods.Single(m => m.ModId == "unchisel").RemoveCommand.Execute(null);
 
         Assert.DoesNotContain(detail.Mods, m => m.ModId == "unchisel");
         var onDisk = File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json"));
@@ -289,7 +294,7 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Pinning_and_unpinning_a_mod_round_trips_through_the_manifest()
+    public async Task Pinning_and_unpinning_a_mod_round_trips_through_the_manifest()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
@@ -298,10 +303,12 @@ public class MainWindowTests : IDisposable
         // Versions are normally fetched when the mod is selected; prime the cache so the
         // test does not depend on the network.
         detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
+
+        var row = detail.Mods.Single(m => m.ModId == "glassview");
+        await row.EnsureReleasesAsync();
 
         // Choosing a version pins it — no separate Pin button.
-        detail.SelectedRelease = "1.3.0";
+        row.SelectedRelease = "1.3.0";
 
         var pinned = detail.Mods.Single(m => m.ModId == "glassview");
         Assert.True(pinned.IsPinned);
@@ -309,7 +316,7 @@ public class MainWindowTests : IDisposable
         Assert.Contains("1.3.0", File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json")));
 
         // And choosing "newest" unpins it again.
-        detail.SelectedRelease = PackDetailViewModel.TrackNewest;
+        detail.Mods.Single(m => m.ModId == "glassview").SelectedRelease = PackDetailViewModel.TrackNewest;
 
         Assert.Equal("newest", detail.Mods.Single(m => m.ModId == "glassview").PinDisplay);
     }
@@ -386,9 +393,9 @@ public class MainWindowTests : IDisposable
 
         foreach (var label in new[]
                  {
-                     "Play", "New pack",
-                     "Remove", "View on ModDB",
-                     "Search", "Add selected", "Save", "Delete", "Clear",
+                     // Pane-level actions, plus the per-row ones the Mods list realises.
+                     "Play", "New pack", "Search", "Save", "Delete", "Clear",
+                     "View", "✕",
                  })
         {
             Assert.True(found.ContainsKey(label), $"no '{label}' button in the window");
@@ -397,7 +404,7 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void All_four_tabs_are_present()
+    public void Adding_mods_is_not_a_separate_place_from_the_pack()
     {
         var (window, vm) = Show();
         vm.SelectedPack = vm.Packs.First();
@@ -406,10 +413,71 @@ public class MainWindowTests : IDisposable
             .Select(t => t.Header as string)
             .ToList();
 
+        // One list serves the pack and the results you build it from.
         Assert.Contains("Mods", headers);
-        Assert.Contains("Add mods", headers);
+        Assert.DoesNotContain("Add mods", headers);
         Assert.Contains("Settings", headers);
         Assert.Contains("Log", headers);
+    }
+
+    [AvaloniaFact]
+    public void The_list_shows_the_pack_until_a_search_replaces_it()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        Assert.False(detail.ShowingSearch);
+        Assert.Equal("2 mods in this pack", detail.ListHeading);
+
+        // The same entry point a completed search uses.
+        detail.ShowResults("olla", [HitFor(detail, "olla", "Olla")]);
+
+        Assert.Equal("1 result for “olla”", detail.ListHeading);
+
+        detail.ClearSearchCommand.Execute(null);
+
+        // Clearing puts the pack back rather than leaving an empty list.
+        Assert.False(detail.ShowingSearch);
+        Assert.Empty(detail.SearchHits);
+        Assert.Equal("", detail.SearchText);
+        Assert.Equal("2 mods in this pack", detail.ListHeading);
+    }
+
+    [AvaloniaFact]
+    public void Adding_from_a_result_shows_on_that_row_without_leaving_it()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        var hit = HitFor(detail, "olla", "Olla");
+        Assert.False(hit.AlreadyInPack);
+
+        hit.AddCommand.Execute(null);
+
+        // The row stays on screen, so it has to stop offering to add it again.
+        Assert.True(hit.AlreadyInPack);
+        Assert.False(hit.CanAdd);
+        Assert.Contains(detail.Mods, m => m.ModId == "olla");
+    }
+
+    [AvaloniaFact]
+    public void Removing_a_mod_offers_it_again_in_the_results_on_screen()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var hit = HitFor(detail, "glassview", "Glassview");
+        detail.ShowResults("glass", [hit]);
+        Assert.True(hit.AlreadyInPack);
+
+        detail.Mods.Single(m => m.ModId == "glassview").RemoveCommand.Execute(null);
+
+        // Both lists are the same screen now, so they cannot disagree.
+        Assert.False(hit.AlreadyInPack);
+        Assert.True(hit.CanAdd);
     }
 
     // ---- game versions ----
@@ -894,62 +962,72 @@ public class MainWindowTests : IDisposable
     // ---- version pinning ----
 
     [AvaloniaFact]
-    public void Selecting_a_mod_offers_its_versions_without_a_separate_click()
-    {
-        var (window, vm) = Show();
-        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
-        var detail = vm.Detail!;
-
-        detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
-
-        // "newest" plus the compatible releases, populated by selection alone.
-        Assert.Equal([PackDetailViewModel.TrackNewest, "1.3.0", "1.2.0"], detail.ReleaseChoices);
-        Assert.Equal(PackDetailViewModel.TrackNewest, detail.SelectedRelease);
-
-        var combo = window.GetVisualDescendants().OfType<ComboBox>()
-            .First(c => c.IsEffectivelyVisible && c.ItemCount > 0);
-        Assert.Equal(PackDetailViewModel.TrackNewest, combo.SelectedItem);
-    }
-
-    [AvaloniaFact]
-    public void An_already_pinned_mod_shows_its_pin_as_the_selection()
+    public async Task Opening_a_rows_dropdown_fetches_that_mods_versions()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
-
         detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
-        detail.SelectedRelease = "1.2.0";
 
-        // Re-selecting must show the pin, not reset the dropdown to "newest".
-        detail.SelectedMod = null;
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
+        var row = detail.Mods.Single(m => m.ModId == "glassview");
 
-        Assert.Equal("1.2.0", detail.SelectedRelease);
-        Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+        // Before opening it holds only what the row already knows — fetching every row's
+        // versions to draw the pack would be one ModDB call per mod.
+        Assert.Equal([PackDetailViewModel.TrackNewest], row.ReleaseChoices);
+        Assert.False(row.ReleasesLoaded);
+
+        await row.EnsureReleasesAsync();
+
+        Assert.Equal([PackDetailViewModel.TrackNewest, "1.3.0", "1.2.0"], row.ReleaseChoices);
+        Assert.Equal(PackDetailViewModel.TrackNewest, row.SelectedRelease);
     }
 
     [AvaloniaFact]
-    public void Reselecting_after_a_pin_does_not_go_back_to_the_network()
+    public async Task A_pinned_mod_shows_its_pin_before_and_after_loading()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
+        detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
 
+        var row = detail.Mods.Single(m => m.ModId == "glassview");
+        await row.EnsureReleasesAsync();
+        row.SelectedRelease = "1.2.0";
+
+        // Pinning rewrites the manifest and rebuilds the rows, so this is a new row.
+        var rebuilt = detail.Mods.Single(m => m.ModId == "glassview");
+        Assert.True(rebuilt.IsPinned);
+
+        // It must read as pinned straight away, not as "newest" until someone opens it.
+        Assert.Equal("1.2.0", rebuilt.SelectedRelease);
+
+        await rebuilt.EnsureReleasesAsync();
+        Assert.Equal("1.2.0", rebuilt.SelectedRelease);
+    }
+
+    [AvaloniaFact]
+    public async Task Reopening_a_dropdown_after_a_pin_does_not_go_back_to_the_network()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
-        detail.SelectedRelease = "1.3.0";
 
-        // Pinning rewrites the manifest and rebuilds the rows, which re-selects the mod.
-        // Without the cache that would fire a fresh lookup every time.
-        Assert.False(detail.LoadingReleases);
-        Assert.Contains("1.3.0", detail.ReleaseChoices);
+        var row = detail.Mods.Single(m => m.ModId == "glassview");
+        await row.EnsureReleasesAsync();
+        row.SelectedRelease = "1.3.0";
+
+        // Pinning rebuilds the rows; without the cache that would fire a fresh lookup
+        // every time a dropdown was opened again.
+        var rebuilt = detail.Mods.Single(m => m.ModId == "glassview");
+        await rebuilt.EnsureReleasesAsync();
+
+        Assert.False(rebuilt.LoadingReleases);
+        Assert.Contains("1.3.0", rebuilt.ReleaseChoices);
     }
 
     [AvaloniaFact]
-    public void Switching_mods_does_not_pin_the_previous_ones_version()
+    public async Task Filling_one_rows_dropdown_does_not_pin_anything()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
@@ -958,12 +1036,11 @@ public class MainWindowTests : IDisposable
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
         detail.CacheReleaseChoices("unchisel", ["1.2.0"]);
 
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
-        detail.SelectedRelease = "1.3.0";
+        detail.Mods.Single(m => m.ModId == "glassview").SelectedRelease = "1.3.0";
 
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "unchisel");
+        // Populating a list must never be mistaken for the user choosing from it.
+        await detail.Mods.Single(m => m.ModId == "unchisel").EnsureReleasesAsync();
 
-        // Repopulating the dropdown must not be mistaken for the user choosing a version.
         Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
     }
@@ -997,12 +1074,10 @@ public class MainWindowTests : IDisposable
         Assert.False(stale.CanAdd);
         Assert.Equal("no 1.22.x release", stale.NoReleaseNote);
 
-        detail.SelectedHit = stale;
-        Assert.False(detail.AddSelectedCommand.CanExecute(null));
+        Assert.False(stale.AddCommand.CanExecute(null));
 
         // ...and one that is usable still can be.
-        detail.SelectedHit = FullHit("olla", "Olla", 34157, "olla");
-        Assert.True(detail.AddSelectedCommand.CanExecute(null));
+        Assert.True(FullHit("olla", "Olla", 34157, "olla").AddCommand.CanExecute(null));
     }
 
     [AvaloniaFact]
@@ -1065,21 +1140,15 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Viewing_a_page_is_offered_only_once_something_is_selected()
+    public void Every_row_can_reach_its_own_page()
     {
-        var (window, vm) = Show();
+        var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
-        Assert.False(detail.OpenHitPageCommand.CanExecute(null));
-
-        detail.SelectedHit = FullHit("olla", "Olla", 34157, "olla");
-        Assert.True(detail.OpenHitPageCommand.CanExecute(null));
-
-        // And a mod already in the pack can be looked up too, from the Mods tab.
-        Assert.False(detail.OpenModPageCommand.CanExecute(null));
-        detail.SelectedMod = detail.Mods.First();
-        Assert.True(detail.OpenModPageCommand.CanExecute(null));
+        // No selection involved: the button belongs to the row it acts on.
+        Assert.NotNull(FullHit("olla", "Olla", 34157, "olla").OpenPageCommand);
+        Assert.NotNull(detail.Mods.First().OpenPageCommand);
     }
 
     // ---- what "connect" actually means ----
@@ -1165,8 +1234,7 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
         Assert.Contains(VisibleText(sidebar), t => t.Contains("1 mod"));
 
-        vm.Detail!.SelectedHit = Hit("olla", "Olla");
-        vm.Detail.AddSelectedCommand.Execute(null);
+        HitFor(vm.Detail!, "olla", "Olla").AddCommand.Execute(null);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Contains(VisibleText(sidebar), t => t.Contains("2 mods"));
@@ -1259,18 +1327,15 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Clearing_the_selection_empties_the_dropdown_without_pinning()
+    public async Task Loading_a_dropdown_leaves_an_unpinned_mod_unpinned()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
-        detail.SelectedMod = detail.Mods.Single(m => m.ModId == "glassview");
-        detail.SelectedMod = null;
+        await detail.Mods.Single(m => m.ModId == "glassview").EnsureReleasesAsync();
 
-        Assert.Empty(detail.ReleaseChoices);
-        Assert.Null(detail.SelectedRelease);
         Assert.All(detail.Mods, m => Assert.False(m.IsPinned));
     }
 }

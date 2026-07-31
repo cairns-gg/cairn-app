@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Cairn.Core.Packs;
 
 namespace Cairn.App.ViewModels;
@@ -6,13 +8,41 @@ namespace Cairn.App.ViewModels;
 /// <summary>
 /// One mod inside a pack: what the manifest asks for, plus what the lockfile says is
 /// actually on disk.
+///
+/// The row owns its own actions and its own version list. Both used to live on the pane
+/// and act on whichever row happened to be selected, which meant several controls quietly
+/// referring to "the selected mod" from a distance.
 /// </summary>
 public partial class ModRowViewModel : ViewModelBase
 {
-    public ModRowViewModel(PackMod mod, LockedMod? locked)
+    private readonly Func<ModRowViewModel, Task>? _loadReleases;
+    private readonly Action<ModRowViewModel, string?>? _pin;
+    private readonly Action<ModRowViewModel>? _remove;
+    private readonly Action<ModRowViewModel>? _openPage;
+
+    /// <summary>Tells "the list was refilled" apart from "the user chose something".</summary>
+    private bool _settingProgrammatically;
+
+    public ModRowViewModel(
+        PackMod mod,
+        LockedMod? locked,
+        Func<ModRowViewModel, Task>? loadReleases = null,
+        Action<ModRowViewModel, string?>? pin = null,
+        Action<ModRowViewModel>? remove = null,
+        Action<ModRowViewModel>? openPage = null)
     {
         Mod = mod;
         Locked = locked;
+        _loadReleases = loadReleases;
+        _pin = pin;
+        _remove = remove;
+        _openPage = openPage;
+
+        // Shown before the list is fetched, so the row reads correctly from the start.
+        _settingProgrammatically = true;
+        SelectedRelease = mod.Version ?? PackDetailViewModel.TrackNewest;
+        ReleaseChoices.Add(SelectedRelease);
+        _settingProgrammatically = false;
     }
 
     public PackMod Mod { get; }
@@ -26,10 +56,6 @@ public partial class ModRowViewModel : ViewModelBase
 
     public bool IsPinned => Mod.Version is not null;
 
-    public string InstalledDisplay => Locked?.Version ?? "not installed";
-
-    public bool IsInstalled => Locked is not null;
-
     public string SideDisplay => Locked?.Side ?? "";
 
     /// <summary>
@@ -37,4 +63,55 @@ public partial class ModRowViewModel : ViewModelBase
     /// </summary>
     public bool IsServerSide =>
         string.Equals(Locked?.Side, "server", StringComparison.OrdinalIgnoreCase);
+
+    // ---- versions ----
+
+    /// <summary>
+    /// Holds only the current pin until the dropdown is opened. Fetching every row's
+    /// releases when the pack is merely shown would be one ModDB call per mod, for
+    /// something usually not being asked about.
+    /// </summary>
+    public ObservableCollection<string> ReleaseChoices { get; } = [];
+
+    [ObservableProperty] public partial string? SelectedRelease { get; set; }
+    [ObservableProperty] public partial bool LoadingReleases { get; set; }
+
+    public bool ReleasesLoaded { get; private set; }
+
+    /// <summary>Fetches this row's versions unless they are already here.</summary>
+    public Task EnsureReleasesAsync() =>
+        ReleasesLoaded || _loadReleases is null ? Task.CompletedTask : _loadReleases(this);
+
+    /// <summary>Fills the dropdown without that counting as the user picking something.</summary>
+    public void ShowChoices(IReadOnlyList<string> choices)
+    {
+        _settingProgrammatically = true;
+
+        ReleaseChoices.Clear();
+        foreach (var c in choices) ReleaseChoices.Add(c);
+
+        var pinned = Mod.Version;
+        SelectedRelease = pinned is not null && ReleaseChoices.Contains(pinned)
+            ? pinned
+            : PackDetailViewModel.TrackNewest;
+
+        ReleasesLoaded = true;
+        _settingProgrammatically = false;
+    }
+
+    partial void OnSelectedReleaseChanged(string? value)
+    {
+        if (_settingProgrammatically || value is null) return;
+
+        // Choosing a version is the pin; there is no separate confirm step.
+        _pin?.Invoke(this, value == PackDetailViewModel.TrackNewest ? null : value);
+    }
+
+    // ---- actions ----
+
+    [RelayCommand]
+    private void Remove() => _remove?.Invoke(this);
+
+    [RelayCommand]
+    private void OpenPage() => _openPage?.Invoke(this);
 }
