@@ -11,6 +11,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        UiScale.Attach(this);
     }
 
     /// <summary>

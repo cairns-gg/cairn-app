@@ -389,6 +389,14 @@ public class ThemeTests : IDisposable
             prefs.Close();
         }
 
+        // The same pack at 150%, which is the whole point of the setting.
+        UiScale.Current = 1.5;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Shot("15-scaled-150");
+        UiScale.Current = 1.0;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         vm.BeginImportCommand.Execute(null);
         Shot("04-import");
 

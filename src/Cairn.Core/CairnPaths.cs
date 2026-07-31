@@ -40,6 +40,9 @@ public static class CairnPaths
     /// </summary>
     public static string SessionPath => Path.Combine(Root, "session.json");
 
+    /// <summary>Cairn's own preferences, as opposed to any pack's.</summary>
+    public static string SettingsPath => Path.Combine(Root, "settings.json");
+
     /// <summary>This pack's game data path — worlds, mod configs and settings.</summary>
     public static string DataDir(string id) => Path.Combine(PackDir(id), "data");
 

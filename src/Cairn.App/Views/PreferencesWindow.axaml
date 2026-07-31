@@ -232,6 +232,21 @@
                 </StackPanel>
             </TabItem>
 
+            <TabItem Header="Appearance">
+                <StackPanel Margin="0,14,0,0" Spacing="10" MaxWidth="460" HorizontalAlignment="Left">
+                    <TextBlock Text="Interface size" FontWeight="SemiBold" FontSize="13" />
+                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap"
+                               Text="Scales everything — text, buttons, rows and spacing — rather than only the font, so nothing ends up cramped inside a control that stayed the same size." />
+
+                    <ComboBox MinWidth="140"
+                              ItemsSource="{Binding ScaleChoices}"
+                              SelectedItem="{Binding SelectedScale}" />
+
+                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                               Text="Applies straight away, to this window and the launcher behind it. Remembered for next time." />
+                </StackPanel>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

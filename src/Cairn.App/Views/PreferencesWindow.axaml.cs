@@ -10,6 +10,7 @@ public partial class PreferencesWindow : Window
     public PreferencesWindow()
     {
         InitializeComponent();
+        UiScale.Attach(this);
     }
 
     /// <summary>

@@ -12,6 +12,7 @@ public partial class ConfirmWindow : Window
     public ConfirmWindow()
     {
         InitializeComponent();
+        UiScale.Attach(this);
     }
 
     private void OnConfirm(object? sender, RoutedEventArgs e) => Close(true);

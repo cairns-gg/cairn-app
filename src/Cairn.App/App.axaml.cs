@@ -15,6 +15,10 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Before any window is built, so the first one opens at the chosen size rather
+        // than snapping to it a frame later.
+        UiScale.Load();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow

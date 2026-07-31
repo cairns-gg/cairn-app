@@ -13,6 +13,7 @@ public partial class VersionChangeWindow : Window
     public VersionChangeWindow()
     {
         InitializeComponent();
+        UiScale.Attach(this);
     }
 
     private void OnApply(object? sender, RoutedEventArgs e) => Close(true);

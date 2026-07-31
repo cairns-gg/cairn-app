@@ -54,6 +54,27 @@ public partial class PreferencesViewModel : ViewModelBase
     [ObservableProperty] public partial string RuntimesDetail { get; set; } = "";
     [ObservableProperty] public partial string PacksDetail { get; set; } = "";
 
+    // ---- how large the interface is drawn ----
+
+    /// <summary>Offered as steps rather than a slider: these are the ones worth picking.</summary>
+    public IReadOnlyList<string> ScaleChoices { get; } =
+        [.. UiScale.Choices.Select(UiScale.Describe)];
+
+    /// <summary>
+    /// Applied as you pick it rather than on a Save, because the only way to know whether
+    /// a size is comfortable is to look at it.
+    /// </summary>
+    [ObservableProperty] public partial string SelectedScale { get; set; } = UiScale.Describe(UiScale.Current);
+
+    partial void OnSelectedScaleChanged(string value)
+    {
+        var chosen = UiScale.Choices.FirstOrDefault(c => UiScale.Describe(c) == value);
+        if (chosen == 0) return;
+
+        UiScale.Current = chosen;
+        UiScale.Save();
+    }
+
     public string CairnHome => CairnPaths.Root;
     public string SharedDataPath => GameInstall.DefaultDataPath;
     public string GameInstallPath => GameInstall.TryLocate()?.Directory ?? "(not found)";

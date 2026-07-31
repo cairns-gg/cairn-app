@@ -131,6 +131,10 @@ required:
   where that lives. A non-zero exit pulls the errors and warnings in by itself, with
   repeated lines collapsed — a failing render call logs the same line dozens of times a
   second and would otherwise bury the cause.
+- **Preferences → Appearance** scales the interface, 100% to 200%, applied as you pick it
+  and remembered. It scales the whole window rather than the font size, so buttons, rows
+  and spacing grow with the text instead of the text getting cramped inside controls that
+  stayed put — and it will not grow a window past the display it is on.
 - **Play** syncs the mod directory and then launches. It is the only button that
   needs pressing; `cairn-cli sync` exists for reconciling without starting the game.
 
@@ -232,6 +236,7 @@ cairn-cli games install 1.22.5      download, verify md5, unpack
 cairn-cli games remove 1.22.5
 ```
 
+Game versions are managed with `cairn-cli games` (above)
 or **Preferences → Storage** in the launcher, which is where installed versions are removed
 and private runtimes managed. **Clean up** there sweeps every version no pack targets, plus
 any private runtime left with nothing to run and the icon and mod-detail caches — one sweep
