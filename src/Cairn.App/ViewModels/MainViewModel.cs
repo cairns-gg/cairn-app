@@ -231,7 +231,7 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty] public partial string ImportText { get; set; } = "";
     [ObservableProperty] public partial string ImportAsId { get; set; } = "";
-    [ObservableProperty] public partial bool ImportPinToLock { get; set; } = true;
+    [ObservableProperty] public partial bool ImportReproduce { get; set; } = true;
     [ObservableProperty] public partial string? ImportError { get; set; }
     [ObservableProperty] public partial bool ImportBusy { get; set; }
 
@@ -484,7 +484,7 @@ public partial class MainViewModel : ViewModelBase
                 // Slugged like a new pack's name, so "Anego Copy" is accepted here rather
                 // than rejected for containing a space.
                 string.IsNullOrWhiteSpace(ImportAsId) ? null : PackId.FromOrFallback(ImportAsId),
-                ImportPinToLock);
+                ImportReproduce);
 
             Note($"imported pack '{manifest.Id}' ({manifest.Mods.Count} mods)");
             IsImporting = false;

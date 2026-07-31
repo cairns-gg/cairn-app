@@ -375,20 +375,37 @@ public partial class PackDetailViewModel : ViewModelBase
         var locks = _store.LoadLock(Id);
         Mods.Clear();
 
+        var rows = new List<ModRowViewModel>();
+
         foreach (var mod in Manifest.Mods)
         {
             var locked = locks?.Mods.FirstOrDefault(
                 m => string.Equals(m.ModId, mod.ModId, StringComparison.OrdinalIgnoreCase));
 
-            Mods.Add(new ModRowViewModel(
-                mod, locked,
-                loadReleases: LoadReleasesForRowAsync,
-                pin: ApplyPin,
-                remove: RemoveRow,
-                openPage: OpenModPage,
-                armed: DisarmOtherRows,
-                update: UpdateOne));
+            rows.Add(Row(mod, locked));
         }
+
+        // Mods pulled in by other mods live in the lockfile, not the manifest — that is
+        // where installed-but-not-asked-for belongs. Reading only the manifest left them
+        // correctly installed and completely invisible.
+        var named = Manifest.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var locked in locks?.Mods ?? [])
+        {
+            if (named.Contains(locked.ModId) || locked.RequiredBy is not { Count: > 0 }) continue;
+            rows.Add(Row(new PackMod { ModId = locked.ModId }, locked));
+        }
+
+        foreach (var row in Arrange(rows)) Mods.Add(row);
+
+        ModRowViewModel Row(PackMod mod, LockedMod? locked) => new(
+            mod, locked,
+            loadReleases: LoadReleasesForRowAsync,
+            pin: ApplyPin,
+            remove: RemoveRow,
+            openPage: OpenModPage,
+            armed: DisarmOtherRows,
+            update: UpdateOne);
 
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(ListHeading));
@@ -445,6 +462,57 @@ public partial class PackDetailViewModel : ViewModelBase
                 slots.Release();
             }
         })).ConfigureAwait(false);
+
+        // Once, at the end. Re-sorting as each name landed would walk the rows around
+        // under the pointer for as long as ModDB took to answer.
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (generation == _modIconGeneration) SortRows();
+        });
+    }
+
+    /// <summary>
+    /// Orders rows by what they display — the mod's name once ModDB has supplied one, its
+    /// id until then — with each dependency following the mod that pulled it in.
+    ///
+    /// Sorting dependencies in among everything else would scatter them: `carryonlib` under
+    /// C, three rows away from the `carryon` that is the only reason it is installed.
+    /// </summary>
+    private static List<ModRowViewModel> Arrange(IReadOnlyList<ModRowViewModel> rows)
+    {
+        var byName = StringComparer.OrdinalIgnoreCase;
+        var dependencies = rows.Where(r => r.IsDependency).ToList();
+        var arranged = new List<ModRowViewModel>();
+
+        foreach (var direct in rows.Where(r => r.IsDirect).OrderBy(r => r.Title, byName))
+        {
+            arranged.Add(direct);
+            arranged.AddRange(dependencies
+                .Where(d => byName.Equals(d.RequiredByFirst, direct.ModId))
+                .OrderBy(d => d.Title, byName));
+        }
+
+        // A dependency whose requirer is not itself a row — possible only from a hand-edited
+        // lockfile, but it should still be visible rather than silently dropped.
+        arranged.AddRange(dependencies.Except(arranged).OrderBy(d => d.Title, byName));
+
+        return arranged;
+    }
+
+    /// <summary>
+    /// Reapplies <see cref="Arrange"/> in place, once names have arrived. Moving rows
+    /// rather than rebuilding them keeps each row's own state — an armed remove, a release
+    /// list already fetched.
+    /// </summary>
+    private void SortRows()
+    {
+        var sorted = Arrange([.. Mods]);
+
+        for (var target = 0; target < sorted.Count; target++)
+        {
+            var from = Mods.IndexOf(sorted[target]);
+            if (from != target) Mods.Move(from, target);
+        }
     }
 
     private void Persist()
@@ -756,6 +824,31 @@ public partial class PackDetailViewModel : ViewModelBase
         // The row stays on screen, so it has to stop offering to add it again.
         hit.AlreadyInPack = true;
         _log($"added {hit.ModId}");
+
+        ReloadMods();
+
+        var added = Mods.FirstOrDefault(
+            m => string.Equals(m.ModId, hit.ModId, StringComparison.OrdinalIgnoreCase));
+        if (added is not null) added.Downloading = true;
+
+        _ = SyncAfterAddAsync();
+    }
+
+    /// <summary>
+    /// Fetches what was just added, without being asked.
+    ///
+    /// Adding a mod only writes a line to the manifest, so before this the row sat there
+    /// with no version and nothing happened until the next Play. It also matters for
+    /// dependencies: they are declared inside the zip, so a mod's requirements cannot be
+    /// known — or shown — until it has actually been downloaded.
+    /// </summary>
+    private async Task SyncAfterAddAsync()
+    {
+        // A launch or an update is already going to sync, and two at once would race for
+        // the same directory and lockfile.
+        if (IsBusy || IsLaunching) return;
+
+        await RunSyncAsync(quiet: true);
     }
 
     // ---- updates ----
@@ -1164,10 +1257,16 @@ public partial class PackDetailViewModel : ViewModelBase
     /// code — it is the first half of launching, and dropping it would leave Play
     /// starting the game with whatever happened to be on disk.
     /// </summary>
-    private async Task<SyncReport?> RunSyncAsync()
+    /// <param name="quiet">
+    /// For a sync the user did not ask for. It still logs and still installs, but a failure
+    /// does not raise the pane's error banner: the action they took — adding a mod — did
+    /// work, the download is what did not, and Play will say so properly when it retries.
+    /// Nor does it clear an error that was already showing.
+    /// </param>
+    private async Task<SyncReport?> RunSyncAsync(bool quiet = false)
     {
         IsBusy = true;
-        Error = null;
+        if (!quiet) Error = null;
 
         try
         {
@@ -1176,17 +1275,29 @@ public partial class PackDetailViewModel : ViewModelBase
             {
                 _log(Format(s));
                 if (IsLaunching) LaunchStage = $"Mods: {s.ModId} {s.Detail}";
+
+                // The row stops saying "downloading…" when sync has actually reached it,
+                // rather than when the whole run finishes.
+                var row = Mods.FirstOrDefault(
+                    m => string.Equals(m.ModId, s.ModId, StringComparison.OrdinalIgnoreCase));
+                if (row is not null) row.Downloading = false;
             });
 
             var report = await syncer.SyncAsync(
                 Manifest, _store.ModsDir(Id), _store.LockPath(Id), progress);
 
-            if (report.Failed) Error = "Some mods could not be installed — see the log.";
+            if (report.Failed)
+            {
+                if (quiet) _log("some mods could not be installed — Play will try again");
+                else Error = "Some mods could not be installed — see the log.";
+            }
+
             return report;
         }
         catch (Exception e)
         {
-            Error = e.Message;
+            if (quiet) _log($"background sync failed: {e.Message}");
+            else Error = e.Message;
             return null;
         }
         finally

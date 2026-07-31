@@ -58,6 +58,31 @@ public partial class ModRowViewModel : ViewModelBase
 
     public string ModId => Mod.ModId;
 
+    // ---- dependencies ----
+
+    /// <summary>
+    /// True when nothing in the manifest named this mod — it is here because another mod
+    /// requires it. Such a row is shown but not acted on: removing it while its dependent
+    /// is still in the pack is incoherent, and the next sync would reinstate it anyway.
+    /// </summary>
+    public bool IsDependency => Locked?.RequiredBy is { Count: > 0 };
+
+    /// <summary>The mod this row is indented under. Null for a mod the pack named.</summary>
+    public string? RequiredByFirst => Locked?.RequiredBy?.FirstOrDefault();
+
+    public string RequiredByNote =>
+        IsDependency ? $"required by {string.Join(", ", Locked!.RequiredBy!)}" : "";
+
+    /// <summary>Rows the pack asked for, which are the only ones with actions.</summary>
+    public bool IsDirect => !IsDependency;
+
+    /// <summary>
+    /// Set the moment a mod is added, cleared when sync reports on it. A pack edit is
+    /// instant but the download behind it is not, and a row that simply sat there with no
+    /// installed version read as though nothing had happened.
+    /// </summary>
+    [ObservableProperty] public partial bool Downloading { get; set; }
+
     /// <summary>
     /// The mod's own name, once ModDB has been asked. Null until then — a manifest holds
     /// ids, so the id is all a row can honestly show at first.

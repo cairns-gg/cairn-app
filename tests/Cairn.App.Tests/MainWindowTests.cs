@@ -144,6 +144,79 @@ public class MainWindowTests : IDisposable
         Assert.DoesNotContain(text, t => t.Contains("not installed"));
     }
 
+    /// <summary>
+    /// Writes a lockfile directly. Dependencies only ever exist in the lock — they are
+    /// discovered inside a downloaded zip, and the manifest records what was asked for.
+    /// </summary>
+    private void WriteLock(string id, params (string ModId, string[]? RequiredBy)[] mods)
+    {
+        File.WriteAllText(Path.Combine(_home, "packs", id, "pack.lock.json"), JsonSerializer.Serialize(
+            new
+            {
+                gameVersion = "1.22.5",
+                mods = mods.Select(m => new
+                {
+                    modid = m.ModId, version = "1.0.0", filename = $"{m.ModId}_1.0.0.zip",
+                    url = $"https://moddbcdn.vintagestory.at/{m.ModId}_1.0.0.zip",
+                    releaseId = 1, fileId = 1, sha256 = new string('a', 64),
+                    requiredBy = m.RequiredBy,
+                }).ToArray(),
+            },
+            new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    [AvaloniaFact]
+    public void A_dependency_is_shown_under_the_mod_that_requires_it()
+    {
+        WritePack("deps", "Deps", "1.22.5", null, ["carryon"]);
+        WriteLock("deps", ("carryon", null), ("carryonlib", ["carryon"]));
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "deps");
+
+        // It is installed and in the lock but not in the manifest, so reading only the
+        // manifest left it working and invisible.
+        Assert.Equal(
+            new[] { "carryon", "carryonlib" },
+            vm.Detail!.Mods.Select(m => m.ModId).ToArray());
+
+        var lib = vm.Detail.Mods.Single(m => m.ModId == "carryonlib");
+        Assert.True(lib.IsDependency);
+        Assert.False(lib.IsDirect);
+        Assert.Equal("required by carryon", lib.RequiredByNote);
+    }
+
+    [AvaloniaFact]
+    public void A_dependency_stays_with_its_requirer_rather_than_sorting_away_from_it()
+    {
+        WritePack("deps", "Deps", "1.22.5", null, ["aaa", "carryon"]);
+        WriteLock("deps", ("aaa", null), ("carryon", null), ("bbb", ["carryon"]));
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "deps");
+
+        // Sorted flat this would read aaa, bbb, carryon — putting the library three rows
+        // from the only reason it is installed.
+        Assert.Equal(
+            new[] { "aaa", "carryon", "bbb" },
+            vm.Detail!.Mods.Select(m => m.ModId).ToArray());
+    }
+
+    [AvaloniaFact]
+    public void Mods_are_listed_in_lexicographic_order()
+    {
+        // The manifest keeps insertion order, so a pack reads back in whatever order its
+        // author happened to add things.
+        WritePack("jumbled", "Jumbled", "1.22.5", null, ["unchisel", "glassview", "keylock"]);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "jumbled");
+
+        Assert.Equal(
+            new[] { "glassview", "keylock", "unchisel" },
+            vm.Detail!.Mods.Select(m => m.ModId).ToArray());
+    }
+
 
     // ---- creating packs from the UI ----
 

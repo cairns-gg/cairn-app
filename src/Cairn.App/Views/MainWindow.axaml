@@ -108,8 +108,8 @@
                                    FontSize="12" Opacity="0.7" />
                         <TextBox Grid.Column="1" Text="{Binding ImportAsId}"
                                  PlaceholderText="(keep the author's name)" />
-                        <CheckBox Grid.Column="2" Content="pin to their versions"
-                                  IsChecked="{Binding ImportPinToLock}" />
+                        <CheckBox Grid.Column="2" Content="use their exact versions"
+                                  IsChecked="{Binding ImportReproduce}" />
                     </Grid>
 
                     <Border IsVisible="{Binding HasImportError}" Padding="10,8" CornerRadius="1"
@@ -301,8 +301,14 @@
                                                            Stretch="UniformToFill" />
                                                 </Border>
 
+                                                <!-- Indented and dimmed: a dependency is here
+                                                     because of the row above it, not because
+                                                     the pack asked for it. -->
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                             Spacing="8" VerticalAlignment="Center">
+                                                    <TextBlock Text="↳" FontSize="12" Opacity="0.5"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding IsDependency}" />
                                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
                                                     <!-- Kept, quietly: the id is what the
                                                          manifest and lockfile record. -->
@@ -312,11 +318,19 @@
                                                                IsVisible="{Binding HasInstalledVersion}"
                                                                FontSize="11" Opacity="0.75"
                                                                VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding RequiredByNote}"
+                                                               IsVisible="{Binding IsDependency}"
+                                                               FontSize="11" Opacity="0.55"
+                                                               VerticalAlignment="Center" />
                                                     <TextBlock Text="server-side"
                                                                IsVisible="{Binding IsServerSide}"
                                                                FontSize="11" VerticalAlignment="Center"
                                                                Foreground="{DynamicResource VsWarningBrush}" />
                                                 </StackPanel>
+
+                                                <TextBlock Grid.Column="2" Text="downloading…" FontSize="11"
+                                                           Opacity="0.6" VerticalAlignment="Center"
+                                                           IsVisible="{Binding Downloading}" />
 
                                                 <TextBlock Grid.Column="2" Text="loading…" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
@@ -331,8 +345,11 @@
                                                         VerticalAlignment="Center" />
 
                                                 <!-- Its versions are fetched when this is opened,
-                                                     not for every row up front. -->
+                                                     not for every row up front. A dependency has
+                                                     no pin of its own: it is whatever the mod
+                                                     that requires it needs. -->
                                                 <ComboBox Grid.Column="3" MinWidth="120"
+                                                          IsVisible="{Binding IsDirect}"
                                                           ItemsSource="{Binding ReleaseChoices}"
                                                           SelectedItem="{Binding SelectedRelease}"
                                                           DropDownOpened="OnVersionDropDownOpened"
@@ -341,7 +358,11 @@
                                                 <Button Grid.Column="4" Content="View" Padding="10,4"
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
+                                                <!-- Removing a dependency while the mod that
+                                                     needs it is still here would only be undone
+                                                     by the next sync. -->
                                                 <Button Grid.Column="5" Content="✕" Padding="10,4"
+                                                        IsVisible="{Binding IsDirect}"
                                                         Command="{Binding RequestRemoveCommand}"
                                                         VerticalAlignment="Center" />
                                             </Grid>
