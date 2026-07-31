@@ -263,7 +263,7 @@ public class MainWindowTests : IDisposable
 
         Assert.Null(detail.Error);
         Assert.Equal("Renamed Pack", detail.Title);
-        Assert.Contains("joins newhost:42420", detail.ServerLine);
+        Assert.Contains("auto-joins newhost:42420", detail.ServerLine);
 
         var onDisk = File.ReadAllText(Path.Combine(_home, "packs", "vanilla-qol", "pack.json"));
         Assert.Contains("Renamed Pack", onDisk);
@@ -1029,6 +1029,55 @@ public class MainWindowTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Contains(VisibleText(window), t => t.Contains("saved settings for 'anego'"));
+    }
+
+    // ---- what "connect" actually means ----
+
+    /// <summary>
+    /// A pack without a server used to be labelled "singleplayer", which is not what the
+    /// field means. "connect" only decides whether launching skips the main menu; it does
+    /// not restrict the pack, and multiplayer stays available from the menu either way.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_with_no_server_is_not_called_singleplayer()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");   // no connect
+
+        Assert.DoesNotContain(VisibleText(window), t => t.Contains("singleplayer"));
+
+        // Nothing is claimed at all: the line is simply absent.
+        Assert.False(vm.SelectedPack.HasServer);
+        Assert.Equal("", vm.SelectedPack.ServerLine);
+        Assert.False(vm.Detail!.HasServer);
+    }
+
+    [AvaloniaFact]
+    public void A_pack_with_a_server_says_it_will_join_it()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.SelectedPack.HasServer);
+        Assert.Equal("auto-joins anego.example.com:42420", vm.SelectedPack.ServerLine);
+
+        // Worth knowing before pressing Play that it will drop you straight into a server.
+        Assert.Contains(VisibleText(window), t => t.Contains("auto-joins anego.example.com"));
+    }
+
+    [AvaloniaFact]
+    public void Clearing_the_server_removes_the_line_rather_than_relabelling_it()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.EditConnect = "";
+        vm.Detail.SaveSettingsCommand.Execute(null);
+
+        Assert.False(vm.Detail.HasServer);
+        Assert.False(vm.SelectedPack!.HasServer);
+        Assert.Equal("", vm.SelectedPack.ServerLine);
     }
 
     [AvaloniaFact]

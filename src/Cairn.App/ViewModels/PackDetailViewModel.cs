@@ -144,9 +144,11 @@ public partial class PackDetailViewModel : ViewModelBase
     public string Subtitle =>
         $"game {Manifest.GameVersion}  ·  {Manifest.Mods.Count} mod{(Manifest.Mods.Count == 1 ? "" : "s")}";
 
-    public string ServerLine => string.IsNullOrWhiteSpace(Manifest.Connect)
-        ? "singleplayer"
-        : $"joins {Manifest.Connect}";
+    /// <summary>See PackListItemViewModel.HasServer — blank is "opens at the main menu",
+    /// not "singleplayer only".</summary>
+    public bool HasServer => !string.IsNullOrWhiteSpace(Manifest.Connect);
+
+    public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
 
     public string ModsDirectory => _store.ModsDir(Id);
 
@@ -262,6 +264,7 @@ public partial class PackDetailViewModel : ViewModelBase
         Persist();
 
         OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(HasServer));
         OnPropertyChanged(nameof(ServerLine));
         RefreshGameState();
         _log($"saved settings for '{Id}'");

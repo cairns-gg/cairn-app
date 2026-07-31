@@ -80,7 +80,8 @@
                             <StackPanel Spacing="2" Margin="0,4">
                                 <TextBlock Text="{Binding Display}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.7" />
-                                <TextBlock Text="{Binding ServerLine}" FontSize="11" Opacity="0.55" />
+                                <TextBlock Text="{Binding ServerLine}" FontSize="11" Opacity="0.55"
+                                           IsVisible="{Binding HasServer}" />
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -281,8 +282,11 @@
                 </StackPanel>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Server to join (optional)" FontSize="12" Opacity="0.7" />
+                    <TextBlock Text="Server to auto-join on launch (optional)"
+                               FontSize="12" Opacity="0.7" />
                     <TextBox Text="{Binding NewPackConnect}" PlaceholderText="host:42420" />
+                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                               Text="Leave blank to start at the main menu — you can still join servers from there." />
                 </StackPanel>
 
                 <Border IsVisible="{Binding HasNewPackError}" Padding="10,8" CornerRadius="1"
@@ -303,6 +307,8 @@
                 <StackPanel DockPanel.Dock="Top" Spacing="4">
                     <TextBlock Text="{Binding Detail.Title}" Classes="heading" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Detail.Subtitle}" Opacity="0.7" FontSize="12" />
+                    <TextBlock Text="{Binding Detail.ServerLine}" Opacity="0.7" FontSize="12"
+                               IsVisible="{Binding Detail.HasServer, FallbackValue=False}" />
                 </StackPanel>
 
                 <Border DockPanel.Dock="Top" Margin="0,12,0,0" Padding="10,8" CornerRadius="1"
@@ -421,9 +427,11 @@
                                 <TextBox Text="{Binding Detail.EditGameVersion}" />
                             </StackPanel>
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Server to join (blank for singleplayer)"
+                                <TextBlock Text="Server to auto-join on launch"
                                            FontSize="12" Opacity="0.7" />
                                 <TextBox Text="{Binding Detail.EditConnect}" />
+                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                                           Text="Leave blank to start at the main menu — you can still join servers from there." />
                             </StackPanel>
 
                             <!-- Delete is deliberately not beside Save; it lives with the

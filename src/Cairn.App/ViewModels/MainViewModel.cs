@@ -25,9 +25,15 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
     public string Subtitle =>
         $"game {Manifest.GameVersion}  ·  {Manifest.Mods.Count} mod{(Manifest.Mods.Count == 1 ? "" : "s")}";
 
-    public string ServerLine => string.IsNullOrWhiteSpace(Manifest.Connect)
-        ? "singleplayer"
-        : $"joins {Manifest.Connect}";
+    /// <summary>
+    /// Shown only when the pack has a server. "connect" decides whether launching jumps
+    /// straight into one — it does not restrict the pack to that server, and a pack
+    /// without it is not a singleplayer pack: it opens at the main menu, from which
+    /// multiplayer is as available as it ever was.
+    /// </summary>
+    public bool HasServer => !string.IsNullOrWhiteSpace(Manifest.Connect);
+
+    public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
 
     /// <summary>
     /// The detail pane edits this same manifest instance, and these are computed getters
@@ -38,6 +44,7 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
     {
         OnPropertyChanged(nameof(Display));
         OnPropertyChanged(nameof(Subtitle));
+        OnPropertyChanged(nameof(HasServer));
         OnPropertyChanged(nameof(ServerLine));
     }
 }
