@@ -519,8 +519,19 @@
 
                     <TabItem Header="Log">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
-                            <Button DockPanel.Dock="Bottom" Content="Clear" HorizontalAlignment="Left"
-                                    Margin="0,8,0,0" Command="{Binding Detail.ClearLogCommand}" />
+                            <!--
+                                Cairn's log is only half the story: when the game closes on
+                                startup the answer is in its own log, which nobody should
+                                have to know the location of.
+                            -->
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                        Spacing="8" Margin="0,8,0,0">
+                                <Button Content="Clear" Command="{Binding Detail.ClearLogCommand}" />
+                                <Button Content="Game log"
+                                        Command="{Binding Detail.ShowGameLogCommand}" />
+                                <Button Content="Open logs folder"
+                                        Command="{Binding Detail.OpenLogsFolderCommand}" />
+                            </StackPanel>
                             <ScrollViewer>
                                 <ItemsControl ItemsSource="{Binding Detail.Log}" Margin="4">
                                     <ItemsControl.ItemTemplate>

@@ -125,6 +125,12 @@ required:
   a save when a newer build opens it and will not open one saved by a newer build. Mods
   that ModDB could not be asked about are reported as *could not be checked* rather than
   as working — a preview is worth nothing if it guesses.
+- **Log** tab — what Cairn did, plus the game's own log. **Game log** pulls the tail of
+  `client-main.log` into the pane and **Open logs folder** opens the directory, because
+  when the game closes on startup the answer is in its log and nobody should have to know
+  where that lives. A non-zero exit pulls the errors and warnings in by itself, with
+  repeated lines collapsed — a failing render call logs the same line dozens of times a
+  second and would otherwise bury the cause.
 - **Play** syncs the mod directory and then launches. It is the only button that
   needs pressing; `cairn-cli sync` exists for reconciling without starting the game.
 

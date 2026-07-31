@@ -165,6 +165,60 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand]
     private void ClearLog() => Log.Clear();
 
+    // ---- the game's own logs ----
+
+    private GameLogs GameLogs => new(_packData.DataPathFor(Id));
+
+    public bool HasGameLogs => GameLogs.Exists;
+
+    /// <summary>
+    /// Pulls the game's own log into this pane. Cairn's log says what Cairn did, which is
+    /// no help at all when the game closes on startup or a mod silently fails to load —
+    /// that answer is in client-main.log, and nobody should have to know that.
+    /// </summary>
+    [RelayCommand]
+    private void ShowGameLog()
+    {
+        var logs = GameLogs;
+
+        if (!logs.Exists)
+        {
+            _log("no game logs yet — this pack has not been launched");
+            return;
+        }
+
+        var tail = logs.Tail(GameLogs.ClientMain, lines: 200);
+        if (tail.Count == 0)
+        {
+            _log($"no {GameLogs.ClientMain} under {logs.Directory}");
+            return;
+        }
+
+        _log($"── {GameLogs.ClientMain} (last {tail.Count} lines) ──");
+        foreach (var line in tail) _log(line);
+        _log("── end of game log ──");
+    }
+
+    /// <summary>The errors and warnings only, which is what a failed launch is asked about.</summary>
+    private void ShowGameProblems(string why)
+    {
+        var problems = GameLogs.Problems();
+        if (problems.Count == 0) return;
+
+        _log($"── {why}: what the game logged ──");
+        foreach (var line in problems) _log(line);
+        _log("── use Game log for the full file ──");
+    }
+
+    [RelayCommand]
+    private void OpenLogsFolder()
+    {
+        var logs = GameLogs;
+
+        if (!Files.OpenFolder(logs.Directory))
+            _log($"could not open {logs.Directory}");
+    }
+
     public ObservableCollection<ModRowViewModel> Mods { get; } = [];
 
     public ObservableCollection<SearchHitViewModel> SearchHits { get; } = [];
@@ -1082,8 +1136,12 @@ public partial class PackDetailViewModel : ViewModelBase
 
             if (code is { } c && c != 0)
             {
-                Error = $"Vintage Story exited with code {c}.";
+                Error = $"Vintage Story exited with code {c}. See the Log tab.";
                 _log($"Vintage Story exited with code {c}");
+
+                // The moment the game's log matters, so it is put in front of you rather
+                // than left somewhere you would have to know to look.
+                ShowGameProblems($"exit code {c}");
             }
             else
             {

@@ -255,6 +255,32 @@ public class ThemeTests : IDisposable
         Shot("10-remove-confirm");
         vm.Detail.Mods.First().CancelRemoveCommand.Execute(null);
 
+        // The Log tab, with the game's own log pulled into it.
+        {
+            var logs = Path.Combine(_home, "packs", "anego", "data", "Logs");
+            Directory.CreateDirectory(logs);
+            File.WriteAllLines(Path.Combine(logs, "client-main.log"),
+            [
+                "29.7.2026 20:02:29 [Notification] Game Version: v1.22.5",
+                "29.7.2026 20:02:31 [Error] GLFW Exception: Requested OpenGL version 4.3, got version 4.1",
+                "29.7.2026 20:02:44 [Notification] Loading mod glassview 1.3.0",
+                "29.7.2026 20:02:44 [Error] Failed to load mod olla: missing dependency 'game' >= 1.22.6",
+                "29.7.2026 20:02:52 [Warning] (x_x) Captured 2 issues during startup",
+            ]);
+
+            vm.Detail!.ShowGameLogCommand.Execute(null);
+
+            var logTabs = window.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
+            var logTab = logTabs?.GetVisualDescendants().OfType<TabItem>()
+                .FirstOrDefault(t => (t.Header as string) == "Log");
+
+            if (logTabs is not null && logTab is not null)
+            {
+                logTabs.SelectedItem = logTab;
+                Shot("12-game-log");
+            }
+        }
+
         vm.Detail!.IsLaunching = true;
         vm.Detail.LaunchStage = "Mods: glassview 1.3.0";
         Shot("08-launching");

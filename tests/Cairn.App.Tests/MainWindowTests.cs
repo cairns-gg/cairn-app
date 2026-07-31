@@ -754,6 +754,77 @@ public class MainWindowTests : IDisposable
         Assert.False(games.Vm.ConfirmingRemove);
     }
 
+    // ---- the game's own log ----
+
+    private string LogsDirFor(string packId) =>
+        Path.Combine(_home, "packs", packId, "data", "Logs");
+
+    private void WriteGameLog(string packId, params string[] lines)
+    {
+        Directory.CreateDirectory(LogsDirFor(packId));
+        File.WriteAllLines(Path.Combine(LogsDirFor(packId), "client-main.log"), lines);
+    }
+
+    [AvaloniaFact]
+    public void The_log_tab_offers_the_games_log_as_well_as_Cairns()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.First();
+
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+        tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
+            .Single(t => (t.Header as string) == "Log");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var buttons = Buttons(window);
+
+        foreach (var label in new[] { "Clear", "Game log", "Open logs folder" })
+        {
+            Assert.True(buttons.ContainsKey(label), $"no '{label}' button in the Log tab");
+            Assert.NotNull(buttons[label].Command);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Showing_the_game_log_puts_it_in_the_pane()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        WriteGameLog("anego",
+            "29.7.2026 20:02:31 [Notification] Loading mods",
+            "29.7.2026 20:02:32 [Error] Failed to load mod olla");
+
+        vm.Detail!.ShowGameLogCommand.Execute(null);
+
+        Assert.Contains(vm.Detail.Log, l => l.Contains("client-main.log"));
+        Assert.Contains(vm.Detail.Log, l => l.Contains("Failed to load mod olla"));
+    }
+
+    [AvaloniaFact]
+    public void Asking_for_a_log_that_is_not_there_says_so_rather_than_nothing()
+    {
+        // Silence would read as "there is nothing wrong", which is the opposite of true.
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.ShowGameLogCommand.Execute(null);
+
+        Assert.Contains(vm.Detail.Log, l => l.Contains("not been launched"));
+    }
+
+    [AvaloniaFact]
+    public void The_logs_button_survives_a_pack_that_has_never_run()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        // No Logs directory at all: this must report, not throw.
+        vm.Detail!.OpenLogsFolderCommand.Execute(null);
+
+        Assert.Contains(vm.Detail.Log, l => l.Contains("could not open"));
+    }
+
     // ---- changing the game version ----
 
     /// <summary>
