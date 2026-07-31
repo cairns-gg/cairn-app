@@ -1052,25 +1052,10 @@ public partial class PackDetailViewModel : ViewModelBase
 
     /// <summary>Re-enables Play when the game exits, and reports a non-zero exit.</summary>
     /// <summary>
-    /// Where the pack's worlds, mod configs and settings live, or the shared path for a
-    /// pack that has not been given its own.
+    /// Where the pack's worlds, mod configs and settings live. Always its own directory;
+    /// it appears on first launch.
     /// </summary>
     public string DataDirectory => _packData.DataPathFor(Id);
-
-    public bool HasOwnData => _packData.HasOwnData(Id);
-
-    /// <summary>
-    /// Gives this pack its own worlds and configs. Existing worlds are not moved — they
-    /// belong to whoever made them, under a mod set Cairn cannot vouch for.
-    /// </summary>
-    [RelayCommand]
-    private void UseOwnData()
-    {
-        _packData.EnableOwnData(Id);
-        OnPropertyChanged(nameof(DataDirectory));
-        OnPropertyChanged(nameof(HasOwnData));
-        _log($"'{Id}' now has its own worlds and settings at {DataDirectory}");
-    }
 
     private async Task WatchAsync(System.Diagnostics.Process proc)
     {

@@ -12,7 +12,14 @@ namespace Cairn.Core.Launch;
 /// <c>Playerdata/</c> and <c>ModsByServer/</c> were shared for the same reason; all of them
 /// are hardcoded under the data path by the game, with only <c>Logs</c> overridable.
 ///
-/// So a pack gets its own data path, and the session is merged in at launch instead.
+/// So every pack gets its own data path, and the session is merged in at launch instead.
+///
+/// Unconditionally: sharing a data path was briefly offered as a per-pack choice, for packs
+/// created before this existed. But it is not a preference — it is the failure mode this
+/// class exists to prevent, and offering it made it look like a supported way to run.
+/// Packs from before simply get a data path on their next launch. Worlds already in the
+/// shared path stay there, still reachable by launching Vintage Story normally: they are
+/// the player's ordinary saves, and Cairn cannot know which pack, if any, they belong to.
 /// </summary>
 public sealed class PackData(PackStore store, string? sessionPath = null, string? sharedDataPath = null)
 {
@@ -25,22 +32,25 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     private static string SettingsIn(string dataPath) => Path.Combine(dataPath, "clientsettings.json");
 
     /// <summary>
-    /// Whether this pack has its own data. The directory is the flag — no extra state
-    /// file, and nothing machine-local smuggled into the manifest, which travels.
+    /// Where this pack launches. Always its own directory.
+    ///
+    /// A pure read: cairn-cli launch --dry-run prints this without starting anything, so
+    /// resolving a path must not create one. EnsureDataPath does the creating, from the
+    /// launch path only.
     /// </summary>
-    public bool HasOwnData(string id) => Directory.Exists(store.DataDir(id));
+    public string DataPathFor(string id) => store.DataDir(id);
 
-    /// <summary>Where this pack launches: its own data if it has any, else the shared path.</summary>
-    public string DataPathFor(string id) => HasOwnData(id) ? store.DataDir(id) : SharedDataPath;
+    /// <summary>Whether the directory is there yet, which is not the same as which path is used.</summary>
+    private bool Exists(string id) => Directory.Exists(store.DataDir(id));
 
     /// <summary>
-    /// Gives a pack its own data path.
+    /// Creates the pack's data path if it has none yet, seeding settings once.
     ///
-    /// Existing worlds are deliberately left where they are rather than moved: they belong
-    /// to whoever made them, under a mod set Cairn cannot vouch for. Callers should say so
-    /// — the worlds stay reachable by launching the game normally.
+    /// Worlds in the shared path are deliberately not moved: they are the player's ordinary
+    /// saves, and Cairn cannot know which pack — if any — they belong to. Taking them would
+    /// remove them from plain Vintage Story too.
     /// </summary>
-    public void EnableOwnData(string id)
+    public void EnsureDataPath(string id)
     {
         var data = store.DataDir(id);
         if (Directory.Exists(data)) return;
@@ -63,13 +73,12 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     }
 
     /// <summary>
-    /// Puts the current login into this pack's settings, so a pack with its own data path
-    /// does not ask you to sign in again. Does nothing for a pack on the shared path,
-    /// which already has the real settings file.
+    /// Makes sure the pack has a data path and puts the current login into it, so a pack
+    /// never asks you to sign in again.
     /// </summary>
     public void BeforeLaunch(string id)
     {
-        if (!HasOwnData(id)) return;
+        EnsureDataPath(id);
 
         // Take the newest login on the machine first. The command line does not wait for
         // the game to exit, so signing in inside one pack would otherwise never reach the
@@ -112,7 +121,7 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
         yield return SettingsIn(SharedDataPath);
 
         foreach (var id in store.ListIds())
-            if (HasOwnData(id))
+            if (Exists(id))
                 yield return SettingsIn(store.DataDir(id));
     }
 
@@ -135,7 +144,7 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     /// </summary>
     public void AfterExit(string id)
     {
-        if (!HasOwnData(id)) return;
+        if (!Exists(id)) return;
 
         var played = ClientSession.ReadFrom(SettingsIn(store.DataDir(id)));
         if (!played.IsEmpty) played.Save(SessionPath);

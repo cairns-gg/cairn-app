@@ -101,7 +101,7 @@ internal static class Program
         Console.WriteLine($"install     : {install?.Directory ?? "(not found)"}");
         Console.WriteLine($"version     : {install?.Version ?? "-"}");
         Console.WriteLine($"executable  : {install?.Executable ?? "-"}");
-        Console.WriteLine($"data path   : {GameInstall.DefaultDataPath}  (packs with their own use it only as a seed)");
+        Console.WriteLine($"data path   : {GameInstall.DefaultDataPath}  (yours; packs use it only as a seed)");
         Console.WriteLine($"cairn home  : {CairnPaths.Root}");
 
         if (install is not null)
@@ -355,7 +355,7 @@ internal static class Program
         if (report.Failed)
             return Fail("sync failed; not launching (use --force once implemented to override)");
 
-        // A pack with its own data path keeps its worlds and configs to itself. Resolving
+        // A pack keeps its worlds and configs to itself. Resolving
         // the path is a pure read, so --dry-run can print it; carrying the login into it
         // writes, and waits until we know we are really launching.
         var packData = new PackData(store);
@@ -382,7 +382,7 @@ internal static class Program
             return 0;
         }
 
-        // Carried in now, so a pack with its own data path does not ask for a fresh login.
+        // Carried in now, so a pack does not ask for a fresh login.
         packData.BeforeLaunch(id);
 
         var proc = launcher.Launch(options);

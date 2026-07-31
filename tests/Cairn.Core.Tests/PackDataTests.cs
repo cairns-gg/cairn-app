@@ -12,6 +12,9 @@ namespace Cairn.Core.Tests;
 /// They used to share one data path so there would be one login — which also meant one
 /// set of worlds, reachable from every pack whatever its mods. Carrying just the session
 /// keeps the login and drops the sharing.
+///
+/// Every pack, unconditionally: sharing was briefly a per-pack opt-out, which presented
+/// the failure mode this class exists to prevent as a supported way to run.
 /// </summary>
 public class PackDataTests : IDisposable
 {
@@ -73,51 +76,53 @@ public class PackDataTests : IDisposable
     {
         NewPack("anego");
 
-        Assert.True(_data.HasOwnData("anego"));
         Assert.Equal(_store.DataDir("anego"), _data.DataPathFor("anego"));
     }
 
     [Fact]
-    public void A_pack_without_one_still_uses_the_shared_path()
+    public void A_pack_from_before_this_existed_gets_one_too()
     {
-        // An existing pack, from before packs had their own data.
+        // No data directory, as packs created before per-pack data look. There is no
+        // shared-path mode left to fall into: it was the bug, not a setting.
         NewPack("legacy");
         Directory.Delete(_store.DataDir("legacy"), recursive: true);
 
-        Assert.False(_data.HasOwnData("legacy"));
-        Assert.Equal(SharedData, _data.DataPathFor("legacy"));
+        Assert.Equal(_store.DataDir("legacy"), _data.DataPathFor("legacy"));
+        Assert.NotEqual(SharedData, _data.DataPathFor("legacy"));
     }
 
     [Fact]
-    public void Editing_a_pack_does_not_silently_move_it_off_the_shared_path()
-    {
-        NewPack("legacy");
-        Directory.Delete(_store.DataDir("legacy"), recursive: true);
-
-        // The directory is the flag, so anything that recreated it would migrate someone's
-        // worlds without asking. Saving a manifest must not.
-        var manifest = _store.Load("legacy");
-        manifest.Name = "Renamed";
-        _store.Save(manifest);
-
-        Assert.False(_data.HasOwnData("legacy"));
-    }
-
-    [Fact]
-    public void Opting_in_creates_the_directory_and_seeds_settings_once()
+    public void The_directory_appears_on_launch_and_is_seeded_once()
     {
         NewPack("legacy");
         Directory.Delete(_store.DataDir("legacy"), recursive: true);
         WriteSettings(SharedData, sessionKey: "abc", keybind: "Z", renderDistance: 512);
 
-        _data.EnableOwnData("legacy");
+        _data.BeforeLaunch("legacy");
 
-        Assert.True(_data.HasOwnData("legacy"));
+        Assert.True(Directory.Exists(_store.DataDir("legacy")));
 
         // Seeded from what the player already uses, so a first launch is not bare.
         var seeded = ReadSettings(_store.DataDir("legacy"));
         Assert.Equal("Z", seeded["keyMapping"]!["walkforward"]!.GetValue<string>());
         Assert.Equal(512, seeded["intSettings"]!["viewDistance"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void Worlds_already_in_the_shared_path_are_left_where_they_are()
+    {
+        // They are the player's ordinary saves. Cairn cannot know which pack — if any —
+        // they belong to, and taking them would remove them from plain Vintage Story too.
+        Directory.CreateDirectory(Path.Combine(SharedData, "Saves"));
+        File.WriteAllBytes(Path.Combine(SharedData, "Saves", "Old World.vcdbs"), new byte[128]);
+
+        NewPack("legacy");
+        Directory.Delete(_store.DataDir("legacy"), recursive: true);
+
+        _data.BeforeLaunch("legacy");
+
+        Assert.True(File.Exists(Path.Combine(SharedData, "Saves", "Old World.vcdbs")));
+        Assert.Empty(_data.Worlds("legacy"));
     }
 
     [Fact]
@@ -132,7 +137,6 @@ public class PackDataTests : IDisposable
             _store.DataDir("anego"), "*", SearchOption.AllDirectories).Length;
 
         _ = _data.DataPathFor("anego");
-        _ = _data.HasOwnData("anego");
 
         var after = Directory.GetFileSystemEntries(
             _store.DataDir("anego"), "*", SearchOption.AllDirectories).Length;
@@ -298,12 +302,11 @@ public class PackDataTests : IDisposable
     }
 
     [Fact]
-    public void A_pack_on_the_shared_path_reports_no_worlds_of_its_own()
+    public void A_pack_that_has_never_launched_reports_no_worlds()
     {
         NewPack("legacy");
         Directory.Delete(_store.DataDir("legacy"), recursive: true);
 
-        // Its worlds are the shared ones, and deleting the pack will not touch them.
         Assert.Empty(_data.Worlds("legacy"));
         Assert.Equal(0, _data.DataSize("legacy"));
     }

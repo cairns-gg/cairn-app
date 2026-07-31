@@ -86,13 +86,18 @@ Because a pack's data is inside the pack, **deleting a pack deletes its worlds**
 confirmation says so and names them. A world made under a pack's mod set generally cannot be
 opened without it, so leaving one behind would strand data nothing can read.
 
-Packs made before this change keep using the shared data path until you ask otherwise —
-nobody's worlds move on their own. **Settings → Give this pack its own worlds** switches one
-over; existing worlds stay where they are and remain reachable by launching the game normally.
+This applies to every pack, with no way to turn it off. Sharing a data path was briefly a
+per-pack choice, for packs made before this existed — which presented the failure mode above
+as a supported way to run. Those packs simply get a data path on their next launch instead.
+
+Worlds already in your own Vintage Story data path stay there. They are your ordinary saves,
+Cairn cannot know which pack — if any — they belong to, and claiming them would take them
+away from plain Vintage Story too. They remain reachable by launching the game normally; to
+put one inside a pack, copy its `.vcdbs` into `packs/<id>/data/Saves`.
 
 `--addModPath` is still *additive* — the game always also searches `<install>/Mods` and
 `<dataPath>/Mods` — but with a per-pack data path that second directory is the pack's own, so
-nothing leaks between packs. A pack still on the shared path inherits whatever is in it.
+nothing leaks between packs.
 
 ## Usage
 
