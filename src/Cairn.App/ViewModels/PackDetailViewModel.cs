@@ -110,6 +110,8 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Bumped per search, so icons still arriving for an old one are dropped.</summary>
     private int _searchGeneration;
 
+    private readonly Func<CancellationToken, Task<IReadOnlyList<string>>>? _knownGameVersions;
+
     public PackDetailViewModel(
         PackManifest manifest,
         PackStore store,
@@ -122,7 +124,8 @@ public partial class PackDetailViewModel : ViewModelBase
         Action onChanged,
         Func<string, Task> provision,
         Func<string, bool> isProvisioning,
-        Action<object?> requestDelete)
+        Action<object?> requestDelete,
+        Func<CancellationToken, Task<IReadOnlyList<string>>>? knownGameVersions = null)
     {
         Manifest = manifest;
         _store = store;
@@ -136,13 +139,15 @@ public partial class PackDetailViewModel : ViewModelBase
         _provision = provision;
         _requestDelete = requestDelete;
         _isProvisioning = isProvisioning;
+        _knownGameVersions = knownGameVersions;
         _icons = new ModIconCache(http);
         _modInfo = new ModInfoCache(moddb);
         _packData = new PackData(store);
 
         EditName = manifest.Name ?? manifest.Id;
-        EditGameVersion = manifest.GameVersion;
         EditConnect = manifest.Connect ?? "";
+        GameVersionChoices.Add(manifest.GameVersion);
+        TargetGameVersion = manifest.GameVersion;
 
         ReloadMods();
     }
@@ -167,7 +172,6 @@ public partial class PackDetailViewModel : ViewModelBase
     public ObservableCollection<string> ReleaseChoices { get; } = [];
 
     [ObservableProperty] public partial string EditName { get; set; }
-    [ObservableProperty] public partial string EditGameVersion { get; set; }
     [ObservableProperty] public partial string EditConnect { get; set; }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
@@ -414,7 +418,9 @@ public partial class PackDetailViewModel : ViewModelBase
     private void SaveSettings()
     {
         Manifest.Name = string.IsNullOrWhiteSpace(EditName) ? Id : EditName.Trim();
-        Manifest.GameVersion = EditGameVersion.Trim();
+
+        // The game version deliberately does not come from here any more: changing it
+        // re-resolves every mod, so it goes through Check → Apply instead.
         Manifest.Connect = string.IsNullOrWhiteSpace(EditConnect) ? null : EditConnect.Trim();
 
         _releaseCache.Clear();
@@ -426,6 +432,132 @@ public partial class PackDetailViewModel : ViewModelBase
         RefreshGameState();
         _log($"saved settings for '{Id}'");
     }
+
+    // ---- changing the game version ----
+
+    /// <summary>
+    /// Versions offerable as a target: what ModDB's publisher lists, plus whatever the pack
+    /// already targets so a pack pointed at something unpublished still shows its own value.
+    /// </summary>
+    public ObservableCollection<string> GameVersionChoices { get; } = [];
+
+    [ObservableProperty] public partial string? TargetGameVersion { get; set; }
+    [ObservableProperty] public partial bool IsCheckingVersion { get; set; }
+    [ObservableProperty] public partial string CheckingMod { get; set; } = "";
+
+    /// <summary>
+    /// The last completed check. Non-null means the confirmation is on screen; nothing has
+    /// been written at that point, which is the entire purpose of the step.
+    /// </summary>
+    [ObservableProperty] public partial VersionChangeViewModel? VersionChange { get; set; }
+
+    public bool CanCheckVersion =>
+        !IsCheckingVersion
+        && !string.IsNullOrWhiteSpace(TargetGameVersion)
+        && !string.Equals(TargetGameVersion, Manifest.GameVersion, StringComparison.OrdinalIgnoreCase);
+
+    partial void OnTargetGameVersionChanged(string? value)
+    {
+        // A different target invalidates the answer on screen, which was about the old one.
+        VersionChange = null;
+        OnPropertyChanged(nameof(CanCheckVersion));
+        CheckVersionCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsCheckingVersionChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanCheckVersion));
+        CheckVersionCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Fills the picker. Cheap and idempotent; called when the pane is shown.</summary>
+    public async Task LoadGameVersionsAsync(CancellationToken ct = default)
+    {
+        if (_knownGameVersions is null) return;
+
+        IReadOnlyList<string> versions;
+        try
+        {
+            versions = await _knownGameVersions(ct);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException
+                                       or System.Text.Json.JsonException)
+        {
+            return;   // the pack's own version is already in the list; offline still works
+        }
+
+        var chosen = TargetGameVersion;
+
+        foreach (var v in versions.Where(v => !GameVersionChoices.Contains(v)))
+            GameVersionChoices.Add(v);
+
+        // Adding to the bound collection can clear the selection out from under us.
+        TargetGameVersion = chosen;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCheckVersion))]
+    private async Task CheckVersion(CancellationToken ct)
+    {
+        var target = TargetGameVersion!.Trim();
+
+        IsCheckingVersion = true;
+        VersionChange = null;
+        Error = null;
+
+        try
+        {
+            var plan = await GameVersionChange.PreviewAsync(
+                _moddb, Manifest, _store.LoadLock(Id), target,
+                worlds: _packData.Worlds(Id),
+                progress: new Progress<string>(m => CheckingMod = m),
+                ct: ct);
+
+            VersionChange = new VersionChangeViewModel(plan);
+            _log($"checked {Manifest.GameVersion} -> {target}: {plan.Summary()}");
+        }
+        catch (OperationCanceledException)
+        {
+            // Leaving the pane mid-check is not an error.
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            IsCheckingVersion = false;
+            CheckingMod = "";
+        }
+    }
+
+    /// <summary>
+    /// Writes the new target. Deliberately does not download: Play is the one place that
+    /// fetches a game version and syncs mods, and having two would mean two things to keep
+    /// in step. The mods on disk stay as they are until then.
+    /// </summary>
+    [RelayCommand]
+    private void ApplyVersionChange()
+    {
+        if (VersionChange is null) return;
+
+        var target = VersionChange.Plan.To;
+        Manifest.GameVersion = target;
+
+        _releaseCache.Clear();
+        Persist();
+
+        VersionChange = null;
+        OnPropertyChanged(nameof(Subtitle));
+        OnPropertyChanged(nameof(CanCheckVersion));
+        RefreshGameState();
+        ReloadMods();
+        _onChanged();
+
+        _log($"pack now targets game {target}; press Play to install it and update mods");
+    }
+
+    [RelayCommand]
+    private void CancelVersionChange() => VersionChange = null;
 
     public bool NotBusy => !IsBusy;
 

@@ -104,8 +104,19 @@ required:
 - **Mods** tab — what the pack contains, what is pinned, and what is actually installed.
   Remove a mod, or fetch its compatible releases and pin an exact version.
 - **Add mods** tab — search ModDB and add a result to the pack.
-- **Settings** tab — rename, retarget the game version, change or clear the server, or
-  delete the pack.
+- **Settings** tab — rename, change or clear the server, export, or delete the pack.
+- **Changing the game version** is its own step, in Settings: pick a target from the
+  versions ModDB publishes and press **Check…**. Nothing is written yet. The answer lists
+  every mod and what would happen to it — `keeps`, `updates`, `untested`, `breaks`,
+  `pin fails` — worst first, because the reason to say no should not need scrolling to.
+  Only **Change to X** commits it. Retargeting invalidates the lockfile for every mod, so
+  this is a bigger change than it looks: it can move several mods at once, or leave one
+  behind entirely.
+
+  A downgrade additionally warns about the pack's own worlds, since Vintage Story upgrades
+  a save when a newer build opens it and will not open one saved by a newer build. Mods
+  that ModDB could not be asked about are reported as *could not be checked* rather than
+  as working — a preview is worth nothing if it guesses.
 - **Play** syncs the mod directory and then launches. It is the only button that
   needs pressing; `cairn-cli sync` exists for reconciling without starting the game.
 

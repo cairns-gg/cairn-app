@@ -35,6 +35,10 @@ public class ThemeTests : IDisposable
             connect = "host:42420", mods = new[] { new { modid = "glassview" } },
         }));
 
+        // Two versions to move between, so the screenshots show a real picker.
+        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"));
+        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"));
+
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
     }
 
@@ -236,6 +240,19 @@ public class ThemeTests : IDisposable
         {
             tabs.SelectedItem = settings;
             Shot("05-settings");
+
+            // The retarget confirmation: the whole point of Check → Apply.
+            vm.Detail.LoadGameVersionsAsync().GetAwaiter().GetResult();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            vm.Detail.TargetGameVersion =
+                vm.Detail.GameVersionChoices.FirstOrDefault(v => v != vm.Detail.Manifest.GameVersion);
+
+            if (vm.Detail.TargetGameVersion is not null)
+            {
+                vm.Detail.CheckVersionCommand.Execute(null);
+                Shot("05b-version-change");
+            }
         }
 
         vm.BeginCreateCommand.Execute(null);

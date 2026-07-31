@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using System.Net;
 using Cairn.App.ViewModels;
 using Cairn.Core;
 using Cairn.App.Views;
@@ -21,18 +22,37 @@ public class MainWindowTests : IDisposable
     private readonly string _home = Path.Combine(
         Path.GetTempPath(), "cairn-uitest-" + Guid.NewGuid().ToString("n")[..8]);
 
+    private string SystemInstallDir => Path.Combine(_home, "system-install");
+
     public MainWindowTests()
     {
         WritePack("anego", "Anego Server", "1.22.5", "anego.example.com:42420", ["glassview", "unchisel"]);
         WritePack("vanilla-qol", "Vanilla + QoL", "1.22.5", null, ["glassview"]);
         WritePack("old-pack", "Legacy 1.21 Pack", "1.21.5", null, ["glassview"]);
 
+        // Three installed game versions — a target has to be one the picker offers, because
+        // a ComboBox coerces a selection that is not in its list straight back to null.
+        // Without these the only source of versions is the
+        // catalog, which the tests deliberately keep offline — so anything about offering
+        // versions silently depended on the machine happening to have Vintage Story on it,
+        // and started failing the day this one did not.
+        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"));
+        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"));
+        Games.FakeInstall("1.21.7", Path.Combine(_home, "games", "1.21.7"));
+
+        // And one install Cairn did not make. VINTAGE_STORY is the first thing TryLocate
+        // consults, so this pins what "the machine's own install" is instead of inheriting
+        // whatever the machine running the tests happens to have.
+        Games.FakeInstall("1.22.6", SystemInstallDir);
+
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+        Environment.SetEnvironmentVariable("VINTAGE_STORY", SystemInstallDir);
     }
 
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+        Environment.SetEnvironmentVariable("VINTAGE_STORY", null);
         if (Directory.Exists(_home)) Directory.Delete(_home, recursive: true);
     }
 
@@ -346,17 +366,23 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Saving_an_unusable_game_version_surfaces_an_error()
+    public void An_unusable_game_version_can_no_longer_be_typed_in()
     {
+        // "^1.22" used to be accepted into the manifest here and rejected on save. The
+        // field is a picker now, so the offer is the validation — GameVersions.IsPlausibleVersion
+        // still guards the manifest for packs that arrive by import.
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
         var detail = vm.Detail!;
 
-        detail.EditGameVersion = "^1.22";
+        Assert.All(detail.GameVersionChoices, v => Assert.True(GameVersions.IsPlausibleVersion(v)));
+
+        // And saving the other settings cannot disturb it.
+        var before = detail.Manifest.GameVersion;
+        detail.EditName = "Renamed";
         detail.SaveSettingsCommand.Execute(null);
 
-        Assert.NotNull(detail.Error);
-        Assert.True(detail.HasError);
+        Assert.Equal(before, detail.Manifest.GameVersion);
     }
 
     [AvaloniaFact]
@@ -553,12 +579,13 @@ public class MainWindowTests : IDisposable
         var (_, vm) = Show();
         var preferences = OpenPreferences(vm);
 
-        // A fresh store, so the numbers are small — but they must be present and readable,
-        // because "where did my disk go" is the reason this screen exists.
+        // The numbers are small here, but they must be present and readable, because
+        // "where did my disk go" is the reason this screen exists. Only Cairn's own two
+        // installs count — the machine's is not Cairn's disk usage to claim.
         Assert.False(string.IsNullOrWhiteSpace(preferences.TotalSize));
         Assert.False(string.IsNullOrWhiteSpace(preferences.GamesSize));
         Assert.False(string.IsNullOrWhiteSpace(preferences.CacheSize));
-        Assert.Equal("no versions", preferences.GamesDetail);
+        Assert.Equal("3 versions", preferences.GamesDetail);
         Assert.Contains("pack", preferences.PacksDetail);
     }
 
@@ -576,13 +603,15 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void A_fresh_store_has_installed_nothing_of_its_own()
+    public void An_install_whose_version_cannot_be_read_is_not_offered_as_a_target()
     {
+        // The fixture's system install has no readable assembly, so it reports "unknown" —
+        // which is a fine thing to list, and not a thing a pack can be pointed at.
         var (_, vm) = Show();
 
-        // The machine's own install may well be listed — that is deliberate — but nothing
-        // here was installed by Cairn.
-        Assert.DoesNotContain(vm.Games.Installed, g => g.IsManaged);
+        Assert.Contains(vm.Games.Installed, g => !g.IsManaged);
+        Assert.DoesNotContain("unknown", vm.GameVersionChoices);
+        Assert.All(vm.GameVersionChoices, v => Assert.True(GameVersions.IsPlausibleVersion(v)));
     }
 
     /// <summary>A GamesViewModel with a made-up system install, and no network.</summary>
@@ -684,13 +713,14 @@ public class MainWindowTests : IDisposable
     [AvaloniaFact]
     public void Removal_deletes_the_directory_it_listed_not_one_named_after_the_version()
     {
-        // The fake install reports no version at all, so deriving the path back from
-        // "unknown" would delete nothing — and still log that it had.
+        // A directory whose name is not a version, so the store cannot fall back to it
+        // either: the install reports "unknown", and deriving the path back from that would
+        // delete nothing — and still log that it had.
         using var games = NewGames(system: null);
-        var dir = games.AddManaged("1.21.7");
+        var dir = games.AddManagedAt("nightly-build");
         var listed = games.Managed(dir);
 
-        Assert.NotEqual("1.21.7", listed.Version);
+        Assert.Equal("unknown", listed.Version);
 
         games.Vm.SelectedInstalled = listed;
         games.Vm.RequestRemoveCommand.Execute(null);
@@ -714,6 +744,222 @@ public class MainWindowTests : IDisposable
         // Otherwise the armed prompt would carry over onto a version nobody chose.
         games.Vm.SelectedInstalled = games.Managed(second);
         Assert.False(games.Vm.ConfirmingRemove);
+    }
+
+    // ---- changing the game version ----
+
+    /// <summary>
+    /// Serves one mod, "glassview", with a 1.0.0 marked for 1.22.5 and a 2.0.0 for 1.22.6.
+    /// Everything else is a 404, so the fixture's other mods read as unavailable.
+    /// </summary>
+    private sealed class RetargetHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            var url = r.RequestUri!.ToString();
+
+            if (url.Contains("/api/mod/glassview"))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(GlassviewJson),
+                });
+
+            // A mod ModDB does not have: HTTP 200 carrying a status code, which is what
+            // ModDB actually answers. Distinct from the endpoint being unreachable, and the
+            // difference is what separates "this mod breaks" from "could not check".
+            if (url.Contains("/api/mod/"))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"statuscode":"404"}"""),
+                });
+
+            // Everything else — the game catalog — is simply not reachable.
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private const string GlassviewJson = """
+            {"statuscode":"200","mod":{
+              "modid":1,"assetid":2,"name":"Glass View","urlalias":"glassview","side":"client",
+              "releases":[
+                {"releaseid":2,"fileid":2,"modidstr":"glassview","modversion":"2.0.0",
+                 "filename":"glassview_2.0.0.zip",
+                 "mainfile":"https://moddbcdn.vintagestory.at/glassview_2.0.0.zip","tags":["1.22.6"]},
+                {"releaseid":1,"fileid":1,"modidstr":"glassview","modversion":"1.0.0",
+                 "filename":"glassview_1.0.0.zip",
+                 "mainfile":"https://moddbcdn.vintagestory.at/glassview_1.0.0.zip","tags":["1.22.5"]}
+              ]
+            }}
+            """;
+    }
+
+    private static (MainWindow Window, MainViewModel Vm) ShowWithModDb()
+    {
+        var vm = new MainViewModel(new RetargetHandler());
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        return (window, vm);
+    }
+
+    /// <summary>
+    /// Selects a pack and waits for its version picker to fill. The list loads in the
+    /// background, and a ComboBox coerces a selection that is not yet in it back to null —
+    /// so a test that raced the load would silently be choosing nothing.
+    /// </summary>
+    private static async Task<PackDetailViewModel> Retargetable(MainViewModel vm, string id = "vanilla-qol")
+    {
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == id);
+        var detail = vm.Detail!;
+
+        await detail.LoadGameVersionsAsync();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        return detail;
+    }
+
+    [AvaloniaFact]
+    public async Task The_version_picker_starts_on_what_the_pack_already_targets()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        Assert.Equal("1.22.5", detail.TargetGameVersion);
+        Assert.Contains("1.22.5", detail.GameVersionChoices);
+
+        // Nothing to check until a different version is chosen.
+        Assert.False(detail.CanCheckVersion);
+        Assert.False(detail.CheckVersionCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public async Task Checking_a_version_writes_nothing()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+        var manifestPath = Path.Combine(_home, "packs", "vanilla-qol", "pack.json");
+        var before = File.ReadAllText(manifestPath);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        Assert.NotNull(detail.VersionChange);
+
+        // The entire point of the step: the pack is untouched until Apply.
+        Assert.Equal(before, File.ReadAllText(manifestPath));
+        Assert.Equal("1.22.5", detail.Manifest.GameVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task The_check_says_which_mods_move_and_which_break()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        var glassview = detail.VersionChange!.Mods.Single(m => m.ModId == "glassview");
+        Assert.Equal("updates", glassview.Label);
+        Assert.Contains("2.0.0", glassview.Note);
+    }
+
+    [AvaloniaFact]
+    public async Task A_mod_with_nothing_published_for_the_target_is_shown_first_and_marked()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm, "anego");   // glassview + unchisel
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        var change = detail.VersionChange!;
+        Assert.True(change.AnythingBreaks);
+
+        // Worst first: the reason to say no should not need scrolling to.
+        Assert.Equal("unchisel", change.Mods[0].ModId);
+        Assert.True(change.Mods[0].Breaks);
+        Assert.Contains("nothing published for 1.22.6", change.BreakWarning);
+    }
+
+    [AvaloniaFact]
+    public async Task Applying_is_what_finally_changes_the_pack()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+        detail.ApplyVersionChangeCommand.Execute(null);
+
+        Assert.Equal("1.22.6", detail.Manifest.GameVersion);
+        Assert.Contains("1.22.6",
+            File.ReadAllText(Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+
+        // The confirmation is gone, and there is nothing left to apply twice.
+        Assert.Null(detail.VersionChange);
+        Assert.False(detail.CanCheckVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task Cancelling_leaves_the_pack_where_it_was()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+        detail.CancelVersionChangeCommand.Execute(null);
+
+        Assert.Null(detail.VersionChange);
+        Assert.Equal("1.22.5", detail.Manifest.GameVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_different_target_discards_the_answer_about_the_old_one()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+        Assert.NotNull(detail.VersionChange);
+
+        // Otherwise Apply would commit a version nobody checked.
+        detail.TargetGameVersion = "1.21.7";
+        Assert.Null(detail.VersionChange);
+    }
+
+    [AvaloniaFact]
+    public async Task Downgrading_a_pack_with_worlds_warns_about_them()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        // Give the pack its own data, with a world in it.
+        var saves = Path.Combine(_home, "packs", "vanilla-qol", "data", "Saves");
+        Directory.CreateDirectory(saves);
+        File.WriteAllBytes(Path.Combine(saves, "Homestead.vcdbs"), new byte[64]);
+
+        detail.TargetGameVersion = "1.21.7";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        var change = detail.VersionChange!;
+        Assert.True(change.RisksWorlds);
+        Assert.Contains("Homestead", change.WorldWarning);
+    }
+
+    [AvaloniaFact]
+    public async Task The_confirmation_appears_on_screen_not_just_in_the_view_model()
+    {
+        var (window, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        ShowSettingsTab(window);
+
+        Assert.Contains(VisibleText(window), t => t.Contains("Upgrade 1.22.5 → 1.22.6"));
+        Assert.True(Buttons(window).ContainsKey("Change to 1.22.6"));
     }
 
     // ---- sharing ----

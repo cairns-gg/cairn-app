@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -335,7 +336,39 @@ public partial class MainViewModel : ViewModelBase
             onChanged: value.Changed,
             provision: v => ProvisionAsync(v, value.Id),
             isProvisioning: v => Provisioning && ProvisioningVersion == v,
-            requestDelete: RequestDeleteCommand.Execute);
+            requestDelete: RequestDeleteCommand.Execute,
+            knownGameVersions: KnownGameVersionsAsync);
+
+        // Fills the version picker in the background; the pane is usable before it arrives.
+        _ = Detail.LoadGameVersionsAsync();
+    }
+
+    /// <summary>
+    /// Versions a pack can be pointed at: everything ModDB's publisher lists, newest first,
+    /// with what is installed locally folded in so an offline machine still offers its own.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> KnownGameVersionsAsync(CancellationToken ct)
+    {
+        var installed = _gameStore.ListInstalled().Select(i => i.Version).ToList();
+        if (_install is not null) installed.Add(_install.Version);
+
+        List<string> published = [];
+        try
+        {
+            published = (await new GameCatalog(_http).ListReleasesAsync(ct: ct))
+                .Select(r => r.Version).ToList();
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            // Offline, or a catalog we cannot parse: what is on the machine is still worth
+            // offering, and a version picker is no place to fail hard.
+        }
+
+        return published.Concat(installed)
+            .Where(GameVersions.IsPlausibleVersion)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(v => v, GameVersionComparer.Ascending)
+            .ToList();
     }
 
     private void LoadPacks()
@@ -507,8 +540,10 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     private void SetVersionChoices(IEnumerable<string> versions)
     {
+        // "unknown" is what GameInstall reports for an install whose assembly it could not
+        // read. It is not something a pack can target, so it must not be offerable.
         var ordered = GameVersionComparer.Descending(
-            versions.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()).ToList();
+            versions.Where(GameVersions.IsPlausibleVersion).Distinct()).ToList();
 
         GameVersionChoices.Clear();
         foreach (var v in ordered) GameVersionChoices.Add(v);

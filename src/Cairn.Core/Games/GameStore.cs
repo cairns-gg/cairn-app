@@ -38,8 +38,34 @@ public sealed class GameStore
         foreach (var dir in Directory.EnumerateDirectories(_root).OrderBy(d => d, StringComparer.Ordinal))
         {
             var install = GameInstall.TryAt(dir);
-            if (install is not null) yield return install;
+            if (install is not null) yield return Named(install, dir);
         }
+    }
+
+    /// <summary>
+    /// Falls back to the directory name when the install's own metadata cannot be read.
+    ///
+    /// This store names its directories by version, so a directory called "1.22.5" is far
+    /// better evidence than the "unknown" GameInstall reports for an assembly it could not
+    /// parse — and "unknown" is what would otherwise reach the version picker and the
+    /// installed list. Only applied when the name is itself a plausible version, so a
+    /// directory named anything else still reports honestly.
+    /// </summary>
+    private static GameInstall Named(GameInstall install, string dir)
+    {
+        if (GameVersions.IsPlausibleVersion(install.Version)) return install;
+
+        var name = Path.GetFileName(dir);
+        if (!GameVersions.IsPlausibleVersion(name)) return install;
+
+        return new GameInstall
+        {
+            Directory = install.Directory,
+            Executable = install.Executable,
+            Version = name,
+            Architecture = install.Architecture,
+            RequiredFramework = install.RequiredFramework,
+        };
     }
 
     /// <summary>A managed install whose reported version matches, or null.</summary>

@@ -74,9 +74,22 @@ public static class Games
         }
 
         /// <summary>
+        /// A managed install in a directory named something other than a version, so the
+        /// store's directory-name fallback does not apply and it reports "unknown".
+        /// </summary>
+        public string AddManagedAt(string directoryName)
+        {
+            var dir = Path.Combine(_root, directoryName);
+            FakeInstall("does-not-matter", dir);
+            Vm.RefreshInstalled();
+            return dir;
+        }
+
+        /// <summary>
         /// The install found in <paramref name="dir"/>. Its reported version is "unknown" —
-        /// the fake dll carries no metadata — which is exactly the case that used to make
-        /// Remove delete nothing while logging success.
+        /// the fake dll carries no metadata, and the directory name is not a version either —
+        /// which is exactly the case that used to make Remove delete nothing while logging
+        /// success.
         /// </summary>
         public InstalledGameViewModel Managed(string dir) =>
             Vm.Installed.Single(i => i.Directory == dir);

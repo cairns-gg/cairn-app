@@ -1,0 +1,195 @@
+using Cairn.Core.ModDb;
+
+namespace Cairn.Core.Packs;
+
+/// <summary>What retargeting a pack at another game version does to one of its mods.</summary>
+public enum ModOutcome
+{
+    /// <summary>The release already installed is also the one for the target version.</summary>
+    Unchanged,
+
+    /// <summary>A different release will be installed.</summary>
+    Moves,
+
+    /// <summary>
+    /// Installs, but the release is marked for another version in the same minor series
+    /// rather than the target exactly. Usually fine — the game itself treats same-minor
+    /// releases as installable — which is why this warns rather than blocks.
+    /// </summary>
+    Approximate,
+
+    /// <summary>Nothing on ModDB serves the target version. This mod stops working.</summary>
+    Unavailable,
+
+    /// <summary>The pack pins a version of this mod, and that version has nothing for the target.</summary>
+    PinUnavailable,
+
+    /// <summary>
+    /// ModDB could not be reached, so nothing is known about this mod. Deliberately not
+    /// folded in with Unavailable: "it will break" and "we could not find out" lead to
+    /// different decisions, and this is the screen the decision gets made on.
+    /// </summary>
+    Unknown,
+}
+
+/// <summary>What one mod does if the change is applied.</summary>
+public sealed record ModVerdict(string ModId, string? From, string? To, ModOutcome Outcome, string Note)
+{
+    public bool Breaks => Outcome is ModOutcome.Unavailable or ModOutcome.PinUnavailable;
+    public bool Warns => Outcome is ModOutcome.Approximate;
+    public bool Changes => Outcome is ModOutcome.Moves;
+    public bool Unknown => Outcome is ModOutcome.Unknown;
+}
+
+/// <summary>
+/// What changing a pack's game version would do, worked out without downloading anything
+/// or writing to the pack.
+///
+/// Retargeting invalidates the lockfile for every mod — PackSyncer's lockApplies compares
+/// the locked game version against the manifest's — so every mod is re-resolved. That is
+/// the right behaviour and it is also why the change deserves a preview: it can silently
+/// move several mods at once, or leave one behind entirely.
+/// </summary>
+public sealed record VersionChangePlan(
+    string From,
+    string To,
+    IReadOnlyList<ModVerdict> Mods,
+    IReadOnlyList<string> Worlds)
+{
+    public bool IsDowngrade => GameVersions.IsLowerVersionThan(To, From);
+    public bool IsUpgrade => GameVersions.IsNewerVersionThan(To, From);
+
+    /// <summary>Nothing to preview when the target is what the pack already targets.</summary>
+    public bool IsNoChange => !IsDowngrade && !IsUpgrade;
+
+    public IEnumerable<ModVerdict> Breaking => Mods.Where(m => m.Breaks);
+    public IEnumerable<ModVerdict> Warning => Mods.Where(m => m.Warns);
+    public IEnumerable<ModVerdict> Moving => Mods.Where(m => m.Changes);
+    public IEnumerable<ModVerdict> Unchecked => Mods.Where(m => m.Unknown);
+
+    public bool AnythingBreaks => Breaking.Any();
+
+    /// <summary>Some mod could not be checked, so the preview is incomplete.</summary>
+    public bool IsIncomplete => Unchecked.Any();
+
+    /// <summary>
+    /// A world saved by a newer build generally will not open on an older one, and Vintage
+    /// Story upgrades a save's format on load rather than asking. Only worth saying when
+    /// the pack actually has worlds of its own to lose.
+    /// </summary>
+    public bool RisksWorlds => IsDowngrade && Worlds.Count > 0;
+
+    public string Summary()
+    {
+        if (IsNoChange) return $"The pack already targets {To}.";
+
+        var direction = IsDowngrade ? "Downgrade" : "Upgrade";
+        var parts = new List<string>();
+
+        if (AnythingBreaks) parts.Add($"{Breaking.Count()} would stop working");
+        if (Moving.Any()) parts.Add($"{Moving.Count()} would change version");
+        if (Warning.Any()) parts.Add($"{Warning.Count()} not marked for {To} exactly");
+        if (IsIncomplete) parts.Add($"{Unchecked.Count()} could not be checked");
+
+        var mods = parts.Count == 0
+            ? Mods.Count == 0 ? "No mods to check." : "Every mod keeps the release it has."
+            : string.Join(", ", parts) + ".";
+
+        return $"{direction} {From} → {To}. {mods}";
+    }
+}
+
+public static class GameVersionChange
+{
+    /// <summary>
+    /// Resolves every mod against <paramref name="target"/> exactly as a sync would after
+    /// the retarget, but downloads nothing and writes nothing.
+    ///
+    /// Kept deliberately parallel to PackSyncer's resolve step: same call, same arguments,
+    /// same same-minor rule. A preview that disagrees with the sync it predicts is worse
+    /// than no preview at all.
+    /// </summary>
+    public static async Task<VersionChangePlan> PreviewAsync(
+        ModDbClient moddb,
+        PackManifest manifest,
+        PackLock? locked,
+        string target,
+        IReadOnlyList<string>? worlds = null,
+        IProgress<string>? progress = null,
+        CancellationToken ct = default)
+    {
+        var verdicts = new List<ModVerdict>();
+
+        foreach (var want in manifest.Mods)
+        {
+            ct.ThrowIfCancellationRequested();
+            progress?.Report(want.ModId);
+
+            var installed = locked?.Mods.FirstOrDefault(
+                m => string.Equals(m.ModId, want.ModId, StringComparison.OrdinalIgnoreCase))?.Version;
+
+            ResolvedRelease? release;
+            try
+            {
+                // want.Version is the manifest's pin, or null for "newest". This mirrors
+                // the `wanted` PackSyncer computes once the lock no longer applies.
+                release = await moddb.ResolveAsync(want.ModId, target, want.Version, ct).ConfigureAwait(false);
+            }
+            catch (ModDbException e)
+            {
+                // ModDB answering "no" is a verdict, and its own message is more specific
+                // than anything reconstructed here — an unmeetable pin arrives this way
+                // rather than as a null, as does a mod that is not on ModDB at all.
+                verdicts.Add(new ModVerdict(want.ModId, installed, null,
+                    want.Version is null ? ModOutcome.Unavailable : ModOutcome.PinUnavailable,
+                    e.Message));
+                continue;
+            }
+            catch (HttpRequestException e)
+            {
+                // Not reaching ModDB says nothing about the mod. Reporting that as "breaks"
+                // would be a guess presented as a finding.
+                verdicts.Add(new ModVerdict(want.ModId, installed, null, ModOutcome.Unknown,
+                    $"could not be checked: {e.Message}"));
+                continue;
+            }
+
+            verdicts.Add(Judge(want, installed, release, target));
+        }
+
+        return new VersionChangePlan(manifest.GameVersion, target, verdicts, worlds ?? []);
+    }
+
+    private static ModVerdict Judge(PackMod want, string? installed, ResolvedRelease? release, string target)
+    {
+        if (release is null)
+            return want.Version is null
+                ? new ModVerdict(want.ModId, installed, null, ModOutcome.Unavailable,
+                    $"no release marked for {target}")
+                : new ModVerdict(want.ModId, installed, null, ModOutcome.PinUnavailable,
+                    $"pinned to {want.Version}, which has no release for {target}");
+
+        // Approximate wins over moved-or-not: that a release is not marked for the target
+        // is the actionable fact, and it is true whether or not the file changes.
+        if (release.Quality == MatchQuality.SameMinor)
+            return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Approximate,
+                $"marked for another {Minor(target)} release, not {target}");
+
+        if (string.Equals(installed, release.ModVersion, StringComparison.OrdinalIgnoreCase))
+            return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Unchanged,
+                $"already on the release for {target}");
+
+        return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Moves,
+            installed is null
+                // Naming the version either way: the row shows this note and nothing else,
+                // so "not installed yet" alone would hide what is about to be installed.
+                ? $"not installed yet; would install {release.ModVersion}"
+                : $"{installed} → {release.ModVersion}");
+    }
+
+    private static string Minor(string version)
+    {
+        var parts = version.Split('.');
+        return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}.x" : version;
+    }
+}
