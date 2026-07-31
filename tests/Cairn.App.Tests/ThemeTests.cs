@@ -221,6 +221,28 @@ public class ThemeTests : IDisposable
             detail.ClearSearchCommand.Execute(null);
         }
 
+        // The destructive-action dialog, now that the delete prompt is not inline.
+        {
+            var confirm = new ConfirmWindow
+            {
+                DataContext = new ConfirmViewModel(
+                    "Delete \u201cAnego Server\u201d?",
+                    "This deletes the pack, its downloaded mods, and 3 worlds (412 MB). This cannot be undone.",
+                    "Delete pack"),
+            };
+            confirm.Show();
+
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            using (var frame = confirm.CaptureRenderedFrame())
+            {
+                using var file = File.Create(Path.Combine(outDir, "06-delete-confirm.png"));
+                frame!.Save(file, new PngBitmapEncoderOptions());
+            }
+
+            confirm.Close();
+        }
+
         // Armed removal: only ever visible mid-interaction.
         vm.Detail!.Mods.First().RequestRemoveCommand.Execute(null);
         Shot("10-remove-confirm");
@@ -302,10 +324,6 @@ public class ThemeTests : IDisposable
         Shot("04-import");
 
         vm.CancelImportCommand.Execute(null);
-        vm.RequestDeleteCommand.Execute(null);
-        Shot("06-delete-confirm");
-
-        vm.CancelDeleteCommand.Execute(null);
         vm.ProvisioningVersion = vm.Detail?.Manifest.GameVersion;
         vm.Provisioning = true;
         vm.ProvisionStatus = "downloading Vintage Story 1.22.5 — 214 MB (34%)";

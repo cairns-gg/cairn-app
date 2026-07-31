@@ -76,6 +76,14 @@ public class MainWindowTests : IDisposable
         var vm = new MainViewModel(new OfflineHandler());
         var window = new MainWindow { DataContext = vm };
         window.Show();
+
+        // The real window confirms destructive actions in a modal dialog, which a headless
+        // run cannot answer. Without a confirmer the prompt is left armed instead, which is
+        // what these tests inspect; the dialogs have their own tests.
+        vm.Confirm = null;
+        vm.ConfirmVersionChange = null;
+        if (vm.Detail is not null) vm.Detail.ConfirmVersionChange = null;
+
         return (window, vm);
     }
 
@@ -424,7 +432,7 @@ public class MainWindowTests : IDisposable
         foreach (var label in new[]
                  {
                      // Pane-level actions, plus the per-row ones the Mods list realises.
-                     "Play", "New pack", "Search", "Save", "Delete", "Clear",
+                     "Play", "New pack", "Search", "Save", "Delete pack", "Clear",
                      "View", "✕",
                  })
         {
@@ -798,9 +806,8 @@ public class MainWindowTests : IDisposable
         var window = new MainWindow { DataContext = vm };
         window.Show();
 
-        // The real window hands the view model a modal dialog to confirm with, which would
-        // block a headless run forever. These tests inspect the result and drive Apply or
-        // Cancel themselves; the dialog itself is covered by VersionChangeWindowTests.
+        // As in Show(): no modal dialogs in a headless run.
+        vm.Confirm = null;
         vm.ConfirmVersionChange = null;
         if (vm.Detail is not null) vm.Detail.ConfirmVersionChange = null;
 
@@ -1171,8 +1178,8 @@ public class MainWindowTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_home, "packs", "anego")));
 
         // And it says what would go, not just that something would.
-        Assert.Contains(VisibleText(window), t => t.Contains("Anego Server"));
-        Assert.Contains(VisibleText(window), t => t.Contains("downloaded mods"));
+        Assert.Equal("Anego Server", vm.DeleteTargetName);
+        Assert.Contains("downloaded mods", vm.DeleteConsequence);
     }
 
     [AvaloniaFact]
@@ -1215,6 +1222,41 @@ public class MainWindowTests : IDisposable
 
         Assert.False(vm.ConfirmingDelete);
         Assert.Equal(3, vm.Packs.Count);
+    }
+
+    [AvaloniaFact]
+    public void Delete_reaches_a_confirmation_dialog_from_a_freshly_shown_window()
+    {
+        // The wiring, not the prompt: a hook that never arrives means Delete does nothing
+        // at all, which is how the version-change dialog shipped broken.
+        var vm = new MainViewModel(new OfflineHandler());
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+
+        Assert.NotNull(vm.Confirm);
+    }
+
+    [AvaloniaFact]
+    public async Task Delete_destroys_the_pack_only_when_the_dialog_says_yes()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        ConfirmViewModel? asked = null;
+        vm.Confirm = c => { asked = c; return Task.FromResult(false); };
+
+        await vm.RequestDeleteCommand.ExecuteAsync(null);
+
+        // It asked, naming the pack — and took "no" for an answer.
+        Assert.NotNull(asked);
+        Assert.Contains("Anego Server", asked!.Title);
+        Assert.Equal("Delete pack", asked.ConfirmLabel);
+        Assert.True(Directory.Exists(Path.Combine(_home, "packs", "anego")));
+
+        vm.Confirm = _ => Task.FromResult(true);
+        await vm.RequestDeleteCommand.ExecuteAsync(null);
+
+        Assert.False(Directory.Exists(Path.Combine(_home, "packs", "anego")));
     }
 
     [AvaloniaFact]

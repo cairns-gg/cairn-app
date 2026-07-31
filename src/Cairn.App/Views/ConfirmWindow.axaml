@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.ConfirmWindow"
+        x:DataType="vm:ConfirmViewModel"
+        Title="{Binding Title}"
+        Width="440" SizeToContent="Height"
+        MinHeight="160" MaxHeight="420"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <DockPanel Margin="18" LastChildFill="True">
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}"
+                   FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                   Margin="0,0,0,10" />
+
+        <!-- Buttons dock before the message fills the middle, so a long message scrolls
+             rather than pushing them out of reach. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    Spacing="8" Margin="0,14,0,0">
+            <Button Name="ConfirmButton" Content="{Binding ConfirmLabel}"
+                    Classes="accent" Padding="16,5" Click="OnConfirm" />
+            <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                    Click="OnCancel" IsCancel="True" />
+        </StackPanel>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>

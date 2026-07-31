@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 
         vm.OpenPreferences = ShowPreferencesAsync;
         vm.ConfirmVersionChange = ConfirmVersionChangeAsync;
+        vm.Confirm = ConfirmAsync;
     }
 
     private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
@@ -36,6 +37,9 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmVersionChangeAsync(VersionChangeViewModel change) =>
         new VersionChangeWindow { DataContext = change }.ShowDialog<bool>(this);
+
+    private Task<bool> ConfirmAsync(ConfirmViewModel confirm) =>
+        new ConfirmWindow { DataContext = confirm }.ShowDialog<bool>(this);
 
     /// <summary>
     /// Fetches a mod's versions the moment its dropdown is opened.

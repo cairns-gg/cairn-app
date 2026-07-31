@@ -174,22 +174,43 @@ public partial class MainViewModel : ViewModelBase
     public bool CanDeleteSelected => SelectedPack is not null;
 
     /// <summary>
-    /// Deleting removes the pack and every mod zip under it, so it asks first. The
-    /// button used to sit next to Save in a tab, one click from irreversible.
+    /// Shows a confirmation and returns whether to go ahead. Supplied by the view; when
+    /// absent — headless tests — the prompt is left armed on ConfirmingDelete instead.
+    /// </summary>
+    public Func<ConfirmViewModel, Task<bool>>? Confirm { get; set; }
+
+    /// <summary>
+    /// Deleting removes the pack, every mod zip under it and its worlds, so it asks first.
+    ///
+    /// In a dialog, not in the page: this prompt lives at the bottom of a scrolling tab,
+    /// where arming it rendered the warning below the fold — the one place a destructive
+    /// prompt must never be.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
-    private void RequestDelete()
+    private async Task RequestDelete()
     {
         OnPropertyChanged(nameof(DeleteTargetName));
         OnPropertyChanged(nameof(DeleteConsequence));
-        ConfirmingDelete = true;
+
+        if (Confirm is null)
+        {
+            ConfirmingDelete = true;
+            return;
+        }
+
+        var confirmed = await Confirm(new ConfirmViewModel(
+            $"Delete “{DeleteTargetName}”?",
+            $"This deletes the pack, {DeleteConsequence}",
+            "Delete pack"));
+
+        if (confirmed) ConfirmDelete();
     }
 
     [RelayCommand]
     private void CancelDelete() => ConfirmingDelete = false;
 
     [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
-    private void ConfirmDelete()
+    public void ConfirmDelete()
     {
         var pack = SelectedPack!;
         ConfirmingDelete = false;
