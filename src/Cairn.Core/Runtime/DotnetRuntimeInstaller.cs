@@ -70,6 +70,26 @@ public sealed class RuntimeStore
         var dir = InstallDir(version, rid);
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
     }
+
+    /// <summary>
+    /// Removes a runtime this store listed, by the directory it was found in — the same
+    /// reasoning as GameStore.Remove(GameInstall): the directory is what was inspected,
+    /// so rebuilding a path from its reported version can miss.
+    /// </summary>
+    public void Remove(DotnetRuntime runtime)
+    {
+        var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(runtime.Root));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_root));
+
+        // Only ever inside the store, and never the store itself: this deletes recursively.
+        if (!dir.StartsWith(root + Path.DirectorySeparatorChar, PathComparison) || dir == root)
+            throw new InvalidOperationException($"'{runtime.Root}' is not a managed runtime.");
+
+        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+    }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 }
 
 /// <summary>

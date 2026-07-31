@@ -19,12 +19,12 @@ namespace Cairn.App.Tests;
 /// </summary>
 public static class Games
 {
-    public static GameInstall FakeInstall(string version, string dir)
+    public static GameInstall FakeInstall(string version, string dir, int bytes = 0)
     {
         // GameInstall.TryAt only requires that these two exist, so a directory of empty
         // files is a real enough install for everything below the launch itself.
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, ExecutableName), "");
+        File.WriteAllBytes(Path.Combine(dir, ExecutableName), new byte[bytes]);
         File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
 
         return new GameInstall

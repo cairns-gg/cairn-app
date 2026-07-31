@@ -44,8 +44,9 @@ public class ThemeTests : IDisposable
         File.WriteAllBytes(Path.Combine(saves, "Test Flats.vcdbs"), new byte[9_000_000]);
 
         // Two versions to move between, so the screenshots show a real picker.
-        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"));
-        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"));
+        // Sized so the storage figures and the cleanup prompt read like real ones.
+        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"), bytes: 614 * 1024 * 1024);
+        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"), bytes: 614 * 1024 * 1024);
 
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
     }
@@ -341,6 +342,27 @@ public class ThemeTests : IDisposable
         {
             var prefs = new PreferencesWindow { DataContext = preferences };
             prefs.Show();
+
+            // The cleanup confirmation, built from the real plan.
+            preferences.Confirm = c =>
+            {
+                var dialog = new ConfirmWindow { DataContext = c };
+                dialog.Show();
+
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                using (var frame = dialog.CaptureRenderedFrame())
+                {
+                    using var file = File.Create(Path.Combine(outDir, "13-cleanup-confirm.png"));
+                    frame!.Save(file, new PngBitmapEncoderOptions());
+                }
+
+                dialog.Close();
+                return System.Threading.Tasks.Task.FromResult(false);
+            };
+
+            preferences.CleanUpCommand.Execute(null);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();

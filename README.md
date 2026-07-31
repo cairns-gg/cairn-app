@@ -233,7 +233,11 @@ cairn-cli games remove 1.22.5
 ```
 
 or **Preferences → Storage** in the launcher, which is where installed versions are removed
-and private runtimes managed. Nothing nags about a missing version: pressing **Play** fetches
+and private runtimes managed. **Clean up** there sweeps every version no pack targets, plus
+any private runtime left with nothing to run — it lists each one with its size and what it
+frees, and asks first. Nothing it removes is irreplaceable, which is what makes it safe to
+offer: Play downloads whatever a pack needs. A pack whose manifest will not load blocks the
+sweep rather than being treated as needing nothing. Nothing nags about a missing version: pressing **Play** fetches
 whatever the pack needs, so that screen exists mainly to give the disk space back — it also
 reports what Cairn is using and can empty its caches.
 

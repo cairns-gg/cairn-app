@@ -38,6 +38,10 @@
                                        HorizontalAlignment="Right" FontWeight="SemiBold" />
                             <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding GamesDetail}"
                                        Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+                            <!-- 600 MB a version, and a retargeted pack leaves its old one
+                                 behind with nothing pointing at it. -->
+                            <Button Grid.Row="0" Grid.Column="3" Content="Clean up" Padding="12,3"
+                                    Command="{Binding CleanUpCommand}" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text=".NET runtimes" />
                             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimesSize}"
@@ -60,6 +64,10 @@
                             <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding PacksDetail}"
                                        Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
                         </Grid>
+
+                        <TextBlock Text="{Binding CleanupSummary}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding CleanupSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                         <Separator Margin="0,4" />
 

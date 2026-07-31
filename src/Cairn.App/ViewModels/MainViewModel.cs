@@ -540,8 +540,14 @@ public partial class MainViewModel : ViewModelBase
 
         if (!Games.CatalogLoaded) Games.RefreshCatalogCommand.Execute(null);
 
-        await OpenPreferences(new PreferencesViewModel(
-            Games, _store, _gameStore, _runtimes, new ModIconCache(_http), new ModInfoCache(_moddb)));
+        var preferences = new PreferencesViewModel(
+            Games, _store, _gameStore, _runtimes, new ModIconCache(_http), new ModInfoCache(_moddb))
+        {
+            // Cleanup deletes downloads, so it asks with the same dialog everything else does.
+            Confirm = Confirm,
+        };
+
+        await OpenPreferences(preferences);
 
         // Removing a game version from in there changes what every pack can launch.
         Games.RefreshInstalled();

@@ -597,6 +597,78 @@ public class MainWindowTests : IDisposable
         Assert.Contains("pack", preferences.PacksDetail);
     }
 
+    [AvaloniaFact]
+    public async Task Cleaning_up_asks_before_deleting_and_says_what_goes()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+
+        // The fixture installs 1.22.5, 1.22.6 and 1.21.7; packs target 1.22.5 and 1.21.5.
+        ConfirmViewModel? asked = null;
+        preferences.Confirm = c => { asked = c; return Task.FromResult(false); };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        Assert.NotNull(asked);
+        Assert.Contains("1.22.6", asked!.Message);
+        Assert.Contains("Frees", asked.Message);
+        Assert.Equal("Clean up", asked.ConfirmLabel);
+
+        // Said no, so nothing moved.
+        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_keeps_what_packs_target()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+        preferences.Confirm = _ => Task.FromResult(true);
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        // 1.22.5 is the Anego pack's version; 1.22.6 is nobody's.
+        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.5")));
+        Assert.False(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+        Assert.Contains("Removed", preferences.CleanupSummary);
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_with_nothing_to_do_says_so_instead_of_asking()
+    {
+        var (_, vm) = Show();
+        var preferences = OpenPreferences(vm);
+        preferences.Confirm = _ => Task.FromResult(true);
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        // Second run: the unused ones are gone, so there is nothing left to confirm.
+        var asked = false;
+        preferences.Confirm = _ => { asked = true; return Task.FromResult(true); };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        Assert.False(asked);
+        Assert.Contains("Nothing to clean up", preferences.CleanupSummary);
+    }
+
+    [AvaloniaFact]
+    public async Task Cleaning_up_refuses_to_guess_when_a_pack_will_not_load()
+    {
+        var (_, vm) = Show();
+        File.WriteAllText(Path.Combine(_home, "packs", "anego", "pack.json"), "{ not json");
+
+        var preferences = OpenPreferences(vm);
+        var asked = false;
+        preferences.Confirm = _ => { asked = true; return Task.FromResult(true); };
+
+        await preferences.CleanUpCommand.ExecuteAsync(null);
+
+        Assert.False(asked);
+        Assert.Contains("anego", preferences.CleanupSummary);
+        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+    }
+
     [AvaloniaTheory]
     [InlineData(0, "0 B")]
     [InlineData(900, "900 B")]

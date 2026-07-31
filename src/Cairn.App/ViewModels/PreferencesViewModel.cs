@@ -83,6 +83,89 @@ public partial class PreferencesViewModel : ViewModelBase
         PacksDetail = Count(_store.ListIds().Count(), "pack");
     }
 
+    /// <summary>Set by the view; the same confirmation dialog the pack delete uses.</summary>
+    public Func<ConfirmViewModel, Task<bool>>? Confirm { get; set; }
+
+    [ObservableProperty] public partial string CleanupSummary { get; set; } = "";
+
+    /// <summary>
+    /// Removes game versions no pack targets, and any private .NET runtime left with
+    /// nothing to run.
+    ///
+    /// Safe to offer because none of it is irreplaceable — every version is
+    /// re-downloadable and Play fetches whatever a pack needs — but it is still shown in
+    /// full first, because "600 MB is gone" is not something to discover afterwards.
+    /// </summary>
+    [RelayCommand]
+    private async Task CleanUp()
+    {
+        var plan = GameCleanup.Plan(_games, _runtimes, _store);
+
+        if (plan.IsBlocked)
+        {
+            CleanupSummary = plan.Blocked!;
+            return;
+        }
+
+        if (!plan.AnythingToDo)
+        {
+            CleanupSummary = "Nothing to clean up — every installed version is in use.";
+            return;
+        }
+
+        var lines = plan.Describe();
+        var kept = plan.Kept.Count == 0
+            ? ""
+            : $"\n\nKeeps {string.Join(", ", plan.Kept)}, which packs still target.";
+
+        var message = "This deletes:\n"
+                      + string.Join("\n", lines.Select(l => "  • " + l))
+                      + $"\n\nFrees {Bytes.Human(plan.TotalBytes)}. "
+                      + "Any of it downloads again when a pack needs it."
+                      + kept;
+
+        if (Confirm is not null
+            && !await Confirm(new ConfirmViewModel("Clean up unused downloads?", message, "Clean up")))
+            return;
+
+        var removed = 0;
+
+        foreach (var version in plan.Versions)
+        {
+            try
+            {
+                _games.Remove(GameInstall.TryAt(version.Directory)
+                              ?? throw new InvalidOperationException($"{version.Label} vanished"));
+                removed++;
+            }
+            catch (Exception e)
+            {
+                CleanupSummary = $"Could not remove {version.Label}: {e.Message}";
+            }
+        }
+
+        foreach (var runtime in plan.Runtimes)
+        {
+            try
+            {
+                _runtimes.Remove(DotnetRuntimeLocator.Inspect(runtime.Directory)
+                                 ?? throw new InvalidOperationException($"{runtime.Label} vanished"));
+                removed++;
+            }
+            catch (Exception e)
+            {
+                CleanupSummary = $"Could not remove {runtime.Label}: {e.Message}";
+            }
+        }
+
+        Games.RefreshInstalled();
+        Refresh();
+
+        if (removed > 0)
+            CleanupSummary = $"Removed {removed} item{(removed == 1 ? "" : "s")}, "
+                             + $"freeing {Bytes.Human(plan.TotalBytes)}.";
+    }
+
     /// <summary>
     /// Empties the icon and mod-detail caches. Safe by construction — everything in there
     /// is re-fetchable, which is why it lives apart from packs and games.
