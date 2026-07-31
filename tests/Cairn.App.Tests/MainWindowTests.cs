@@ -927,6 +927,51 @@ public class MainWindowTests : IDisposable
         Assert.False(games.Vm.ConfirmingRemove);
     }
 
+    /// <summary>Right edge of a control in window coordinates.</summary>
+    private static double RightEdge(Visual v, Visual root) =>
+        v.TranslatePoint(default, root)!.Value.X + v.Bounds.Width;
+
+    [AvaloniaFact]
+    public void The_two_rows_of_the_mods_toolbar_share_a_right_edge()
+    {
+        // A collapsed grid column still costs its ColumnSpacing, so "Check for updates"
+        // sat inset from the Search button above it by the width of the gaps reserved for
+        // two buttons that were not there.
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var buttons = Buttons(window);
+        var list = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "PackMods");
+
+        // Measured, because this was off by ten pixels and looked like nothing much:
+        // Search ended at 966, Check for updates at 956, the list at 972.
+        var edge = RightEdge(list, window);
+
+        Assert.Equal(edge, RightEdge(buttons["Search"], window), precision: 0);
+        Assert.Equal(edge, RightEdge(buttons["Check for updates"], window), precision: 0);
+    }
+
+    [AvaloniaFact]
+    public void They_still_share_it_once_searching_swaps_the_buttons()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.SearchText = "farming";
+        vm.Detail.ShowingSearch = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var buttons = Buttons(window);
+
+        // Clear joins Search, and "back to the pack" replaces Check for updates — the
+        // edge must not move when the set of visible buttons changes.
+        Assert.Equal(
+            RightEdge(buttons["Clear"], window),
+            RightEdge(buttons["← back to the pack"], window),
+            precision: 0);
+    }
+
     // ---- the game's own log ----
 
     private string LogsDirFor(string packId) =>

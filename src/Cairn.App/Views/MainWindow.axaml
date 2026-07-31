@@ -229,48 +229,61 @@
                     <TabItem Header="Mods">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
 
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+            <!--
+                                Buttons that come and go live in a StackPanel, not in
+                                columns of their own. A collapsed column still costs its
+                                ColumnSpacing, so the visible button sat inset from the
+                                search box above it and the list below by the width of the
+                                gaps reserved for buttons that were not there.
+                            -->
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
                                 <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
-                                         PlaceholderText="Search ModDB to add a mod…" />
-                                <Button Grid.Column="1" Content="Search"
-                                        Command="{Binding Detail.SearchCommand}"
-                                        IsDefault="{Binding Detail.ShowingSearch, Converter={x:Static BoolConverters.Not}}" />
-                                <Button Grid.Column="2" Content="Clear"
-                                        IsVisible="{Binding Detail.ShowingSearch}"
-                                        Command="{Binding Detail.ClearSearchCommand}" />
+                                         PlaceholderText="Search ModDB to add a mod…"
+                                         Margin="0,0,6,0" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <Button Content="Search"
+                                            Command="{Binding Detail.SearchCommand}"
+                                            IsDefault="{Binding Detail.ShowingSearch, Converter={x:Static BoolConverters.Not}}" />
+                                    <Button Content="Clear"
+                                            IsVisible="{Binding Detail.ShowingSearch}"
+                                            Command="{Binding Detail.ClearSearchCommand}" />
+                                </StackPanel>
                             </Grid>
 
                             <Grid DockPanel.Dock="Top" Margin="0,10,0,6"
-                                  ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+                                  ColumnDefinitions="Auto,*,Auto">
                                 <TextBlock Grid.Column="0" Text="{Binding Detail.ListHeading}"
                                            FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
 
                                 <TextBlock Grid.Column="1" Text="{Binding Detail.UpdateSummary}"
                                            IsVisible="{Binding Detail.HasUpdateSummary}"
+                                           Margin="8,0,8,0"
                                            FontSize="12" VerticalAlignment="Center"
                                            Foreground="{DynamicResource VsParchmentBrush}" />
 
-                                <!-- Nothing moves on its own, so checking is a thing you do. -->
-                                <Button Grid.Column="2" Content="Check for updates"
-                                        IsVisible="{Binding !Detail.ShowingSearch}"
-                                        Command="{Binding Detail.CheckUpdatesCommand}"
-                                        Padding="10,3" FontSize="11" />
-                                <Button Grid.Column="3" Content="Update all" Classes="accent"
-                                        IsVisible="{Binding Detail.AnyUpdates}"
-                                        Command="{Binding Detail.UpdateAllCommand}"
-                                        Padding="10,3" FontSize="11" />
-
-                                <Button Grid.Column="4" Content="← back to the pack"
-                                        IsVisible="{Binding Detail.ShowingSearch}"
-                                        Command="{Binding Detail.ClearSearchCommand}"
-                                        Padding="10,3" FontSize="11" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                    <!-- Nothing moves on its own, so checking is a thing you do. -->
+                                    <Button Content="Check for updates"
+                                            IsVisible="{Binding !Detail.ShowingSearch}"
+                                            Command="{Binding Detail.CheckUpdatesCommand}"
+                                            Padding="10,3" FontSize="11" />
+                                    <Button Content="Update all" Classes="accent"
+                                            IsVisible="{Binding Detail.AnyUpdates}"
+                                            Command="{Binding Detail.UpdateAllCommand}"
+                                            Padding="10,3" FontSize="11" />
+                                    <Button Content="← back to the pack"
+                                            IsVisible="{Binding Detail.ShowingSearch}"
+                                            Command="{Binding Detail.ClearSearchCommand}"
+                                            Padding="10,3" FontSize="11" />
+                                </StackPanel>
                             </Grid>
 
                             <!-- Both lists fill the same space; a DockPanel would
                                  dock the first one to the left at content width. -->
                             <Panel>
                                 <!-- The pack -->
-                                <ListBox IsVisible="{Binding !Detail.ShowingSearch}"
+                                <ListBox x:Name="PackMods"
+                                         IsVisible="{Binding !Detail.ShowingSearch}"
                                          ItemsSource="{Binding Detail.Mods}">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ModRowViewModel">
