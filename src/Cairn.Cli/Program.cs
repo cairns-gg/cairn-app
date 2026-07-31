@@ -59,7 +59,7 @@ internal static class Program
 
               cairn info                          show the detected install and data path
               cairn list                          list packs
-              cairn init <id> [--game <version>] [--connect host:port]
+              cairn init <name> [--id <id>] [--game <version>] [--connect host:port]
               cairn add <id> <modid> [version]    add a mod to a pack
               cairn remove <id> <modid>           remove a mod from a pack
               cairn delete <id>                   delete a pack and its mods
@@ -120,7 +120,7 @@ internal static class Program
         var ids = store.ListIds().ToList();
         if (ids.Count == 0)
         {
-            Console.WriteLine("no packs yet - create one with: cairn init <id>");
+            Console.WriteLine("no packs yet - create one with: cairn init <name>");
             return 0;
         }
 
@@ -136,18 +136,23 @@ internal static class Program
 
     private static int Init(PackStore store, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn init <id> [--game <version>] [--connect host:port]");
+        if (args.Length < 2)
+            return Fail("usage: cairn init <name> [--id <id>] [--game <version>] [--connect host:port]");
 
-        var id = args[1];
+        var name = args[1];
         var gameVersion = ArgValue(args, "--game") ?? GameInstall.TryLocate()?.Version;
         if (gameVersion is null or "unknown")
             return Fail("could not detect the game version; pass --game <version>");
 
+        // Slugging is idempotent, so `cairn init anego` still produces exactly "anego"
+        // while `cairn init "Anego Server"` now works instead of being refused.
+        var id = ArgValue(args, "--id") ?? store.SuggestId(name);
+
         var problem = store.DescribeIdProblem(id);
         if (problem is not null) return Fail(problem);
 
-        store.Create(id, gameVersion, id, ArgValue(args, "--connect"));
-        Console.WriteLine($"created {store.ManifestPath(id)}  (game {gameVersion})");
+        store.Create(id, gameVersion, name, ArgValue(args, "--connect"));
+        Console.WriteLine($"created {store.ManifestPath(id)}  (id {id}, game {gameVersion})");
         return 0;
     }
 

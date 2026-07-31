@@ -120,10 +120,10 @@
 
                 <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Import as id" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="0" Text="Import as" VerticalAlignment="Center"
                                    FontSize="12" Opacity="0.7" />
                         <TextBox Grid.Column="1" Text="{Binding ImportAsId}"
-                                 PlaceholderText="(keep the author's id)" />
+                                 PlaceholderText="(keep the author's name)" />
                         <CheckBox Grid.Column="2" Content="pin to their versions"
                                   IsChecked="{Binding ImportPinToLock}" />
                     </Grid>
@@ -258,15 +258,13 @@
                 <TextBlock Text="New pack" Classes="heading" FontSize="22" FontWeight="SemiBold" />
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Pack id" FontSize="12" Opacity="0.7" />
-                    <TextBox Text="{Binding NewPackId}" PlaceholderText="anego" />
-                    <TextBlock Text="Letters, digits, '-' and '_'. Used as the folder name."
-                               FontSize="11" Opacity="0.55" />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Display name" FontSize="12" Opacity="0.7" />
+                    <TextBlock Text="Name" FontSize="12" Opacity="0.7" />
                     <TextBox Text="{Binding NewPackName}" PlaceholderText="Anego Server" />
+                    <!-- Shown, not asked for: the id is a folder name and travels in
+                         shared bundles, but nobody should have to invent one. -->
+                    <TextBlock FontSize="11" Opacity="0.55"
+                               IsVisible="{Binding HasNewPackSlug}"
+                               Text="{Binding NewPackSlug, StringFormat='Saved as {0}'}" />
                 </StackPanel>
 
                 <StackPanel Spacing="4">

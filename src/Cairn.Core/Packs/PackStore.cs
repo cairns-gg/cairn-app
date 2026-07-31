@@ -44,6 +44,13 @@ public sealed class PackStore
 
     public bool Exists(string id) => IsValidId(id) && File.Exists(ManifestPath(id));
 
+    /// <summary>
+    /// The id a pack called <paramref name="name"/> would get: its slug, made unique
+    /// against what is already here. Nobody is asked to invent a directory name.
+    /// </summary>
+    public string SuggestId(string? name) =>
+        PackId.MakeUnique(PackId.FromOrFallback(name), Exists);
+
     public IEnumerable<string> ListIds()
     {
         if (!Directory.Exists(_packsRoot)) yield break;

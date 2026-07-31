@@ -189,8 +189,16 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnIsImportingChanged(bool value) => RefreshPaneState();
     [ObservableProperty] public partial bool IsCreating { get; set; }
-    [ObservableProperty] public partial string NewPackId { get; set; } = "";
     [ObservableProperty] public partial string NewPackName { get; set; } = "";
+
+    /// <summary>
+    /// The id the pack will be saved under, derived from the name. Shown rather than
+    /// asked for: it is a directory name and it travels in shared bundles, which is the
+    /// machine's problem, not something to make someone invent a second time.
+    /// </summary>
+    public string NewPackSlug => _store.SuggestId(NewPackName);
+
+    public bool HasNewPackSlug => !string.IsNullOrWhiteSpace(NewPackName);
     [ObservableProperty] public partial string NewPackGameVersion { get; set; }
 
     /// <summary>
@@ -255,9 +263,11 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnNewPackErrorChanged(string? value) => OnPropertyChanged(nameof(HasNewPackError));
 
-    partial void OnNewPackIdChanged(string value)
+    partial void OnNewPackNameChanged(string value)
     {
         NewPackError = null;
+        OnPropertyChanged(nameof(NewPackSlug));
+        OnPropertyChanged(nameof(HasNewPackSlug));
         CreatePackCommand.NotifyCanExecuteChanged();
     }
 
@@ -375,7 +385,9 @@ public partial class MainViewModel : ViewModelBase
             var bundle = PackBundle.Parse(json);
             var manifest = _store.Import(
                 bundle,
-                string.IsNullOrWhiteSpace(ImportAsId) ? null : ImportAsId.Trim(),
+                // Slugged like a new pack's name, so "Anego Copy" is accepted here rather
+                // than rejected for containing a space.
+                string.IsNullOrWhiteSpace(ImportAsId) ? null : PackId.FromOrFallback(ImportAsId),
                 ImportPinToLock);
 
             Note($"imported pack '{manifest.Id}' ({manifest.Mods.Count} mods)");
@@ -413,7 +425,6 @@ public partial class MainViewModel : ViewModelBase
     {
         IsShowingGames = false;
         IsImporting = false;
-        NewPackId = "";
         NewPackName = "";
         NewPackConnect = "";
         NewPackError = null;
@@ -492,9 +503,17 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanCreatePack))]
     private void CreatePack()
     {
-        var id = NewPackId.Trim();
+        if (string.IsNullOrWhiteSpace(NewPackName))
+        {
+            NewPackError = "Enter a name.";
+            return;
+        }
 
-        // Same validation the store enforces, surfaced before we touch the disk.
+        // Derived here rather than read off the bound property, so two packs created in
+        // quick succession cannot race to the same id.
+        var id = _store.SuggestId(NewPackName);
+
+        // The store validates too; this only surfaces a problem before touching the disk.
         var problem = _store.DescribeIdProblem(id);
         if (problem is not null)
         {
@@ -604,5 +623,5 @@ public partial class MainViewModel : ViewModelBase
         _provisionCts?.Cancel();
     }
 
-    private bool CanCreatePack => !string.IsNullOrWhiteSpace(NewPackId);
+    private bool CanCreatePack => !string.IsNullOrWhiteSpace(NewPackName);
 }

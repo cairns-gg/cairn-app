@@ -119,7 +119,6 @@ public class MainWindowTests : IDisposable
         Assert.True(vm.ShowCreate);
         Assert.False(vm.ShowDetail);
 
-        vm.NewPackId = "fresh-pack";
         vm.NewPackName = "Fresh Pack";
         vm.NewPackGameVersion = "1.22.5";
         vm.NewPackConnect = "example.com:42420";
@@ -134,32 +133,94 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void A_pack_id_that_would_escape_the_store_is_refused()
+    public void A_name_that_would_escape_the_store_is_slugged_into_something_harmless()
     {
         var (_, vm) = Show();
 
         vm.BeginCreateCommand.Execute(null);
-        vm.NewPackId = "../../../etc/evil";
+        vm.NewPackName = "../../../etc/evil";
+
+        // The traversal never reaches the filesystem: separators are not in the slug
+        // alphabet at all, so there is nothing to reject.
+        Assert.Equal("etc-evil", vm.NewPackSlug);
+
         vm.CreatePackCommand.Execute(null);
 
-        Assert.NotNull(vm.NewPackError);
-        Assert.True(vm.IsCreating, "should stay on the form so the id can be corrected");
-        Assert.DoesNotContain(vm.Packs, p => p.Id.Contains("evil"));
+        Assert.Null(vm.NewPackError);
+        Assert.Contains(vm.Packs, p => p.Id == "etc-evil");
         Assert.False(Directory.Exists(Path.Combine(_home, "packs", "etc")));
+        Assert.True(File.Exists(Path.Combine(_home, "packs", "etc-evil", "pack.json")));
     }
 
     [AvaloniaFact]
-    public void A_duplicate_pack_id_is_refused()
+    public void A_duplicate_name_gets_its_own_id_rather_than_an_error()
+    {
+        var (_, vm) = Show();
+
+        // Wanting two packs with the same name is reasonable — say, one per game version.
+        vm.BeginCreateCommand.Execute(null);
+        vm.NewPackName = "Kitchen Sink";
+        vm.NewPackGameVersion = "1.22.5";
+        Assert.Equal("kitchen-sink", vm.NewPackSlug);
+        vm.CreatePackCommand.Execute(null);
+
+        vm.BeginCreateCommand.Execute(null);
+        vm.NewPackName = "Kitchen Sink";
+        vm.NewPackGameVersion = "1.22.5";
+        Assert.Equal("kitchen-sink-2", vm.NewPackSlug);
+        vm.CreatePackCommand.Execute(null);
+
+        Assert.Null(vm.NewPackError);
+        Assert.Equal(5, vm.Packs.Count);
+        Assert.Contains(vm.Packs, p => p.Id == "kitchen-sink-2");
+
+        // Both keep the name they were given; only the id had to differ.
+        Assert.Equal(2, vm.Packs.Count(p => p.Display == "Kitchen Sink"));
+    }
+
+    [AvaloniaFact]
+    public void The_derived_id_is_shown_before_the_pack_is_created()
+    {
+        var (window, vm) = Show();
+
+        vm.BeginCreateCommand.Execute(null);
+        Assert.False(vm.HasNewPackSlug);   // nothing to promise yet
+
+        vm.NewPackName = "Anego's Café 2";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Punctuation and accents are handled rather than rejected, and the result is
+        // visible on the form so the id is never a surprise.
+        Assert.Equal("anego-s-cafe-2", vm.NewPackSlug);
+        Assert.True(vm.HasNewPackSlug);
+        Assert.Contains(VisibleText(window), t => t.Contains("Saved as anego-s-cafe-2"));
+    }
+
+    [AvaloniaFact]
+    public void A_name_with_nothing_sluggable_still_produces_an_id()
     {
         var (_, vm) = Show();
 
         vm.BeginCreateCommand.Execute(null);
-        vm.NewPackId = "anego";
+        vm.NewPackName = "日本語";
+        vm.NewPackGameVersion = "1.22.5";
         vm.CreatePackCommand.Execute(null);
 
-        Assert.NotNull(vm.NewPackError);
-        Assert.Contains("already exists", vm.NewPackError!);
-        Assert.Equal(3, vm.Packs.Count);
+        // Nothing survives the ASCII alphabet, so it falls back rather than failing.
+        Assert.Null(vm.NewPackError);
+        Assert.Contains(vm.Packs, p => p.Id == "pack");
+        Assert.Equal("日本語", vm.Packs.Single(p => p.Id == "pack").Display);
+    }
+
+    [AvaloniaFact]
+    public void Creating_without_a_name_is_refused()
+    {
+        var (_, vm) = Show();
+
+        vm.BeginCreateCommand.Execute(null);
+        vm.NewPackName = "   ";
+
+        Assert.False(vm.CreatePackCommand.CanExecute(null));
     }
 
     [AvaloniaFact]
@@ -168,7 +229,7 @@ public class MainWindowTests : IDisposable
         var (_, vm) = Show();
 
         vm.BeginCreateCommand.Execute(null);
-        vm.NewPackId = "bad-version";
+        vm.NewPackName = "Bad Version";
         vm.NewPackGameVersion = ">=1.22.0";
         vm.CreatePackCommand.Execute(null);
 
@@ -777,7 +838,7 @@ public class MainWindowTests : IDisposable
         vm.BeginCreateCommand.Execute(null);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        vm.NewPackId = "fetches";
+        vm.NewPackName = "Fetches";
 
         // Pick from the offered list, as the dropdown requires.
         vm.GameVersionChoices.Add("1.21.5");
@@ -801,7 +862,7 @@ public class MainWindowTests : IDisposable
         var (_, vm) = Show();
 
         vm.BeginCreateCommand.Execute(null);
-        vm.NewPackId = "no-version";
+        vm.NewPackName = "No Version";
         vm.NewPackGameVersion = null!;      // what the ComboBox does with an unlisted value
 
         vm.CreatePackCommand.Execute(null);
@@ -902,6 +963,55 @@ public class MainWindowTests : IDisposable
         // Repopulating the dropdown must not be mistaken for the user choosing a version.
         Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+    }
+
+    // ---- what "connect" actually means ----
+
+    /// <summary>
+    /// A pack without a server used to be labelled "singleplayer", which is not what the
+    /// field means. "connect" only decides whether launching skips the main menu; it does
+    /// not restrict the pack, and multiplayer stays available from the menu either way.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_with_no_server_is_not_called_singleplayer()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");   // no connect
+
+        Assert.DoesNotContain(VisibleText(window), t => t.Contains("singleplayer"));
+
+        // Nothing is claimed at all: the line is simply absent.
+        Assert.False(vm.SelectedPack.HasServer);
+        Assert.Equal("", vm.SelectedPack.ServerLine);
+        Assert.False(vm.Detail!.HasServer);
+    }
+
+    [AvaloniaFact]
+    public void A_pack_with_a_server_says_it_will_join_it()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.SelectedPack.HasServer);
+        Assert.Equal("auto-joins anego.example.com:42420", vm.SelectedPack.ServerLine);
+
+        // Worth knowing before pressing Play that it will drop you straight into a server.
+        Assert.Contains(VisibleText(window), t => t.Contains("auto-joins anego.example.com"));
+    }
+
+    [AvaloniaFact]
+    public void Clearing_the_server_removes_the_line_rather_than_relabelling_it()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.EditConnect = "";
+        vm.Detail.SaveSettingsCommand.Execute(null);
+
+        Assert.False(vm.Detail.HasServer);
+        Assert.False(vm.SelectedPack!.HasServer);
+        Assert.Equal("", vm.SelectedPack.ServerLine);
     }
 
     // ---- the sidebar tracks its packs ----
@@ -1005,7 +1115,7 @@ public class MainWindowTests : IDisposable
         vm.ConfirmDeleteCommand.Execute(null);
 
         vm.BeginCreateCommand.Execute(null);
-        vm.NewPackId = "old-pack";
+        vm.NewPackName = "old-pack";
         vm.GameVersionChoices.Add("1.22.5");
         vm.NewPackGameVersion = "1.22.5";
         vm.CreatePackCommand.Execute(null);
@@ -1029,55 +1139,6 @@ public class MainWindowTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Contains(VisibleText(window), t => t.Contains("saved settings for 'anego'"));
-    }
-
-    // ---- what "connect" actually means ----
-
-    /// <summary>
-    /// A pack without a server used to be labelled "singleplayer", which is not what the
-    /// field means. "connect" only decides whether launching skips the main menu; it does
-    /// not restrict the pack, and multiplayer stays available from the menu either way.
-    /// </summary>
-    [AvaloniaFact]
-    public void A_pack_with_no_server_is_not_called_singleplayer()
-    {
-        var (window, vm) = Show();
-        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");   // no connect
-
-        Assert.DoesNotContain(VisibleText(window), t => t.Contains("singleplayer"));
-
-        // Nothing is claimed at all: the line is simply absent.
-        Assert.False(vm.SelectedPack.HasServer);
-        Assert.Equal("", vm.SelectedPack.ServerLine);
-        Assert.False(vm.Detail!.HasServer);
-    }
-
-    [AvaloniaFact]
-    public void A_pack_with_a_server_says_it_will_join_it()
-    {
-        var (window, vm) = Show();
-        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-
-        Assert.True(vm.SelectedPack.HasServer);
-        Assert.Equal("auto-joins anego.example.com:42420", vm.SelectedPack.ServerLine);
-
-        // Worth knowing before pressing Play that it will drop you straight into a server.
-        Assert.Contains(VisibleText(window), t => t.Contains("auto-joins anego.example.com"));
-    }
-
-    [AvaloniaFact]
-    public void Clearing_the_server_removes_the_line_rather_than_relabelling_it()
-    {
-        var (_, vm) = Show();
-        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
-
-        vm.Detail!.EditConnect = "";
-        vm.Detail.SaveSettingsCommand.Execute(null);
-
-        Assert.False(vm.Detail.HasServer);
-        Assert.False(vm.SelectedPack!.HasServer);
-        Assert.Equal("", vm.SelectedPack.ServerLine);
     }
 
     [AvaloniaFact]
