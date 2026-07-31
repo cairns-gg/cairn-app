@@ -55,8 +55,8 @@ publish() {
 if [ "$CLI_ONLY" = 1 ]; then
   OUT="artifacts/$RID"
   publish src/Cairn.Cli/Cairn.Cli.csproj "$OUT"
-  echo "  built $OUT/cairn"
-  [ "$RUN" = 1 ] && exec "$OUT/cairn" info
+  echo "  built $OUT/cairn-cli"
+  [ "$RUN" = 1 ] && exec "$OUT/cairn-cli" info
   exit 0
 fi
 
@@ -75,5 +75,5 @@ OUT="artifacts/$RID"
 publish src/Cairn.App/Cairn.App.csproj "$OUT"
 publish src/Cairn.Cli/Cairn.Cli.csproj "$OUT"
 
-echo "  built $OUT/cairn-launcher and $OUT/cairn"
-[ "$RUN" = 1 ] && exec "$OUT/cairn-launcher"
+echo "  built $OUT/cairn and $OUT/cairn-cli"
+[ "$RUN" = 1 ] && exec "$OUT/cairn"

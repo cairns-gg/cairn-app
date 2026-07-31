@@ -25,7 +25,7 @@ RID="${1:-osx-arm64}"
 VERSION="0.1.0"
 BUNDLE_ID="${BUNDLE_ID:-com.dizzyd.cairn}"
 APP="artifacts/$RID/Cairn.app"
-EXE="cairn-launcher"
+EXE="cairn"
 
 echo "building $APP ($RID)"
 

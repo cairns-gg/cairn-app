@@ -75,19 +75,19 @@ required:
 dotnet run --project src/Cairn.App
 ```
 
-The CLI (`cairn`) drives the same `Cairn.Core` engine, so every action is also
+The CLI (`cairn-cli`) drives the same `Cairn.Core` engine, so every action is also
 scriptable:
 
 ```
-cairn info                          show the detected install and data path
-cairn list                          list packs
-cairn init <id> [--game <version>] [--connect host:port]
-cairn add <id> <modid> [version]    add a mod to a pack
-cairn remove <id> <modid>           remove a mod from a pack
-cairn delete <id>                   delete a pack and its mods
-cairn search <text>                 search ModDB
-cairn sync <id>                     resolve + download
-cairn launch <id>                   sync, then start the game
+cairn-cli info                          show the detected install and data path
+cairn-cli list                          list packs
+cairn-cli init <id> [--game <version>] [--connect host:port]
+cairn-cli add <id> <modid> [version]    add a mod to a pack
+cairn-cli remove <id> <modid>           remove a mod from a pack
+cairn-cli delete <id>                   delete a pack and its mods
+cairn-cli search <text>                 search ModDB
+cairn-cli sync <id>                     resolve + download
+cairn-cli launch <id>                   sync, then start the game
 ```
 
 ### Sharing a pack
@@ -96,11 +96,11 @@ cairn launch <id>                   sync, then start the game
 handed around. Export bundles it with the lockfile into one file:
 
 ```
-cairn export anego -o anego.cairn.json     # omit -o to print it
-cairn export anego --no-lock                # intent only
-cairn import anego.cairn.json              # or a https:// URL
-cairn import shared.json --id anego-copy    # when the id collides
-cairn import shared.json --loose            # track newest instead of pinning
+cairn-cli export anego -o anego.cairn.json     # omit -o to print it
+cairn-cli export anego --no-lock                # intent only
+cairn-cli import anego.cairn.json              # or a https:// URL
+cairn-cli import shared.json --id anego-copy    # when the id collides
+cairn-cli import shared.json --loose            # track newest instead of pinning
 ```
 
 In the launcher: **Import…** in the sidebar (paste the file, or a URL), and **Export…** in
@@ -111,7 +111,7 @@ On import each mod is pinned to the version the author had, and the author's che
 travel with it, so the first sync verifies the recipient got identical bytes:
 
 ```
-$ cairn sync anego          # lock says a checksum that does not match what downloaded
+$ cairn-cli sync anego          # lock says a checksum that does not match what downloaded
   x glassview   1.3.0 does not match the locked checksum — refusing it
 ```
 
@@ -164,9 +164,9 @@ in-game login, not at download — so Cairn can fetch the game, but you still ne
 purchased account to play it.
 
 ```
-cairn games                     installed and available versions
-cairn games install 1.22.5      download, verify md5, unpack
-cairn games remove 1.22.5
+cairn-cli games                     installed and available versions
+cairn-cli games install 1.22.5      download, verify md5, unpack
+cairn-cli games remove 1.22.5
 ```
 
 or the **Game versions** pane in the launcher, which is also where a pack's
@@ -228,9 +228,9 @@ the game bundles no runtime. Rather than requiring several system-wide installs,
 can keep private copies and point the game at the right one:
 
 ```
-cairn runtimes                  what cairn manages
-cairn runtimes install 8        fetch a private .NET 8 (sha512-verified)
-cairn runtimes remove 8.0.29
+cairn-cli runtimes                  what cairn manages
+cairn-cli runtimes install 8        fetch a private .NET 8 (sha512-verified)
+cairn-cli runtimes remove 8.0.29
 ```
 
 or **Install its .NET** in the Game versions pane, enabled for an installed game whose
@@ -328,7 +328,8 @@ SIGN_IDENTITY="Developer ID Application: …" ./build-macos-app.sh
 
 Produces a real bundle — `Contents/MacOS`, `Contents/Info.plist`, `Contents/_CodeSignature`
 — so it gets a Dock tile, proper foreground activation and its own name in the menu bar.
-The CLI ships inside it at `Contents/MacOS/cairn`.
+The launcher binary is `Contents/MacOS/cairn`; the CLI ships alongside it at
+`Contents/MacOS/cairn-cli`, so one download provides both.
 
 Deliberately **not** single-file: measured on an M-series machine, warmed, ten runs each,
 

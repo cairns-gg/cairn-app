@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>cairn-launcher</AssemblyName>
+    <AssemblyName>cairn</AssemblyName>
     <!-- The icon baked into the Windows .exe itself, as seen in Explorer and the
          taskbar before the window ever opens. -->
     <ApplicationIcon>Assets/cairn.ico</ApplicationIcon>

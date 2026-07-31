@@ -15,7 +15,7 @@ namespace Cairn.App.Tests;
 public class IconTests
 {
     private static Stream OpenIcon() =>
-        AssetLoader.Open(new Uri("avares://cairn-launcher/Assets/cairn.ico"));
+        AssetLoader.Open(new Uri("avares://cairn/Assets/cairn.ico"));
 
     [AvaloniaFact]
     public void The_icon_is_a_multi_size_ico_with_the_sizes_windows_asks_for()

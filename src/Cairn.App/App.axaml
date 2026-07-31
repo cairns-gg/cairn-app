@@ -14,6 +14,6 @@
         <FluentTheme />
         <!-- Layered over Fluent rather than replacing it: property setters keep the
              control templates intact, so behaviour is untouched. -->
-        <StyleInclude Source="avares://cairn-launcher/Styles/VintageStory.axaml" />
+        <StyleInclude Source="avares://cairn/Styles/VintageStory.axaml" />
     </Application.Styles>
 </Application>

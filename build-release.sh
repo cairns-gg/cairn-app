@@ -42,12 +42,12 @@ publish() {
 
 for rid in "${RIDS[@]}"; do
   echo "publishing $rid"
-  publish src/Cairn.Cli/Cairn.Cli.csproj cairn "$rid"
-  publish src/Cairn.App/Cairn.App.csproj cairn-launcher "$rid"
+  publish src/Cairn.Cli/Cairn.Cli.csproj cairn-cli "$rid"
+  publish src/Cairn.App/Cairn.App.csproj cairn "$rid"
 done
 
 echo
 echo "artifacts:"
 find "$OUT" -maxdepth 2 -type f \( -name 'cairn' -o -name 'cairn.exe' \
-  -o -name 'cairn-launcher' -o -name 'cairn-launcher.exe' \) \
+  -o -name 'cairn-cli' -o -name 'cairn-cli.exe' \) \
   -exec ls -lh {} \; | awk '{printf "  %-10s %s\n", $5, $NF}'

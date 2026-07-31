@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>cairn</AssemblyName>
+    <AssemblyName>cairn-cli</AssemblyName>
     <RootNamespace>Cairn.Cli</RootNamespace>
   </PropertyGroup>
   <ItemGroup>

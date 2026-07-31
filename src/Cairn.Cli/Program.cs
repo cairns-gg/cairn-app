@@ -55,25 +55,25 @@ internal static class Program
     private static void Usage()
     {
         Console.WriteLine("""
-            cairn - Vintage Story client-side modpack manager
+            cairn-cli - Vintage Story client-side modpack manager
 
-              cairn info                          show the detected install and data path
-              cairn list                          list packs
-              cairn init <name> [--id <id>] [--game <version>] [--connect host:port]
-              cairn add <id> <modid> [version]    add a mod to a pack
-              cairn remove <id> <modid>           remove a mod from a pack
-              cairn delete <id>                   delete a pack and its mods
-              cairn export <id> [-o file] [--no-lock]   write a shareable pack file
-              cairn import <file|url> [--id x] [--loose] create a pack from one
-              cairn games                         list installed and available game versions
-              cairn games install <version>       download and install a game version
-              cairn games remove <version>        delete an installed game version
-              cairn runtimes                      list .NET runtimes cairn manages
-              cairn runtimes install <major>      download a private .NET runtime (e.g. 8)
-              cairn runtimes remove <version>     delete one
-              cairn search <text>                 search ModDB
-              cairn sync <id>                     resolve + download into the pack's Mods dir
-              cairn launch <id> [--dry-run] [--no-install]  sync, then start the game
+              cairn-cli info                          show the detected install and data path
+              cairn-cli list                          list packs
+              cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]
+              cairn-cli add <id> <modid> [version]    add a mod to a pack
+              cairn-cli remove <id> <modid>           remove a mod from a pack
+              cairn-cli delete <id>                   delete a pack and its mods
+              cairn-cli export <id> [-o file] [--no-lock]   write a shareable pack file
+              cairn-cli import <file|url> [--id x] [--loose] create a pack from one
+              cairn-cli games                         list installed and available game versions
+              cairn-cli games install <version>       download and install a game version
+              cairn-cli games remove <version>        delete an installed game version
+              cairn-cli runtimes                      list .NET runtimes Cairn manages
+              cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
+              cairn-cli runtimes remove <version>     delete one
+              cairn-cli search <text>                 search ModDB
+              cairn-cli sync <id>                     resolve + download into the pack's Mods dir
+              cairn-cli launch <id> [--dry-run] [--no-install]  sync, then start the game
 
             Packs live under $CAIRN_HOME (default ~/.cairn/packs/<id>).
             """);
@@ -120,7 +120,7 @@ internal static class Program
         var ids = store.ListIds().ToList();
         if (ids.Count == 0)
         {
-            Console.WriteLine("no packs yet - create one with: cairn init <name>");
+            Console.WriteLine("no packs yet - create one with: cairn-cli init <name>");
             return 0;
         }
 
@@ -137,15 +137,15 @@ internal static class Program
     private static int Init(PackStore store, string[] args)
     {
         if (args.Length < 2)
-            return Fail("usage: cairn init <name> [--id <id>] [--game <version>] [--connect host:port]");
+            return Fail("usage: cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]");
 
         var name = args[1];
         var gameVersion = ArgValue(args, "--game") ?? GameInstall.TryLocate()?.Version;
         if (gameVersion is null or "unknown")
             return Fail("could not detect the game version; pass --game <version>");
 
-        // Slugging is idempotent, so `cairn init anego` still produces exactly "anego"
-        // while `cairn init "Anego Server"` now works instead of being refused.
+        // Slugging is idempotent, so `cairn-cli init anego` still produces exactly "anego"
+        // while `cairn-cli init "Anego Server"` now works instead of being refused.
         var id = ArgValue(args, "--id") ?? store.SuggestId(name);
 
         var problem = store.DescribeIdProblem(id);
@@ -158,7 +158,7 @@ internal static class Program
 
     private static int Add(PackStore store, string[] args)
     {
-        if (args.Length < 3) return Fail("usage: cairn add <id> <modid> [version]");
+        if (args.Length < 3) return Fail("usage: cairn-cli add <id> <modid> [version]");
 
         var id = args[1];
         var manifest = store.Load(id);
@@ -177,7 +177,7 @@ internal static class Program
 
     private static async Task<int> Search(ModDbClient moddb, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn search <text>");
+        if (args.Length < 2) return Fail("usage: cairn-cli search <text>");
 
         var query = string.Join(' ', args[1..]);
         var results = await moddb.SearchRankedAsync(query);
@@ -199,7 +199,7 @@ internal static class Program
 
     private static async Task<int> Sync(PackStore store, ModDbClient moddb, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn sync <id>");
+        if (args.Length < 2) return Fail("usage: cairn-cli sync <id>");
 
         var id = args[1];
         var report = await RunSync(store, moddb, http, id);
@@ -235,7 +235,7 @@ internal static class Program
 
     private static async Task<int> LaunchPack(PackStore store, GameStore gameStore, RuntimeStore runtimes, ModDbClient moddb, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn launch <id>");
+        if (args.Length < 2) return Fail("usage: cairn-cli launch <id>");
 
         var id = args[1];
         var manifest = store.Load(id);
@@ -287,7 +287,7 @@ internal static class Program
         var runtime = new GameLauncher(install).ResolveRuntime(probe);
         if (!runtime.Resolved)
             return Fail($"{install.Version} needs .NET {install.RequiredFramework} and none was found. "
-                        + $"Install one with: cairn runtimes install {install.RequiredFramework.Major}");
+                        + $"Install one with: cairn-cli runtimes install {install.RequiredFramework.Major}");
 
         Console.WriteLine($"using runtime {runtime.Describe()}");
 
@@ -329,8 +329,8 @@ internal static class Program
 
         if (action == "remove")
         {
-            if (args.Length < 3) return Fail("usage: cairn games remove <version>");
-            if (!games.IsInstalled(args[2])) return Fail($"{args[2]} is not installed by cairn");
+            if (args.Length < 3) return Fail("usage: cairn-cli games remove <version>");
+            if (!games.IsInstalled(args[2])) return Fail($"{args[2]} is not installed by Cairn");
 
             games.Remove(args[2]);
             Console.WriteLine($"removed game {args[2]}");
@@ -339,7 +339,7 @@ internal static class Program
 
         if (action == "install")
         {
-            if (args.Length < 3) return Fail("usage: cairn games install <version>");
+            if (args.Length < 3) return Fail("usage: cairn-cli games install <version>");
 
             var wanted = args[2];
             var releases = await catalog.ListReleasesAsync(includePreReleases: true);
@@ -348,7 +348,7 @@ internal static class Program
                 return Fail($"no {GameCatalog.PlatformKey} download published for {wanted}");
 
             if (!release.CanInstall)
-                return Fail($"{wanted} ships as {release.Artifact.FileName}, which cairn cannot install");
+                return Fail($"{wanted} ships as {release.Artifact.FileName}, which Cairn cannot install");
 
             Console.WriteLine($"installing {wanted} ({release.Artifact.FileSize})");
 
@@ -376,7 +376,7 @@ internal static class Program
 
         var installed = games.ListInstalled().ToList();
         Console.WriteLine($"installed ({games.Root}):");
-        if (installed.Count == 0) Console.WriteLine("  (none managed by cairn)");
+        if (installed.Count == 0) Console.WriteLine("  (none managed by Cairn)");
         foreach (var i in installed)
             Console.WriteLine($"  {i.Version,-12} {i.Architecture,-6} needs .NET {i.RequiredFramework}");
 
@@ -400,7 +400,7 @@ internal static class Program
 
     private static int Export(PackStore store, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn export <id> [-o file] [--no-lock]");
+        if (args.Length < 2) return Fail("usage: cairn-cli export <id> [-o file] [--no-lock]");
 
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
@@ -421,7 +421,7 @@ internal static class Program
 
     private static async Task<int> Import(PackStore store, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn import <file|url> [--id x] [--loose]");
+        if (args.Length < 2) return Fail("usage: cairn-cli import <file|url> [--id x] [--loose]");
 
         var source = args[1];
         string json;
@@ -446,7 +446,7 @@ internal static class Program
         var pinned = manifest.Mods.Count(m => m.Version is not null);
         Console.WriteLine($"imported '{manifest.Id}' for game {manifest.GameVersion} "
                           + $"({manifest.Mods.Count} mods, {pinned} pinned)");
-        Console.WriteLine($"  sync it with: cairn sync {manifest.Id}");
+        Console.WriteLine($"  sync it with: cairn-cli sync {manifest.Id}");
         return 0;
     }
 
@@ -458,7 +458,7 @@ internal static class Program
         if (action == "install")
         {
             if (args.Length < 3 || !int.TryParse(args[2], out var major))
-                return Fail("usage: cairn runtimes install <major>   (e.g. 8)");
+                return Fail("usage: cairn-cli runtimes install <major>   (e.g. 8)");
 
             // The game is x64 on every platform, so that is the runtime it needs.
             var rid = DotnetRuntimeInstaller.RidFor(Cairn.Core.Runtime.ExecutableArch.X64);
@@ -485,7 +485,7 @@ internal static class Program
 
         if (action == "remove")
         {
-            if (args.Length < 3) return Fail("usage: cairn runtimes remove <version>");
+            if (args.Length < 3) return Fail("usage: cairn-cli runtimes remove <version>");
 
             var match = store.ListInstalled()
                 .FirstOrDefault(r => Path.GetFileName(r.Root).StartsWith(args[2], StringComparison.Ordinal));
@@ -508,7 +508,7 @@ internal static class Program
 
     private static int Remove(PackStore store, string[] args)
     {
-        if (args.Length < 3) return Fail("usage: cairn remove <id> <modid>");
+        if (args.Length < 3) return Fail("usage: cairn-cli remove <id> <modid>");
 
         var id = args[1];
         var manifest = store.Load(id);
@@ -524,7 +524,7 @@ internal static class Program
 
     private static int Delete(PackStore store, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn delete <id>");
+        if (args.Length < 2) return Fail("usage: cairn-cli delete <id>");
 
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
