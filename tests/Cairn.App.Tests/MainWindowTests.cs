@@ -1036,9 +1036,17 @@ public class MainWindowTests : IDisposable
         Assert.False(games.Vm.ConfirmingRemove);
     }
 
-    /// <summary>Right edge of a control in window coordinates.</summary>
+    /// <summary>
+    /// Right edge of a control in window coordinates.
+    ///
+    /// Translates the corner, rather than translating the origin and adding Bounds.Width.
+    /// Those are different coordinate spaces once a window's content sits inside the
+    /// LayoutTransformControl that UiScale attaches: the translated point is scaled and the
+    /// width is not, so the error is (scale - 1) x width. Being per-control, it makes two
+    /// genuinely aligned edges measure as though they were 156px apart.
+    /// </summary>
     private static double RightEdge(Visual v, Visual root) =>
-        v.TranslatePoint(default, root)!.Value.X + v.Bounds.Width;
+        v.TranslatePoint(new Point(v.Bounds.Width, 0), root)!.Value.X;
 
     [AvaloniaFact]
     public void The_two_rows_of_the_mods_toolbar_share_a_right_edge()
