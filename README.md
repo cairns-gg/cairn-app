@@ -460,6 +460,24 @@ The rule is not the hidden button. `cairn-cli publish` refuses the same packs, a
 whether or not something is drawn for it. A bundle imported from a *file* has no canonical
 URL, so nobody owns it and it stays yours to publish.
 
+**Export goes too**, and not only for the same reason. A `.cairn` file carries the manifest
+and the lock and nothing else — no canonical URL, no author — so a copy made from somebody
+else's pack reaches the next person as an unowned one they may publish freely. Passing on
+the link keeps it attributed, and keeps whoever you sent it to getting the author's updates.
+
+### Publishing the same thing twice
+
+A revision that differs from its predecessor in nothing but its number tells every follower
+there is an update and then has none for them, so Publish is refused when nothing has
+changed — in the Share window, where the button dims and says which revision it matches,
+and in `cairn-cli publish`.
+
+"Changed" is not only the bytes. Visibility and whether the server address is included are
+part of what was published, so flipping a pack from unlisted to public is a real change
+with nothing to show for it in the document. That is also why the window still opens on an
+unchanged pack: those choices are the reason to come back to one. `PublishRecord.WouldChange`
+is the whole rule, and both front-ends ask it.
+
 That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
 answer to "this could be anything" is to say plainly what it turned out to be. An address
 pasted into the import box gets the same treatment, since a URL from a chat message tells

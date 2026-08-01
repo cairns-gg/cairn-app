@@ -26,6 +26,20 @@ public sealed class PublishRecord
 
     /// <summary>"stripped" or "included" — whether the pack's server address was sent.</summary>
     [JsonPropertyName("connect")] public string Connect { get; set; } = "stripped";
+
+    /// <summary>
+    /// Whether publishing this document with these options would send anything new.
+    ///
+    /// The options count, not only the bytes. A pack republished with the same document
+    /// but flipped from unlisted to public is a real change; one with the same document
+    /// and the same choices is a revision differing from its predecessor in nothing but
+    /// its number — and every follower is told there is an update that isn't one.
+    /// </summary>
+    public bool WouldChange(string publishedJson, bool @public, bool strip) =>
+        !string.Equals(Fingerprint, PackLink.Fingerprint(publishedJson),
+            StringComparison.OrdinalIgnoreCase)
+        || Visibility != (@public ? "public" : "unlisted")
+        || Connect != (strip ? "stripped" : "included");
 }
 
 /// <summary>

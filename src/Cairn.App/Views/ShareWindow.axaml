@@ -74,6 +74,12 @@
                        FontSize="11" TextWrapping="Wrap"
                        Foreground="{DynamicResource VsErrorBrush}" />
 
+            <!-- Says why Publish is dim. Changing the visibility or the server address
+                 makes it go away, which is the point of still being able to open this on a
+                 pack that has not otherwise changed. -->
+            <TextBlock Text="{Binding UnchangedNote}" IsVisible="{Binding NothingToPublish}"
+                       FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="PublishButton" Content="{Binding PublishLabel}"
                         Classes="accent" Padding="16,5" Click="OnPublish"

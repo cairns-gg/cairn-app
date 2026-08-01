@@ -30,9 +30,10 @@ public class ShareWindowTests
     }
 
     private static (ShareWindow Window, ShareViewModel Vm) Show(
-        PublishPlan plan, PackLink? link = null, string? username = "dizzyd")
+        PublishPlan plan, PackLink? link = null, string? username = "dizzyd",
+        Func<bool, string>? documentFor = null)
     {
-        var vm = ShareViewModel.From(plan, "Anego Server", username, link);
+        var vm = ShareViewModel.From(plan, "Anego Server", username, link, documentFor);
         var window = new ShareWindow { DataContext = vm };
         window.Show();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -149,5 +150,93 @@ public class ShareWindowTests
 
         vm.Slug = "anego-hardcore";
         Assert.Equal("cairns.gg/dizzyd/anego-hardcore", vm.UrlPreview);
+    }
+
+    /// <summary>A pack already published unlisted, with its server address stripped.</summary>
+    private static (PackLink Link, Func<bool, string> DocumentFor) AlreadyPublished(
+        string document = """{"pack":"as it went"}""")
+    {
+        var link = new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/dizzyd/anego",
+            Revision = 3,
+            Published = new PublishRecord
+            {
+                Fingerprint = PackLink.Fingerprint(document),
+                Visibility = "unlisted",
+                Connect = "stripped",
+            },
+        };
+
+        return (link, _ => document);
+    }
+
+    [AvaloniaFact]
+    public void An_unchanged_pack_cannot_be_published_again()
+    {
+        var (link, documentFor) = AlreadyPublished();
+        var (window, vm) = Show(Plan(), link, documentFor: documentFor);
+
+        // A revision differing from the last in nothing but its number tells every
+        // follower there is an update and then has none for them.
+        Assert.True(vm.NothingToPublish);
+        Assert.False(vm.CanPublish);
+        Assert.False(Find(window, "PublishButton").IsEnabled);
+        Assert.Contains("revision 3", vm.UnchangedNote);
+    }
+
+    [AvaloniaFact]
+    public void Going_public_is_a_change_even_when_the_document_is_identical()
+    {
+        var (link, documentFor) = AlreadyPublished();
+        var (window, vm) = Show(Plan(), link, documentFor: documentFor);
+
+        Assert.False(vm.CanPublish);
+
+        // Which is why the window still opens on an unchanged pack: visibility is the
+        // reason to come back to one, and blocking on the document alone would strand
+        // somebody whose only remaining edit is this.
+        vm.IsPublic = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.NothingToPublish);
+        Assert.True(vm.CanPublish);
+        Assert.True(Find(window, "PublishButton").IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void Publishing_to_a_different_slug_is_a_change_because_it_is_a_different_url()
+    {
+        var (link, documentFor) = AlreadyPublished();
+        var (_, vm) = Show(Plan(), link, documentFor: documentFor);
+
+        vm.Slug = "anego-hardcore";
+
+        Assert.False(vm.NothingToPublish);
+        Assert.True(vm.CanPublish);
+    }
+
+    [AvaloniaFact]
+    public void A_pack_that_has_actually_changed_publishes()
+    {
+        var (link, _) = AlreadyPublished();
+        var (_, vm) = Show(Plan(), link, documentFor: _ => """{"pack":"edited since"}""");
+
+        Assert.False(vm.NothingToPublish);
+        Assert.True(vm.CanPublish);
+        Assert.Equal("", vm.UnchangedNote);
+    }
+
+    [AvaloniaFact]
+    public void Without_a_document_to_compare_the_check_allows_rather_than_blocks()
+    {
+        // Erring the other way would make a comparison that could not be made into a
+        // refusal to publish at all.
+        var (link, _) = AlreadyPublished();
+        var (_, vm) = Show(Plan(), link);
+
+        Assert.False(vm.NothingToPublish);
+        Assert.True(vm.CanPublish);
     }
 }

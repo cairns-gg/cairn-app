@@ -27,17 +27,35 @@ public sealed class PublishModViewModel(PublishMod mod)
 /// </summary>
 public sealed partial class ShareViewModel : ViewModelBase
 {
-    public ShareViewModel(PublishPlan plan, string packName, string? username, PackLink? link)
+    private readonly PublishRecord? _published;
+    private readonly Func<bool, string>? _documentFor;
+    private readonly string _publishedSlug;
+
+    /// <param name="documentFor">
+    /// What publishing would send, given whether the server address is stripped — a
+    /// function rather than a string because that choice is made in this window, and the
+    /// two documents differ. Compared against what went last time so an unchanged pack
+    /// cannot be published again. Null skips the check, erring toward allowing rather than
+    /// blocking on a comparison that could not be made.
+    /// </param>
+    public ShareViewModel(
+        PublishPlan plan, string packName, string? username, PackLink? link,
+        Func<bool, string>? documentFor = null)
     {
         Plan = plan;
         PackName = packName;
         Username = username;
+        _published = link?.Published;
+        _documentFor = documentFor;
 
         Slug = link?.Url is { Length: > 0 } url
             ? url[(url.LastIndexOf('/') + 1)..]
             : plan.PackId;
 
+        _publishedSlug = Slug;
+
         AlreadyPublished = link?.Published is not null;
+        Revision = link?.Revision ?? 0;
         IsPublic = link?.Published?.Visibility == "public";
 
         // A pack handed to your own players is exactly when the server address is wanted,
@@ -61,6 +79,9 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     public bool AlreadyPublished { get; }
 
+    /// <summary>The revision already published, so "nothing has changed" can name it.</summary>
+    public int Revision { get; }
+
     public IReadOnlyList<PublishModViewModel> Mods { get; init; } = [];
 
     // ---- the choices ----
@@ -72,7 +93,40 @@ public sealed partial class ShareViewModel : ViewModelBase
     /// <summary>Leave the pack's server address out of what gets published.</summary>
     [ObservableProperty] public partial bool StripConnect { get; set; }
 
-    partial void OnSlugChanged(string value) => OnPropertyChanged(nameof(UrlPreview));
+    partial void OnSlugChanged(string value)
+    {
+        OnPropertyChanged(nameof(UrlPreview));
+        RecheckWhetherAnythingChanged();
+    }
+
+    partial void OnStripConnectChanged(bool value) => RecheckWhetherAnythingChanged();
+
+    private void RecheckWhetherAnythingChanged()
+    {
+        OnPropertyChanged(nameof(NothingToPublish));
+        OnPropertyChanged(nameof(UnchangedNote));
+        OnPropertyChanged(nameof(CanPublish));
+    }
+
+    /// <summary>
+    /// True when this would publish a revision identical to the one already up.
+    ///
+    /// The window still opens on an unchanged pack, because the choices in it — who can
+    /// see it, whether the server address goes — are the reason to come back to a pack
+    /// that has not otherwise changed. Changing one of those makes this false again. What
+    /// is refused is only the empty case: a new revision differing from its predecessor in
+    /// nothing but its number, which tells every follower there is an update and then has
+    /// none for them.
+    /// </summary>
+    public bool NothingToPublish =>
+        _published is not null
+        && _documentFor is not null
+        && Slug == _publishedSlug
+        && !_published.WouldChange(_documentFor(StripConnect), IsPublic, StripConnect);
+
+    public string UnchangedNote => NothingToPublish
+        ? $"Nothing has changed since revision {Revision}."
+        : "";
 
     /// <summary>
     /// Turning a pack public strips its server address, unless this pack was already
@@ -86,6 +140,8 @@ public sealed partial class ShareViewModel : ViewModelBase
     partial void OnIsPublicChanged(bool value)
     {
         if (value && !AlreadyPublished) StripConnect = true;
+
+        RecheckWhetherAnythingChanged();
     }
 
     public string UrlPreview => $"cairns.gg/{Username ?? "you"}/{Slug}";
@@ -112,15 +168,16 @@ public sealed partial class ShareViewModel : ViewModelBase
     public string LockProblem => Plan.LockProblem ?? "";
 
     /// <summary>
-    /// False while the lockfile does not cover the manifest. Publishing a pack whose lock
-    /// is stale would advertise reproducibility it cannot deliver, so this refuses rather
-    /// than warns.
+    /// False while the lockfile does not cover the manifest — publishing a pack whose lock
+    /// is stale would advertise reproducibility it cannot deliver, so that refuses rather
+    /// than warns — and false when this would send a revision identical to the last.
     /// </summary>
-    public bool CanPublish => Plan.CanPublish;
+    public bool CanPublish => Plan.CanPublish && !NothingToPublish;
 
     public static ShareViewModel From(
-        PublishPlan plan, string packName, string? username, PackLink? link) =>
-        new(plan, packName, username, link)
+        PublishPlan plan, string packName, string? username, PackLink? link,
+        Func<bool, string>? documentFor = null) =>
+        new(plan, packName, username, link, documentFor)
         {
             // Worst first, the same habit as the version-change dialog: the reason to say
             // no should not need scrolling to.

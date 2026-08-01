@@ -565,7 +565,8 @@
 
                             <Separator Margin="0,4" />
 
-                            <StackPanel Spacing="6">
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding Detail.CanShareFile, FallbackValue=True}">
                                 <TextBlock Text="Share this pack" FontWeight="SemiBold" FontSize="13" />
                                 <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
                                            Text="Writes one file others can import. With the lockfile included they get the exact versions you have." />
@@ -581,6 +582,18 @@
                                          IsVisible="{Binding Detail.HasExported}"
                                          IsReadOnly="True" AcceptsReturn="True" Height="120"
                                          FontFamily="monospace" FontSize="11" />
+                            </StackPanel>
+
+                            <!-- Says where the export controls went. An export carries no
+                                 canonical URL and no author, so a file made from somebody
+                                 else's pack would reach the next person as an unowned one. -->
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}">
+                                <TextBlock Text="Share this pack" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
+                                           Text="This pack is someone else's — pass on its link rather than a copy, so it stays theirs and whoever you send it to keeps getting your author's updates." />
+                                <TextBlock Text="{Binding Detail.ShareUrlLine}" FontSize="11"
+                                           Opacity="0.8" TextWrapping="Wrap" />
                             </StackPanel>
 
                             <Separator Margin="0,4" />

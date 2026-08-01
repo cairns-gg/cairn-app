@@ -494,6 +494,13 @@ internal static class Program
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
 
+        // An export carries the manifest and lock and nothing else — no canonical URL, no
+        // author — so a file made from somebody else's pack reaches the next person as an
+        // unowned one they may publish freely. Pass on the link instead.
+        if (store.LoadLink(id) is { Role: PackRole.Follower, Following: true } following)
+            return Fail($"'{id}' was imported from {following.Url}; pass on that link rather "
+                        + "than a copy, which would arrive with its author stripped off");
+
         var json = store.Export(id, includeLock: !args.Contains("--no-lock"));
         var output = ArgValue(args, "-o");
 
@@ -687,11 +694,13 @@ internal static class Program
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
 
+        var link = store.LoadLink(id);
+
         // A pack imported from someone else is theirs. Checked here as well as in the
         // launcher, which hides its button: a hidden button is a courtesy, and this is the
         // rule.
-        if (store.LoadLink(id) is { Role: PackRole.Follower, Following: true } following)
-            return Fail($"'{id}' was imported from {following.Url} and follows its author; "
+        if (link is { Role: PackRole.Follower, Following: true })
+            return Fail($"'{id}' was imported from {link.Url} and follows its author; "
                         + "publishing it would re-issue their pack under your name");
 
         if (CairnsSession.Load() is not { } session)
@@ -719,6 +728,14 @@ internal static class Program
 
         var document = store.PublishedDocument(id, strip);
         var slug = ArgValue(args, "--slug") ?? id;
+
+        // A revision differing from its predecessor in nothing but its number tells every
+        // follower there is an update and then has none for them. Visibility and the
+        // server address count as changes; the bytes alone are not the whole question.
+        if (link is { Published: { } last, Url: var at }
+            && slug == at[(at.LastIndexOf('/') + 1)..]
+            && !last.WouldChange(document, isPublic, strip))
+            return Fail($"'{id}' has not changed since revision {link.Revision}");
 
         var client = new CairnsClient(http, session.Server);
         var result = await client.PublishAsync(session, document, slug, isPublic);

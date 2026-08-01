@@ -2598,6 +2598,14 @@ public class MainWindowTests : IDisposable
         Assert.NotNull(detail.Error);
         Assert.Contains("under your name", detail.Error!);
         Assert.Null(detail.Publish);
+
+        // Export goes too, and not only for the same reason. A .cairn file carries the
+        // manifest and lock and nothing else — no canonical URL, no author — so a copy
+        // made from somebody else's pack reaches the next person as an unowned one they
+        // may publish freely. Handing on the link keeps it attributed.
+        Assert.False(detail.CanShareFile);
+        Assert.False(detail.ExportCommand.CanExecute(null));
+        Assert.DoesNotContain(VisibleText(window), t => t == "Export…");
     }
 
     [AvaloniaFact]

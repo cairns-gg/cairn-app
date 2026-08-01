@@ -386,6 +386,8 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShareUrlLine));
         OnPropertyChanged(nameof(IsFollowing));
         OnPropertyChanged(nameof(FollowingLine));
+        OnPropertyChanged(nameof(CanShareFile));
+        ExportCommand.NotifyCanExecuteChanged();
     }
 
     public string ShareLabel => Share.Label;
@@ -409,6 +411,9 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public string FollowingLine =>
         IsFollowing ? $"imported from {ShareUrlLine} — it stays theirs to publish" : "";
+
+    /// <summary>Whether the export controls are offered at all. See <see cref="Export"/>.</summary>
+    public bool CanShareFile => !IsFollowing;
 
     private void ReloadShare() => Share = _store.ShareStateFor(Id);
 
@@ -791,6 +796,10 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     private bool CanSaveSettings => NotBusy && !DescriptionTooLong;
 
+    /// <summary>See <see cref="Export"/> — a file made from a followed pack loses its
+    /// author on the way out.</summary>
+    private bool CanExport => NotBusy && !IsFollowing;
+
     /// <summary>Re-evaluates which install serves this pack, after a version edit or a new install.</summary>
     public void RefreshGameState()
     {
@@ -1139,7 +1148,9 @@ public partial class PackDetailViewModel : ViewModelBase
                 Manifest, _store.LoadLock(Id), _moddb,
                 new Progress<string>(id => LaunchStage = $"Checking {id}…"));
 
-            Publish = ShareViewModel.From(plan, Title, session.Username, _store.LoadLink(Id));
+            Publish = ShareViewModel.From(
+                plan, Title, session.Username, _store.LoadLink(Id),
+                strip => _store.PublishedDocument(Id, strip));
 
             if (ConfirmPublish is null || !await ConfirmPublish(Publish)) return;
 
@@ -1401,8 +1412,14 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>
     /// Writes the pack as one shareable file. Including the lock is what makes the
     /// recipient reproduce this exact mod set rather than merely a similar one.
+    ///
+    /// Refused for a pack you follow, and not only for the same reason publishing is. An
+    /// export carries the manifest and lock and nothing else — no canonical URL, no
+    /// author — so a file made from somebody else's pack arrives at the next person as an
+    /// unowned one they may publish freely. Handing out the link keeps it attributed;
+    /// handing out a file launders it.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(NotBusy))]
+    [RelayCommand(CanExecute = nameof(CanExport))]
     private void Export()
     {
         try

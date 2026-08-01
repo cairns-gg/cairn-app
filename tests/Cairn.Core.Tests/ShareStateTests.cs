@@ -164,4 +164,37 @@ public class ShareStateTests : IDisposable
 
         Assert.Equal(ShareStatus.Pending, _store.ShareStateFor("anego").Status);
     }
+
+    private static PublishRecord Sent(string document, bool @public = false, bool strip = true) =>
+        new()
+        {
+            Fingerprint = PackLink.Fingerprint(document),
+            Visibility = @public ? "public" : "unlisted",
+            Connect = strip ? "stripped" : "included",
+        };
+
+    [Fact]
+    public void Republishing_the_same_document_with_the_same_choices_sends_nothing_new()
+    {
+        // A revision differing from its predecessor in nothing but its number tells every
+        // follower there is an update and then has none for them.
+        Assert.False(Sent("{\"pack\":1}")
+            .WouldChange("{\"pack\":1}", @public: false, strip: true));
+    }
+
+    [Fact]
+    public void Changed_bytes_are_a_change() =>
+        Assert.True(Sent("{\"pack\":1}")
+            .WouldChange("{\"pack\":2}", @public: false, strip: true));
+
+    [Theory]
+    [InlineData(true, true)]    // unlisted -> public
+    [InlineData(false, false)]  // stripped -> included
+    public void And_so_are_the_choices_even_when_the_bytes_are_identical(bool @public, bool strip)
+    {
+        // Why the check is not the fingerprint alone: going public is a real change with
+        // nothing to show for it in the document, and refusing it would strand somebody
+        // whose only remaining edit is the one this field controls.
+        Assert.True(Sent("{\"pack\":1}").WouldChange("{\"pack\":1}", @public, strip));
+    }
 }
