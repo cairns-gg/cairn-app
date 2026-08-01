@@ -419,6 +419,52 @@ hashes to match. **Loopback is exempt**, because those packets never leave the m
 `http://localhost:5080/you/pack.json` imports, `http://cairns.gg/…` does not. The check
 is `PackSources`, in Core, so both front-ends answer it the same way.
 
+## Opening a pack from the web
+
+A pack page has an **Open in Cairn** button behind a `cairn://` link, which is the whole
+point of the scheme: most people will never install the CLI.
+
+```
+cairn://cairns.gg/dizzyd/anego   ->   https://cairns.gg/dizzyd/anego.json
+cairn://localhost:5080/me/pack   ->   http://localhost:5080/me/pack.json
+```
+
+A host and two segments is the entire grammar (`PackUri`), and the launcher puts back the
+https itself — loopback excepted, so a link on a local server works while testing. There is
+deliberately no URL nested inside the URL: anybody's web page can contain one of these, and
+a nested address would mean parsing an attacker's string and deciding which schemes to
+honour.
+
+**Following a link never installs anything.** It opens the import form with the address
+filled in and stops; a person still presses Import, and even that only writes a manifest —
+mods arrive on a sync they ask for.
+
+The link reaches the app two ways, and both are wired: macOS hands a *running* instance the
+URL through an activation event, while Windows and Linux launch the handler afresh with it
+in `argv`. Handling either alone leaves half the platforms dead.
+
+### Registration is macOS-only so far
+
+| platform | how | state |
+|---|---|---|
+| macOS | `CFBundleURLTypes` in the bundle, written by `build-macos-app.sh` | **works** — verified cold and with the app already running |
+| Windows | `HKCU\Software\Classes\cairn`, needing either an installer or self-registration on start | **not done** — the link does nothing |
+| Linux | a `.desktop` file carrying `MimeType=x-scheme-handler/cairn` | **not done** — the link does nothing |
+
+Windows also wants single-instance handling before this is pleasant there: with no installer
+it launches a *new* copy per click, and two launchers sharing one `~/.cairn` can race.
+
+On macOS the scheme binds once LaunchServices has seen the bundle somewhere it scans, so a
+freshly built `artifacts/` copy may need `lsregister -f` before a link finds it.
+
+When a click seems to do nothing, the app writes one line to stderr saying whether the link
+arrived and whether it was refused — the three causes (never delivered, delivered and
+refused, worked but the window is behind something) otherwise look identical:
+
+```bash
+open --stdout /tmp/cairn.log --stderr /tmp/cairn.log -n artifacts/osx-arm64/Cairn.app
+```
+
 Release artifacts, all platforms at once:
 
 ```bash

@@ -2421,4 +2421,35 @@ public class MainWindowTests : IDisposable
 
         Assert.All(detail.Mods, m => Assert.False(m.IsPinned));
     }
+
+    [AvaloniaFact]
+    public void Following_a_link_opens_the_import_form_and_stops_there()
+    {
+        var (_, vm) = Show();
+        var before = vm.Packs.Count;
+
+        Assert.True(vm.FollowLink("cairn://cairns.gg/dizzyd/anego-server"));
+
+        // Filled in, shown, and nothing further. A link on somebody's web page gets to
+        // ask; it does not get to answer. The person still presses Import, having seen
+        // the address it resolved to.
+        Assert.True(vm.ShowImport);
+        Assert.Equal("https://cairns.gg/dizzyd/anego-server.json", vm.ImportText);
+        Assert.Equal(before, vm.Packs.Count);
+        Assert.Null(vm.ImportError);
+    }
+
+    [AvaloniaFact]
+    public void A_link_that_is_not_ours_changes_nothing()
+    {
+        var (_, vm) = Show();
+
+        Assert.False(vm.FollowLink("https://evil.example/pack.json"));
+        Assert.False(vm.FollowLink("cairn://cairns.gg/too/many/segments"));
+
+        // Not merely refused: it must not have opened the form either, or a rejected link
+        // leaves the launcher sitting there looking mid-import for no reason.
+        Assert.False(vm.ShowImport);
+        Assert.Equal("", vm.ImportText);
+    }
 }

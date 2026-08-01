@@ -454,6 +454,24 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Follows a <c>cairn://</c> link from a pack page: opens the import pane with the
+    /// address filled in, and stops there.
+    ///
+    /// Stopping there is the point. Any web page anywhere can hold one of these links, so
+    /// the click opens a dialogue and never completes it — the person still presses
+    /// Import, having seen where it came from. Even then nothing is downloaded: import
+    /// writes a manifest, and mods arrive on a sync they ask for.
+    /// </summary>
+    public bool FollowLink(string link)
+    {
+        if (!PackUri.TryGetDocumentUrl(link, out var url)) return false;
+
+        BeginImport();
+        ImportText = url;
+        return true;
+    }
+
+    /// <summary>
     /// Accepts either a pasted bundle or a URL to one, so a pack can be shared as a file,
     /// a gist link, or a blob of text in a chat message.
     /// </summary>

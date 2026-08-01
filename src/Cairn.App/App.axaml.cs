@@ -21,10 +21,15 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainViewModel(),
-            };
+            var model = new MainViewModel();
+
+            desktop.MainWindow = new MainWindow { DataContext = model };
+
+            // Both routes a cairn:// link can arrive by — see PackLinks.
+            PackLinks.Listen(this, model);
+
+            if (PackLinks.FromArguments(desktop.Args ?? []) is { } link)
+                PackLinks.Follow(this, model, link);
         }
 
         base.OnFrameworkInitializationCompleted();

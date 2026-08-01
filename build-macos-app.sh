@@ -97,6 +97,22 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>public.app-category.utilities</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <!-- "Open in Cairn", on a pack page. LaunchServices reads this when it first sees
+         the bundle, so the scheme starts working once the app has been somewhere macOS
+         scans — building it is not enough. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>$BUNDLE_ID.pack</string>
+        <key>CFBundleTypeRole</key>
+        <string>Viewer</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>cairn</string>
+        </array>
+      </dict>
+    </array>
 $ICON_KEY
   </dict>
 </plist>
