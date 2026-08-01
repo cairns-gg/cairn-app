@@ -435,9 +435,21 @@ deliberately no URL nested inside the URL: anybody's web page can contain one of
 a nested address would mean parsing an attacker's string and deciding which schemes to
 honour.
 
-**Following a link never installs anything.** It opens the import form with the address
-filled in and stops; a person still presses Import, and even that only writes a manifest —
-mods arrive on a sync they ask for.
+**Following a link never installs anything.** It fetches the document and shows what is in
+it — pack name, who published it, the host it came from, the game version, every mod and
+the exact version each would install, and the server it would launch into if it has one —
+then waits for a yes or a no. Saying yes still only writes a manifest; mods arrive on a
+sync they ask for.
+
+That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
+answer to "this could be anything" is to say plainly what it turned out to be. An address
+pasted into the import box gets the same treatment, since a URL from a chat message tells
+you no more about its contents than one on a page. Text or a file you are holding imports
+directly.
+
+A name already in use is caught on the form rather than after agreeing — it is the one
+thing on that dialog that was fixable, and finding out afterwards means the dialog is gone
+and an error is in its place.
 
 The link reaches the app two ways, and both are wired: macOS hands a *running* instance the
 URL through an activation event, while Windows and Linux launch the handler afresh with it

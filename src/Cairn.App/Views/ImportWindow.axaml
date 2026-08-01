@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.ImportWindow"
+        x:DataType="vm:ImportViewModel"
+        Title="Add this pack?"
+        Width="580" Height="520"
+        MinWidth="440" MinHeight="340"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <!--
+        Same shape as the share and version-change dialogs: the mods scroll, and what
+        commits them keeps its place at the bottom however long the list is.
+    -->
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="3" Margin="0,0,0,10">
+            <TextBlock Text="{Binding PackName}" FontSize="16" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+
+            <!-- Who and where, directly under the name. This is the whole basis on which
+                 somebody can judge a link they were sent. -->
+            <TextBlock Text="{Binding Provenance}" FontSize="11" Opacity="0.7"
+                       TextWrapping="Wrap" />
+
+            <TextBlock Text="{Binding Summary}" FontSize="12" Opacity="0.85"
+                       Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
+
+            <!-- A pack can carry a server address, and adding it means the pack will
+                 launch straight into somebody's server. Usually the point; never a
+                 surprise worth saving for later. -->
+            <Border IsVisible="{Binding HasConnect}" Padding="10,7" CornerRadius="1"
+                    Background="{DynamicResource VsWarningFillBrush}"
+                    BorderBrush="{DynamicResource VsWarningBrush}" BorderThickness="1">
+                <TextBlock Text="{Binding ConnectNote}" FontSize="11" TextWrapping="Wrap" />
+            </Border>
+
+            <TextBlock Text="{Binding VersionNote}" FontSize="11" Opacity="0.7"
+                       TextWrapping="Wrap" />
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="Install as" FontSize="12" Opacity="0.7"
+                           VerticalAlignment="Center" MinWidth="70" />
+                <TextBox Grid.Column="1" Name="IdBox" Text="{Binding AsId}" />
+            </Grid>
+
+            <TextBlock Text="{Binding IdConflict}" IsVisible="{Binding HasIdConflict}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsErrorBrush}" />
+
+            <CheckBox IsChecked="{Binding Reproduce}" IsEnabled="{Binding HasLock}"
+                      FontSize="12" Content="Reproduce the author's exact versions" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Name="AddButton" Content="Add pack" Classes="accent" Padding="16,5"
+                        Click="OnAdd" IsEnabled="{Binding CanAdd}" />
+                <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                        Click="OnCancel" IsCancel="True" />
+            </StackPanel>
+
+            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       Text="Nothing downloads yet — adding this creates the pack, and the mods arrive when you sync it." />
+        </StackPanel>
+
+        <Border BorderBrush="{DynamicResource VsBorderBrush}" BorderThickness="1"
+                CornerRadius="1" Padding="2">
+            <ScrollViewer Name="ModList"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Mods}" Margin="8,6">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ImportModViewModel">
+                            <Grid ColumnDefinitions="*,110,80" Margin="0,3">
+                                <TextBlock Grid.Column="0" Text="{Binding ModId}" FontSize="12"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding Version}" FontSize="11"
+                                           Opacity="0.75" FontFamily="monospace" />
+                                <TextBlock Grid.Column="2" Text="{Binding Note}" FontSize="11"
+                                           Opacity="0.6" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </DockPanel>
+</Window>

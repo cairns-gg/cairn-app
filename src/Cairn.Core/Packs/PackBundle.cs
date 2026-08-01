@@ -20,6 +20,20 @@ public sealed class PackBundle
     [JsonPropertyName("pack")] public PackManifest? Pack { get; set; }
     [JsonPropertyName("lock")] public PackLock? Lock { get; set; }
 
+    /// <summary>
+    /// Stamped by a server on publish; absent from a file someone exported by hand. Read
+    /// rather than ignored so the import dialog can say where a pack came from and who put
+    /// it there — the questions worth answering before taking on somebody else's mod list.
+    ///
+    /// Never written back out. <see cref="Serialize"/> builds a bundle from the manifest
+    /// and lock alone, so exporting a pack you imported does not re-issue it under its
+    /// original author's name.
+    /// </summary>
+    [JsonPropertyName("publishedBy")] public string? PublishedBy { get; set; }
+
+    /// <summary>Where the server said this lives. See <see cref="PublishedBy"/>.</summary>
+    [JsonPropertyName("canonicalUrl")] public string? CanonicalUrl { get; set; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

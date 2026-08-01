@@ -27,6 +27,7 @@ public partial class MainWindow : Window
         vm.OpenPreferences = ShowPreferencesAsync;
         vm.ConfirmVersionChange = ConfirmVersionChangeAsync;
         vm.ConfirmPublish = ConfirmPublishAsync;
+        vm.ConfirmImport = ConfirmImportAsync;
         vm.Confirm = ConfirmAsync;
     }
 
@@ -35,6 +36,12 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmPublishAsync(ShareViewModel share) =>
         new ShareWindow { DataContext = share }.ShowDialog<bool>(this);
+
+    /// <summary>
+    /// True only if Add was pressed. Dismissing the window any other way adds nothing.
+    /// </summary>
+    private Task<bool> ConfirmImportAsync(ImportViewModel offer) =>
+        new ImportWindow { DataContext = offer }.ShowDialog<bool>(this);
 
     private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
         new PreferencesWindow { DataContext = preferences }.ShowDialog(this);

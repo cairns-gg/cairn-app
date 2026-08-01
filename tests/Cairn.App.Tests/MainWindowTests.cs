@@ -71,10 +71,12 @@ public class MainWindowTests : IDisposable
             new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static (MainWindow Window, MainViewModel Vm) Show()
+    private static (MainWindow Window, MainViewModel Vm) Show() => Show(new OfflineHandler());
+
+    private static (MainWindow Window, MainViewModel Vm) Show(OfflineHandler http)
     {
         // Offline: showing a pack sends its rows to ModDB for names and icons.
-        var vm = new MainViewModel(new OfflineHandler());
+        var vm = new MainViewModel(http);
         var window = new MainWindow { DataContext = vm };
         window.Show();
 
@@ -83,6 +85,7 @@ public class MainWindowTests : IDisposable
         // what these tests inspect; the dialogs have their own tests.
         vm.Confirm = null;
         vm.ConfirmVersionChange = null;
+        vm.ConfirmImport = null;
         if (vm.Detail is not null) vm.Detail.ConfirmVersionChange = null;
 
         return (window, vm);
@@ -2422,34 +2425,177 @@ public class MainWindowTests : IDisposable
         Assert.All(detail.Mods, m => Assert.False(m.IsPinned));
     }
 
+    /// <summary>
+    /// A published document, as a server serves one — manifest, lock, and the fields the
+    /// server stamps on. The mods are deliberately listed out of order and pinned only in
+    /// the lock, which is the normal case and the one worth rendering correctly.
+    /// </summary>
+    private static string Published(string id = "anego-server", string? connect = null) =>
+        JsonSerializer.Serialize(new
+        {
+            formatVersion = 1,
+            pack = new
+            {
+                id,
+                name = "Anego Server",
+                gameVersion = "1.22.5",
+                connect,
+                mods = new[] { new { modid = "glassview" }, new { modid = "carryon" } },
+            },
+            @lock = new
+            {
+                gameVersion = "1.22.5",
+                mods = new[]
+                {
+                    new { modid = "glassview", version = "1.3.0", filename = "g.zip",
+                          url = "https://x/g.zip", sha256 = "aa" },
+                    new { modid = "carryon", version = "2.1.0", filename = "c.zip",
+                          url = "https://x/c.zip", sha256 = "bb" },
+                },
+            },
+            publishedBy = "dizzyd",
+            canonicalUrl = $"https://cairns.gg/dizzyd/{id}",
+        });
+
     [AvaloniaFact]
-    public void Following_a_link_opens_the_import_form_and_stops_there()
+    public async Task Following_a_link_shows_what_it_would_install_before_anything_happens()
     {
-        var (_, vm) = Show();
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego-server.json", Published());
+
+        var (_, vm) = Show(http);
         var before = vm.Packs.Count;
 
-        Assert.True(vm.FollowLink("cairn://cairns.gg/dizzyd/anego-server"));
+        ImportViewModel? shown = null;
+        vm.ConfirmImport = offer => { shown = offer; return Task.FromResult(false); };
 
-        // Filled in, shown, and nothing further. A link on somebody's web page gets to
-        // ask; it does not get to answer. The person still presses Import, having seen
-        // the address it resolved to.
-        Assert.True(vm.ShowImport);
-        Assert.Equal("https://cairns.gg/dizzyd/anego-server.json", vm.ImportText);
+        Assert.True(await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/anego-server"));
+
+        // Everything needed to judge a link somebody sent: what it is, who published it,
+        // where it came from, and every mod and version it would bring.
+        Assert.NotNull(shown);
+        Assert.Equal("Anego Server", shown!.PackName);
+        Assert.Equal("dizzyd", shown.PublishedBy);
+        Assert.Equal("cairns.gg", shown.Source);
+        Assert.Equal("1.22.5", shown.GameVersion);
+        Assert.Equal(["carryon", "glassview"], shown.Mods.Select(m => m.ModId));
+        Assert.Equal(["2.1.0", "1.3.0"], shown.Mods.Select(m => m.Version));
+
+        // And saying no means no.
         Assert.Equal(before, vm.Packs.Count);
-        Assert.Null(vm.ImportError);
     }
 
     [AvaloniaFact]
-    public void A_link_that_is_not_ours_changes_nothing()
+    public async Task Accepting_the_dialog_adds_the_pack()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego-server.json", Published());
+
+        var (_, vm) = Show(http);
+        vm.ConfirmImport = _ => Task.FromResult(true);
+
+        await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/anego-server");
+
+        Assert.Contains(vm.Packs, p => p.Id == "anego-server");
+        Assert.Equal("anego-server", vm.SelectedPack!.Id);
+
+        // Added, not installed: the mods are named in the manifest and arrive on a sync.
+        Assert.Empty(Directory.EnumerateFiles(
+            Path.Combine(_home, "packs", "anego-server", "Mods")));
+    }
+
+    [AvaloniaFact]
+    public async Task The_dialog_names_the_server_a_pack_would_launch_into()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego-server.json", Published(connect: "play.anego.example:42420"));
+
+        var (_, vm) = Show(http);
+
+        ImportViewModel? shown = null;
+        vm.ConfirmImport = offer => { shown = offer; return Task.FromResult(false); };
+
+        await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/anego-server");
+
+        // Adding this pack means it launches into somebody's server. Usually the point,
+        // and never something to find out afterwards.
+        Assert.True(shown!.HasConnect);
+        Assert.Contains("play.anego.example:42420", shown.ConnectNote);
+    }
+
+    [AvaloniaFact]
+    public async Task A_name_already_in_use_is_caught_on_the_form_not_after_saying_yes()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego.json", Published(id: "anego"));   // the fixture pack's id
+
+        var (_, vm) = Show(http);
+
+        ImportViewModel? shown = null;
+        vm.ConfirmImport = offer => { shown = offer; return Task.FromResult(false); };
+
+        await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/anego");
+
+        Assert.True(shown!.HasIdConflict);
+        Assert.False(shown.CanAdd);
+
+        // And it clears when the name does, rather than needing the dialog reopened.
+        shown.AsId = "anego-theirs";
+        Assert.False(shown.HasIdConflict);
+        Assert.True(shown.CanAdd);
+    }
+
+    [AvaloniaFact]
+    public async Task A_withdrawn_pack_says_so_rather_than_showing_an_empty_dialog()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/gone.json", """{"withdrawn":true}""", HttpStatusCode.Gone);
+
+        var (_, vm) = Show(http);
+        vm.ConfirmImport = _ => Task.FromResult(true);   // would say yes, is never asked
+
+        await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/gone");
+
+        Assert.NotNull(vm.ImportError);
+        Assert.Contains("withdrawn", vm.ImportError!);
+
+        // The address stays put so it can be looked at, rather than the failure landing
+        // nowhere because no pane was open when the link was followed.
+        Assert.True(vm.ShowImport);
+        Assert.Equal("https://cairns.gg/dizzyd/gone.json", vm.ImportText);
+    }
+
+    [AvaloniaFact]
+    public async Task A_link_that_is_not_ours_changes_nothing()
     {
         var (_, vm) = Show();
 
-        Assert.False(vm.FollowLink("https://evil.example/pack.json"));
-        Assert.False(vm.FollowLink("cairn://cairns.gg/too/many/segments"));
+        Assert.False(await vm.FollowLinkAsync("https://evil.example/pack.json"));
+        Assert.False(await vm.FollowLinkAsync("cairn://cairns.gg/too/many/segments"));
 
         // Not merely refused: it must not have opened the form either, or a rejected link
         // leaves the launcher sitting there looking mid-import for no reason.
         Assert.False(vm.ShowImport);
         Assert.Equal("", vm.ImportText);
+    }
+
+    [AvaloniaFact]
+    public async Task Pasting_an_address_gets_the_same_dialog_as_clicking_a_link()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego-server.json", Published());
+
+        var (_, vm) = Show(http);
+
+        var asked = false;
+        vm.ConfirmImport = _ => { asked = true; return Task.FromResult(false); };
+
+        vm.BeginImportCommand.Execute(null);
+        vm.ImportText = "https://cairns.gg/dizzyd/anego-server.json";
+        await vm.ImportPackCommand.ExecuteAsync(null);
+
+        // A URL pasted from a chat message says no more about what is in it than one
+        // clicked from a page does.
+        Assert.True(asked);
     }
 }

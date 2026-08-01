@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -454,62 +455,55 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Follows a <c>cairn://</c> link from a pack page: opens the import pane with the
-    /// address filled in, and stops there.
+    /// Follows a <c>cairn://</c> link from a pack page: fetches what it names and shows it,
+    /// for a yes or a no.
     ///
-    /// Stopping there is the point. Any web page anywhere can hold one of these links, so
-    /// the click opens a dialogue and never completes it — the person still presses
-    /// Import, having seen where it came from. Even then nothing is downloaded: import
-    /// writes a manifest, and mods arrive on a sync they ask for.
+    /// A link can be on anybody's web page, so what makes this safe is not treating the
+    /// link as trusted but showing what it resolved to — who published it, from what host,
+    /// and every mod and version it would bring — and doing nothing until somebody agrees.
+    /// Even then nothing downloads: adding writes a manifest, and mods arrive on a sync
+    /// they ask for.
     /// </summary>
-    public bool FollowLink(string link)
+    public async Task<bool> FollowLinkAsync(string link)
     {
         if (!PackUri.TryGetDocumentUrl(link, out var url)) return false;
 
-        BeginImport();
-        ImportText = url;
+        await OfferAsync(url);
         return true;
     }
 
     /// <summary>
     /// Accepts either a pasted bundle or a URL to one, so a pack can be shared as a file,
     /// a gist link, or a blob of text in a chat message.
+    ///
+    /// An address goes through the same dialog a link does — pasting a URL from a chat
+    /// message tells you no more about what is in it than clicking one does. Text or a
+    /// file in your hand is different, and imports directly.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanImport))]
     private async Task ImportPack()
     {
+        var source = ImportText.Trim();
+
+        if (PackSources.IsRemote(source))
+        {
+            await OfferAsync(source);
+            return;
+        }
+
         ImportBusy = true;
         ImportError = null;
 
         try
         {
-            var source = ImportText.Trim();
+            var json = File.Exists(source) ? File.ReadAllText(source) : source;
 
-            // A pack decides which mods get installed, so it must not arrive over a
-            // connection anyone on the path can rewrite. Loopback has no such path.
-            if (PackSources.IsRewritableInFlight(source))
-            {
-                ImportError = "Refusing to import over http — use an https:// address.";
-                return;
-            }
-
-            var json = PackSources.IsRemote(source)
-                ? await _http.GetStringAsync(source)
-                : File.Exists(source) ? File.ReadAllText(source) : source;
-
-            var bundle = PackBundle.Parse(json);
-            var manifest = _store.Import(
-                bundle,
+            Added(_store.Import(
+                PackBundle.Parse(json),
                 // Slugged like a new pack's name, so "Anego Copy" is accepted here rather
                 // than rejected for containing a space.
                 string.IsNullOrWhiteSpace(ImportAsId) ? null : PackId.FromOrFallback(ImportAsId),
-                ImportReproduce);
-
-            Note($"imported pack '{manifest.Id}' ({manifest.Mods.Count} mods)");
-            IsImporting = false;
-
-            LoadPacks();
-            SelectedPack = Packs.FirstOrDefault(p => p.Id == manifest.Id);
+                ImportReproduce));
         }
         catch (Exception e)
         {
@@ -519,6 +513,85 @@ public partial class MainViewModel : ViewModelBase
         {
             ImportBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Fetches a pack from a URL and puts it in front of somebody before anything happens.
+    ///
+    /// Errors land on the import pane rather than in a dialog with blanks in it — a pack
+    /// that could not be fetched has nothing to show, and "here is a form full of nothing,
+    /// approve it?" is worse than a sentence saying what went wrong.
+    /// </summary>
+    private async Task OfferAsync(string url)
+    {
+        ImportBusy = true;
+        ImportError = null;
+
+        try
+        {
+            // A pack decides which mods get installed, so it must not arrive over a
+            // connection anyone on the path can rewrite. Loopback has no such path.
+            if (PackSources.IsRewritableInFlight(url))
+            {
+                ShowImportError("Refusing to import over http — use an https:// address.", url);
+                return;
+            }
+
+            var response = await _http.GetAsync(url);
+
+            // A withdrawn pack answers rather than 404s, precisely so this can say what
+            // happened instead of "not found".
+            if (response.StatusCode == HttpStatusCode.Gone)
+            {
+                ShowImportError("That pack was withdrawn by whoever published it.", url);
+                return;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var bundle = PackBundle.Parse(await response.Content.ReadAsStringAsync());
+            var offer = new ImportViewModel(bundle, url, id => _store.Exists(id));
+
+            if (ConfirmImport is null || !await ConfirmImport(offer))
+            {
+                IsImporting = false;
+                return;
+            }
+
+            Added(_store.Import(bundle, PackId.FromOrFallback(offer.AsId), offer.Reproduce));
+        }
+        catch (Exception e)
+        {
+            ShowImportError(e.Message, url);
+        }
+        finally
+        {
+            ImportBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Puts a failure somewhere it can be read and retried. A link followed from a browser
+    /// has no pane open yet, so this opens one rather than failing invisibly.
+    /// </summary>
+    private void ShowImportError(string message, string url)
+    {
+        if (!IsImporting)
+        {
+            BeginImport();
+            ImportText = url;
+        }
+
+        ImportError = message;
+    }
+
+    private void Added(PackManifest manifest)
+    {
+        Note($"imported pack '{manifest.Id}' ({manifest.Mods.Count} mods)");
+        IsImporting = false;
+
+        LoadPacks();
+        SelectedPack = Packs.FirstOrDefault(p => p.Id == manifest.Id);
     }
 
     private bool CanImport => !ImportBusy && !string.IsNullOrWhiteSpace(ImportText);
@@ -552,6 +625,12 @@ public partial class MainViewModel : ViewModelBase
             if (Detail is not null) Detail.ConfirmVersionChange = value;
         }
     }
+
+    /// <summary>
+    /// Shows a fetched pack and returns whether to add it. Supplied by the view; when
+    /// absent — headless tests — nothing is added, which is the safe way to be missing.
+    /// </summary>
+    public Func<ImportViewModel, Task<bool>>? ConfirmImport { get; set; }
 
     /// <summary>Set by the view; same arrangement as ConfirmVersionChange above.</summary>
     public Func<ShareViewModel, Task<bool>>? ConfirmPublish

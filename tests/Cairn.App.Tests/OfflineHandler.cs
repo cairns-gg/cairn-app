@@ -14,10 +14,30 @@ public sealed class OfflineHandler : HttpMessageHandler
 {
     public int Requests { get; private set; }
 
+    /// <summary>
+    /// Replies to name it, for the few tests that need a URL to answer with something —
+    /// following a pack link, mostly. Keyed by whatever the URL ends with, so a test can
+    /// say "/dizzyd/anego.json" without spelling out a host.
+    /// </summary>
+    public Dictionary<string, HttpResponseMessage> Replies { get; } = [];
+
+    public HttpResponseMessage Serve(string endingWith, string body,
+        HttpStatusCode status = HttpStatusCode.OK) =>
+        Replies[endingWith] = new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body),
+        };
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken ct)
     {
         Requests++;
+
+        var url = request.RequestUri?.ToString() ?? "";
+
+        foreach (var (ending, reply) in Replies)
+            if (url.EndsWith(ending, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(reply);
 
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
         {

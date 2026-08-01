@@ -53,16 +53,17 @@ public static class PackLinks
     /// happened.
     /// </summary>
     public static void Follow(Application app, MainViewModel model, string link) =>
-        Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(async () =>
         {
-            if (!model.FollowLink(link))
-            {
-                Trace($"refused {link}");
-                return;
-            }
+            // Logged on arrival rather than only on the way out. What follows fetches the
+            // pack and then waits on a modal dialog, so a line written afterwards says
+            // nothing for as long as the dialog is open — which is exactly the window in
+            // which somebody wonders whether their click did anything.
+            Trace($"received {link}");
 
-            Trace($"opened {link}");
-
+            // Raised before the fetch for the same reason: the dialog is modal, and
+            // raising the window after it opens would put it behind whatever the browser
+            // left in front.
             if (app.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime
                 { MainWindow: { } window })
             {
@@ -71,16 +72,17 @@ public static class PackLinks
 
                 window.Activate();
             }
+
+            if (!await model.FollowLinkAsync(link)) Trace($"refused {link}");
         });
 
     /// <summary>
     /// The only trace of a link there is.
     ///
-    /// "I clicked the button and nothing happened" has three quite different causes — the
-    /// OS handed the link to nobody, it reached us and was refused, or it worked and the
-    /// window is behind something. Silence looks identical in all three. One line
-    /// separates them, and on macOS it can be read back with
-    /// <c>open --stdout /tmp/cairn.log</c>.
+    /// "I clicked the button and nothing happened" has several quite different causes — the
+    /// OS handed the link to nobody, it arrived and was refused, or it arrived and the
+    /// window is behind something. Silence looks identical in all of them. On macOS this
+    /// can be read back with <c>open --stdout /tmp/cairn.log</c>.
     /// </summary>
     private static void Trace(string what)
     {
