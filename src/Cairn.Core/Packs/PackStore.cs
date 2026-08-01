@@ -127,7 +127,9 @@ public sealed class PackStore
         Directory.CreateDirectory(ModsDir(manifest.Id));
     }
 
-    public PackManifest Create(string id, string gameVersion, string? name = null, string? connect = null)
+    public PackManifest Create(
+        string id, string gameVersion, string? name = null, string? connect = null,
+        string? description = null)
     {
         if (Exists(id)) throw new InvalidOperationException($"Pack '{id}' already exists.");
 
@@ -135,6 +137,7 @@ public sealed class PackStore
         {
             Id = id,
             Name = string.IsNullOrWhiteSpace(name) ? id : name,
+            Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
             GameVersion = gameVersion,
             Connect = string.IsNullOrWhiteSpace(connect) ? null : connect,
         };

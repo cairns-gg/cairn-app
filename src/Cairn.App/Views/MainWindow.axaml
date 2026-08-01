@@ -497,6 +497,17 @@
                                 <TextBlock Text="Display name" FontSize="12" Opacity="0.7" />
                                 <TextBox Text="{Binding Detail.EditName}" />
                             </StackPanel>
+
+                            <!-- Travels with the pack, so it is worth writing before
+                                 sharing rather than after somebody asks what it is. -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Description" FontSize="12" Opacity="0.7" />
+                                <TextBox Text="{Binding Detail.EditDescription}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" Height="64"
+                                         Watermark="What is this pack for, and who is it for?" />
+                                <TextBlock Text="{Binding Detail.DescriptionRoom}" FontSize="11"
+                                           Opacity="0.55" HorizontalAlignment="Right" />
+                            </StackPanel>
                             <!--
                                 Changing the game version re-resolves every mod, so it is
                                 not a field you edit and save with the others: pick a target,

@@ -146,6 +146,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _packData = new PackData(store);
 
         EditName = manifest.Name ?? manifest.Id;
+        EditDescription = manifest.Description ?? "";
         EditConnect = manifest.Connect ?? "";
         GameVersionChoices.Add(manifest.GameVersion);
         TargetGameVersion = manifest.GameVersion;
@@ -227,7 +228,30 @@ public partial class PackDetailViewModel : ViewModelBase
     public ObservableCollection<string> ReleaseChoices { get; } = [];
 
     [ObservableProperty] public partial string EditName { get; set; }
+    [ObservableProperty] public partial string EditDescription { get; set; }
     [ObservableProperty] public partial string EditConnect { get; set; }
+
+    /// <summary>
+    /// Counts down rather than up, and only near the end. A limit nobody is close to is
+    /// noise; one you are about to hit is the only time it is worth saying.
+    /// </summary>
+    public string DescriptionRoom
+    {
+        get
+        {
+            var left = PackManifest.MaxDescription - (EditDescription?.Length ?? 0);
+            return left <= 40 ? $"{left} left" : "";
+        }
+    }
+
+    public bool DescriptionTooLong => (EditDescription?.Length ?? 0) > PackManifest.MaxDescription;
+
+    partial void OnEditDescriptionChanged(string value)
+    {
+        OnPropertyChanged(nameof(DescriptionRoom));
+        OnPropertyChanged(nameof(DescriptionTooLong));
+        SaveSettingsCommand.NotifyCanExecuteChanged();
+    }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
 
@@ -582,10 +606,13 @@ public partial class PackDetailViewModel : ViewModelBase
 
     // ---- settings ----
 
-    [RelayCommand(CanExecute = nameof(NotBusy))]
+    [RelayCommand(CanExecute = nameof(CanSaveSettings))]
     private void SaveSettings()
     {
         Manifest.Name = string.IsNullOrWhiteSpace(EditName) ? Id : EditName.Trim();
+
+        Manifest.Description =
+            string.IsNullOrWhiteSpace(EditDescription) ? null : EditDescription.Trim();
 
         // The game version deliberately does not come from here any more: changing it
         // re-resolves every mod, so it goes through Check → Apply instead.
@@ -741,6 +768,13 @@ public partial class PackDetailViewModel : ViewModelBase
     public void CancelVersionChange() => VersionChange = null;
 
     public bool NotBusy => !IsBusy;
+
+    /// <summary>
+    /// Blocked on an over-long description rather than silently truncating one: a
+    /// description cut off mid-sentence on somebody else's screen is worse than being told
+    /// now, while the words are still in front of you.
+    /// </summary>
+    private bool CanSaveSettings => NotBusy && !DescriptionTooLong;
 
     /// <summary>Re-evaluates which install serves this pack, after a version edit or a new install.</summary>
     public void RefreshGameState()

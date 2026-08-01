@@ -7,7 +7,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Cairn.App.ViewModels;
 
 /// <summary>One mod the pack would bring, as a row.</summary>
-public sealed class ImportModViewModel(string modId, string? version, bool fromLock)
+public sealed class ImportModViewModel(
+    string modId, string? version, bool fromLock, bool dependency = false)
 {
     public string ModId { get; } = modId;
 
@@ -16,7 +17,12 @@ public sealed class ImportModViewModel(string modId, string? version, bool fromL
 
     public bool Exact { get; } = fromLock;
 
-    public string Note => Exact ? "" : Version.Length > 0 ? "asked for" : "newest";
+    /// <summary>In the lock but not the manifest: something a mod asked for in turn.</summary>
+    public bool Dependency { get; } = dependency;
+
+    public string Note => Dependency ? "dependency"
+        : Exact ? ""
+        : Version.Length > 0 ? "asked for" : "newest";
 }
 
 /// <summary>
@@ -43,22 +49,31 @@ public sealed partial class ImportViewModel : ViewModelBase
         var manifest = bundle.Pack!;
 
         PackName = manifest.Name is { Length: > 0 } name ? name : manifest.Id;
+        Description = manifest.Description;
         GameVersion = manifest.GameVersion;
         Connect = manifest.Connect;
         PublishedBy = bundle.PublishedBy;
         Source = HostOf(source);
 
         // The lock is the author's tested set; the manifest is only what they asked for.
-        // Showing the locked version where there is one is showing what would actually be
-        // installed rather than what was requested.
+        // The two differ by more than versions — a mod pulled in to satisfy a dependency
+        // is in the lock and not the manifest — so a list built from the manifest alone
+        // undercounts what would actually be installed, which is the question this screen
+        // is being asked.
         var locked = bundle.Lock?.Mods
             .ToDictionary(m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
 
+        var asked = new HashSet<string>(
+            manifest.Mods.Select(m => m.ModId), StringComparer.OrdinalIgnoreCase);
+
         Mods = manifest.Mods
-            .OrderBy(m => m.ModId, StringComparer.OrdinalIgnoreCase)
             .Select(m => locked is not null && locked.TryGetValue(m.ModId, out var exact)
                 ? new ImportModViewModel(m.ModId, exact, fromLock: true)
                 : new ImportModViewModel(m.ModId, m.Version, fromLock: false))
+            .Concat((bundle.Lock?.Mods ?? [])
+                .Where(l => !asked.Contains(l.ModId))
+                .Select(l => new ImportModViewModel(l.ModId, l.Version, fromLock: true, dependency: true)))
+            .OrderBy(m => m.ModId, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         HasLock = bundle.Lock is not null;
@@ -68,6 +83,16 @@ public sealed partial class ImportViewModel : ViewModelBase
     public PackBundle Bundle { get; }
 
     public string PackName { get; }
+
+    /// <summary>
+    /// The author's own words, and the only thing on this screen that says what the pack
+    /// is *for*. The mod list says what is in it; a list of mods is not an answer to
+    /// "should I want this".
+    /// </summary>
+    public string? Description { get; }
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+
     public string GameVersion { get; }
 
     /// <summary>The pack's own server, if it has one. Worth saying out loud — see below.</summary>

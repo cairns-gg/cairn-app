@@ -110,7 +110,10 @@ required:
 - **Mods** tab — what the pack contains, what is pinned, and what is actually installed.
   Remove a mod, or fetch its compatible releases and pin an exact version.
 - **Add mods** tab — search ModDB and add a result to the pack.
-- **Settings** tab — rename, change or clear the server, export, or delete the pack.
+- **Settings** tab — rename, write a description, change or clear the server, export, or
+  delete the pack. The description travels with the pack, so it is what a recipient reads
+  in the import dialog and on a published pack's page; capped at 280 characters, with the
+  Save button held until it fits rather than cutting it silently later.
 - **Changing the game version** is its own step, in Settings: pick a target from the
   versions ModDB publishes and press **Check…**. Nothing is written yet. A dialog lists
   every mod and what would happen to it — `keeps`, `updates`, `untested`, `breaks`,
@@ -154,7 +157,7 @@ scriptable:
 ```
 cairn-cli info                          show the detected install and data path
 cairn-cli list                          list packs
-cairn-cli init <id> [--game <version>] [--connect host:port]
+cairn-cli init <id> [--game <version>] [--connect host:port] [--description text]
 cairn-cli add <id> <modid> [version]    add a mod to a pack
 cairn-cli remove <id> <modid>           remove a mod from a pack
 cairn-cli delete <id>                   delete a pack and its mods
@@ -436,10 +439,14 @@ a nested address would mean parsing an attacker's string and deciding which sche
 honour.
 
 **Following a link never installs anything.** It fetches the document and shows what is in
-it — pack name, who published it, the host it came from, the game version, every mod and
-the exact version each would install, and the server it would launch into if it has one —
-then waits for a yes or a no. Saying yes still only writes a manifest; mods arrive on a
-sync they ask for.
+it — pack name, the author's description, who published it, the host it came from, the game
+version, every mod and the exact version each would install, and the server it would launch
+into if it has one — then waits for a yes or a no. Saying yes still only writes a manifest;
+mods arrive on a sync they ask for.
+
+That mod list comes from the **lockfile**, not the manifest: a mod pulled in to satisfy a
+dependency is in one and not the other, so a list built from the manifest would show fewer
+mods than actually get installed. Those rows are marked `dependency`.
 
 That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
 answer to "this could be anything" is to say plainly what it turned out to be. An address

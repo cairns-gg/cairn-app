@@ -24,6 +24,11 @@
             <TextBlock Text="{Binding Provenance}" FontSize="11" Opacity="0.7"
                        TextWrapping="Wrap" />
 
+            <!-- The author saying what it is for. The list below says what is in it, which
+                 is not the same question. -->
+            <TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}"
+                       FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+
             <TextBlock Text="{Binding Summary}" FontSize="12" Opacity="0.85"
                        Margin="0,4,0,0" />
         </StackPanel>

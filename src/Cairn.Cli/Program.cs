@@ -152,7 +152,8 @@ internal static class Program
     private static int Init(PackStore store, string[] args)
     {
         if (args.Length < 2)
-            return Fail("usage: cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]");
+            return Fail("usage: cairn-cli init <name> [--id <id>] [--game <version>] "
+                        + "[--connect host:port] [--description text]");
 
         var name = args[1];
         var gameVersion = ArgValue(args, "--game") ?? GameInstall.TryLocate()?.Version;
@@ -166,7 +167,11 @@ internal static class Program
         var problem = store.DescribeIdProblem(id);
         if (problem is not null) return Fail(problem);
 
-        store.Create(id, gameVersion, name, ArgValue(args, "--connect"));
+        var description = ArgValue(args, "--description");
+        if (description is { Length: > PackManifest.MaxDescription })
+            return Fail($"--description is longer than {PackManifest.MaxDescription} characters");
+
+        store.Create(id, gameVersion, name, ArgValue(args, "--connect"), description);
         Console.WriteLine($"created {store.ManifestPath(id)}  (id {id}, game {gameVersion})");
         return 0;
     }

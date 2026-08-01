@@ -20,6 +20,17 @@ public sealed class PackManifest
     [JsonPropertyName("id")] public string Id { get; set; } = "";
     [JsonPropertyName("name")] public string? Name { get; set; }
 
+    /// <summary>
+    /// A sentence or two on what the pack is for, shown wherever it is offered to someone
+    /// else. Short on purpose: it sits in listings beside other packs, where a paragraph
+    /// pushes everything else off the screen — and the mod list already says what is in
+    /// the pack. What it cannot say is who it is for, which is this.
+    /// </summary>
+    [JsonPropertyName("description")] public string? Description { get; set; }
+
+    /// <summary>Room for two real sentences, and not for an essay.</summary>
+    public const int MaxDescription = 280;
+
     /// <summary>Game version to resolve against, e.g. "1.22.5".</summary>
     [JsonPropertyName("gameVersion")] public string GameVersion { get; set; } = "";
 
@@ -43,6 +54,12 @@ public sealed class PackManifest
             yield return $"Pack 'gameVersion' is not a usable version string: '{GameVersion}'. "
                          + "Write a bare version like \"1.22.5\" — the game silently reads "
                          + "\">=1.22.5\" as major version 0, which matches everything.";
+
+        // Deliberately no length check on the description. The cap belongs where one is
+        // written — pack settings, `init --description`, and the server on publish — not
+        // where one is read. Refusing to open somebody's pack over a blurb 281 characters
+        // long would be a bad trade for a field that is decoration; strict about what is
+        // sent, tolerant about what arrives.
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var m in Mods)

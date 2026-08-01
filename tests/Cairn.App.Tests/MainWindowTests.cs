@@ -8,6 +8,7 @@ using Cairn.App.ViewModels;
 using Cairn.Core;
 using Cairn.App.Views;
 using Cairn.Core.ModDb;
+using Cairn.Core.Packs;
 using Xunit;
 
 namespace Cairn.App.Tests;
@@ -484,6 +485,67 @@ public class MainWindowTests : IDisposable
         var onDisk = File.ReadAllText(Path.Combine(_home, "packs", "vanilla-qol", "pack.json"));
         Assert.Contains("Renamed Pack", onDisk);
         Assert.Contains("newhost:42420", onDisk);
+    }
+
+    [AvaloniaFact]
+    public void A_description_is_saved_and_travels_with_the_pack()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        detail.EditDescription = "  Quality of life and building, no magic.  ";
+        detail.SaveSettingsCommand.Execute(null);
+
+        // Trimmed, and on disk.
+        Assert.Equal("Quality of life and building, no magic.", detail.Manifest.Description);
+        Assert.Contains("no magic", File.ReadAllText(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+
+        // In the manifest rather than beside it, which is what makes it travel wherever
+        // the pack goes — exported, published, imported.
+        var shared = PackBundle.Parse(PackBundle.Serialize(detail.Manifest));
+        Assert.Equal("Quality of life and building, no magic.", shared.Pack!.Description);
+    }
+
+    [AvaloniaFact]
+    public void An_empty_description_is_dropped_rather_than_stored_blank()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        detail.EditDescription = "   ";
+        detail.SaveSettingsCommand.Execute(null);
+
+        // Null, not "": the field is omitted from the JSON entirely, so a pack without a
+        // description does not publish an empty one for a page to render a gap for.
+        Assert.Null(detail.Manifest.Description);
+        Assert.DoesNotContain("description", File.ReadAllText(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+    }
+
+    [AvaloniaFact]
+    public void Saving_is_blocked_while_the_description_is_too_long()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        detail.EditDescription = new string('d', PackManifest.MaxDescription + 1);
+
+        // Refused now rather than silently cut later: a blurb truncated mid-sentence on
+        // somebody else's screen is worse than being told while the words are in front of
+        // you.
+        Assert.True(detail.DescriptionTooLong);
+        Assert.False(detail.SaveSettingsCommand.CanExecute(null));
+
+        detail.EditDescription = new string('d', PackManifest.MaxDescription);
+        Assert.False(detail.DescriptionTooLong);
+        Assert.True(detail.SaveSettingsCommand.CanExecute(null));
+
+        // And the count only appears near the end, where it is worth saying.
+        Assert.Equal("0 left", detail.DescriptionRoom);
     }
 
     [AvaloniaFact]
