@@ -398,6 +398,21 @@ Prefer this over `dotnet run` on macOS. `dotnet run` uses whatever SDK is on `PA
 if that SDK is x64 the launcher runs under Rosetta and feels sluggish; publishing for the
 host rid is what produces a native build. On macOS `dev.sh` produces the `.app` bundle.
 
+### Testing against a local cairns
+
+```bash
+cd ../cairns && ./dev.sh          # the server, in its own terminal
+./dev.sh --local                  # a launcher pointed at it
+```
+
+`--local` sets `CAIRNS_SERVER=http://localhost:5080` *and* `CAIRN_HOME=~/.cairn-dev`,
+because the second half is not optional: publishing writes a `cairns.json` into the pack
+recording where it went, and doing that to a real pack leaves it claiming to live at a
+localhost URL that stops existing when the server does. `--server URL` and `--home DIR`
+set them separately.
+
+Sign-in mail is printed to the server's terminal rather than sent — see the cairns README.
+
 Release artifacts, all platforms at once:
 
 ```bash
