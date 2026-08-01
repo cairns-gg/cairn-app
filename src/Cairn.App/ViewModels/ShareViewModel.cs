@@ -82,6 +82,18 @@ public sealed partial class ShareViewModel : ViewModelBase
     /// <summary>The revision already published, so "nothing has changed" can name it.</summary>
     public int Revision { get; }
 
+    /// <summary>
+    /// The URL cannot be edited once published, because on this server the URL *is* the
+    /// pack. Publishing the same pack under a different slug does not move it — it creates
+    /// a second pack, and leaves the first one sitting there under the same name, which is
+    /// how you end up with two identical-looking packs and no idea which is live.
+    /// </summary>
+    public bool SlugFixed => AlreadyPublished;
+
+    public string SlugNote => SlugFixed
+        ? "The address is fixed once published — links to it are already out there."
+        : "";
+
     public IReadOnlyList<PublishModViewModel> Mods { get; init; } = [];
 
     // ---- the choices ----

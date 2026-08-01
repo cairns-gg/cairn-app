@@ -727,13 +727,21 @@ internal static class Program
                 : $"  server address {plan.Connect} will be included");
 
         var document = store.PublishedDocument(id, strip);
-        var slug = ArgValue(args, "--slug") ?? id;
+        var published = link?.Url is { Length: > 0 } at ? at[(at.LastIndexOf('/') + 1)..] : null;
+        var slug = ArgValue(args, "--slug") ?? published ?? id;
+
+        // The URL is the pack. Publishing under a different slug does not move it — it
+        // creates a second pack and leaves the first one live under the same name, which
+        // is how you end up with two identical-looking packs and no idea which is which.
+        if (link?.Published is not null && published is not null && slug != published)
+            return Fail($"'{id}' is published at {link.Url}, and that address is its "
+                        + "identity — publishing under another name would leave a second "
+                        + $"copy behind. Withdraw it first with: cairn-cli unpublish {id}");
 
         // A revision differing from its predecessor in nothing but its number tells every
         // follower there is an update and then has none for them. Visibility and the
         // server address count as changes; the bytes alone are not the whole question.
-        if (link is { Published: { } last, Url: var at }
-            && slug == at[(at.LastIndexOf('/') + 1)..]
+        if (link is { Published: { } last }
             && !last.WouldChange(document, isPublic, strip))
             return Fail($"'{id}' has not changed since revision {link.Revision}");
 

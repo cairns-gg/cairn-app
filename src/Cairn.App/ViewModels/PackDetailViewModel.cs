@@ -387,8 +387,16 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsFollowing));
         OnPropertyChanged(nameof(FollowingLine));
         OnPropertyChanged(nameof(CanShareFile));
+        OnPropertyChanged(nameof(IsUnlisted));
         ExportCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary>
+    /// Whether the published pack is unlisted. Shown beside the URL because the two look
+    /// identical from outside, and which one it is decides whether passing the link
+    /// around is sharing it or publishing it.
+    /// </summary>
+    public bool IsUnlisted => Share.IsUnlisted && HasShareUrl;
 
     public string ShareLabel => Share.Label;
 

@@ -206,15 +206,33 @@ public class ShareWindowTests
     }
 
     [AvaloniaFact]
-    public void Publishing_to_a_different_slug_is_a_change_because_it_is_a_different_url()
+    public void The_address_is_fixed_once_published()
     {
         var (link, documentFor) = AlreadyPublished();
-        var (_, vm) = Show(Plan(), link, documentFor: documentFor);
+        var (window, vm) = Show(Plan(), link, documentFor: documentFor);
 
-        vm.Slug = "anego-hardcore";
+        // On this server the URL *is* the pack, so publishing under a different slug does
+        // not move it — it creates a second pack and leaves the first live under the same
+        // name. Two identical-looking packs and no way to tell which is which.
+        Assert.True(vm.SlugFixed);
+        Assert.Contains("fixed once published", vm.SlugNote);
 
-        Assert.False(vm.NothingToPublish);
-        Assert.True(vm.CanPublish);
+        var box = window.GetVisualDescendants().OfType<TextBox>()
+            .First(b => (b.Text ?? "") == "anego");
+
+        Assert.True(box.IsReadOnly);
+    }
+
+    [AvaloniaFact]
+    public void A_pack_that_has_never_been_published_can_choose_its_address()
+    {
+        var (window, vm) = Show(Plan());
+
+        Assert.False(vm.SlugFixed);
+        Assert.Equal("", vm.SlugNote);
+
+        Assert.False(window.GetVisualDescendants().OfType<TextBox>()
+            .First(b => (b.Text ?? "") == "anego").IsReadOnly);
     }
 
     [AvaloniaFact]

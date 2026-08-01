@@ -207,6 +207,18 @@
                                 IsVisible="{Binding Detail.HasShareUrl, FallbackValue=False}">
                         <TextBlock Text="{Binding Detail.ShareUrlLine}" Opacity="0.7" FontSize="12"
                                    VerticalAlignment="Center" />
+
+                        <!-- Unlisted and public look identical from outside, and which one
+                             this is decides whether passing the link on is sharing it or
+                             publishing it. -->
+                        <Border IsVisible="{Binding Detail.IsUnlisted, FallbackValue=False}"
+                                VerticalAlignment="Center" Padding="5,1" CornerRadius="2"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource VsBorderBrush}"
+                                Background="{DynamicResource VsSunkenBrush}">
+                            <TextBlock Text="unlisted" FontSize="10" Opacity="0.75" />
+                        </Border>
+
                         <Button Content="Open" Padding="8,1" FontSize="11"
                                 Command="{Binding Detail.OpenSharePageCommand}" />
                     </StackPanel>

@@ -478,6 +478,16 @@ with nothing to show for it in the document. That is also why the window still o
 unchanged pack: those choices are the reason to come back to one. `PublishRecord.WouldChange`
 is the whole rule, and both front-ends ask it.
 
+**The address is fixed once published.** On cairns the URL *is* the pack, so publishing the
+same one under a different slug does not move it — it creates a second pack and leaves the
+first live under the same name, which is how you end up with two identical-looking packs
+and no idea which is which. The Share window makes the field read-only after the first
+publish; `cairn-cli publish --slug` refuses and points at `unpublish`.
+
+An **unlisted** pack is marked as such beside its URL, and on its page on the site. The two
+are indistinguishable from outside, and which one a pack is decides whether passing the
+link around is sharing it or publishing it.
+
 That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
 answer to "this could be anything" is to say plainly what it turned out to be. An address
 pasted into the import box gets the same treatment, since a URL from a chat message tells

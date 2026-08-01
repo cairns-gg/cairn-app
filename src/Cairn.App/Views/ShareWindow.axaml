@@ -23,10 +23,17 @@
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Text="URL" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
-                <TextBox Grid.Column="1" Text="{Binding Slug}" />
+                <!-- Read-only once published: on this server the URL is the pack, so a
+                     different slug is a second pack rather than a move. -->
+                <TextBox Grid.Column="1" Text="{Binding Slug}"
+                         IsReadOnly="{Binding SlugFixed}" />
             </Grid>
 
             <TextBlock Text="{Binding UrlPreview}" FontSize="11" Opacity="0.55"
+                       Margin="78,0,0,0" />
+
+            <TextBlock Text="{Binding SlugNote}" IsVisible="{Binding SlugFixed}"
+                       FontSize="11" Opacity="0.55" TextWrapping="Wrap"
                        Margin="78,0,0,0" />
 
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">

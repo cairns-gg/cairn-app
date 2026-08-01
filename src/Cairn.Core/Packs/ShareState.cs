@@ -27,9 +27,16 @@ public enum ShareStatus
 /// whether there is something to publish — has to be recomputed when they change, and
 /// caching it is how a button ends up lying about a pack.
 /// </summary>
-public sealed record ShareState(ShareStatus Status, string? Url)
+public sealed record ShareState(ShareStatus Status, string? Url, string? Visibility = null)
 {
     public static readonly ShareState NotShared = new(ShareStatus.Unshared, null);
+
+    /// <summary>
+    /// Reachable by its link and absent from browse. Worth saying wherever the URL is
+    /// shown: the two are indistinguishable from outside, and which one a pack is decides
+    /// whether handing the link around is sharing it or publishing it.
+    /// </summary>
+    public bool IsUnlisted => Visibility == "unlisted";
 
     /// <summary>False while following, where the button is hidden rather than disabled.</summary>
     public bool IsOffered => Status != ShareStatus.Following;
@@ -78,6 +85,9 @@ public sealed record ShareState(ShareStatus Status, string? Url)
                           link.Published.Fingerprint,
                           StringComparison.OrdinalIgnoreCase);
 
-        return new ShareState(changed ? ShareStatus.Pending : ShareStatus.Shared, link.Url);
+        return new ShareState(
+            changed ? ShareStatus.Pending : ShareStatus.Shared,
+            link.Url,
+            link.Published.Visibility);
     }
 }

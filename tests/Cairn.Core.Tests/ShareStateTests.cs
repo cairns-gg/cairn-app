@@ -183,6 +183,19 @@ public class ShareStateTests : IDisposable
     }
 
     [Fact]
+    public void An_unlisted_pack_says_so()
+    {
+        Publish();
+
+        var state = _store.ShareStateFor("anego");
+
+        // Unlisted and public look identical from outside, and which one a pack is decides
+        // whether handing the link around is sharing it or publishing it.
+        Assert.Equal(ShareStatus.Shared, state.Status);
+        Assert.True(state.IsUnlisted);
+    }
+
+    [Fact]
     public void Changed_bytes_are_a_change() =>
         Assert.True(Sent("{\"pack\":1}")
             .WouldChange("{\"pack\":2}", @public: false, strip: true));
