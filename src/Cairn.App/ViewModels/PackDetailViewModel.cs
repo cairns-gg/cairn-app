@@ -350,6 +350,15 @@ public partial class PackDetailViewModel : ViewModelBase
 
     public string Title => Manifest.Name ?? Manifest.Id;
 
+    /// <summary>
+    /// Shown under the name rather than only in Settings. On a pack somebody else wrote it
+    /// is their account of what this is, and needing to open an editing tab to read it is
+    /// the wrong way round.
+    /// </summary>
+    public string? Description => Manifest.Description;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Manifest.Description);
+
     public string Subtitle =>
         $"game {Manifest.GameVersion}  ·  {Manifest.Mods.Count} mod{(Manifest.Mods.Count == 1 ? "" : "s")}";
 
@@ -394,8 +403,12 @@ public partial class PackDetailViewModel : ViewModelBase
 
     public bool IsFollowing => Share.Status == ShareStatus.Following;
 
+    /// <summary>
+    /// Says whose pack this is, and stands in for the Share button that is not there. A
+    /// missing button with no explanation reads as a bug; this is the explanation.
+    /// </summary>
     public string FollowingLine =>
-        IsFollowing ? $"following {ShareUrlLine}" : "";
+        IsFollowing ? $"imported from {ShareUrlLine} — it stays theirs to publish" : "";
 
     private void ReloadShare() => Share = _store.ShareStateFor(Id);
 
@@ -622,6 +635,8 @@ public partial class PackDetailViewModel : ViewModelBase
         Persist();
 
         OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(HasDescription));
         OnPropertyChanged(nameof(HasServer));
         OnPropertyChanged(nameof(ServerLine));
         RefreshGameState();
@@ -1102,6 +1117,16 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(NotBusy))]
     private async Task PublishPack()
     {
+        // The button is hidden while following, so this is unreachable from the UI. It is
+        // here because "the button is not drawn" is not the same as "the rule holds" —
+        // the command is bindable, and this is the rule.
+        if (IsFollowing)
+        {
+            Error = $"This pack was imported from {ShareUrlLine} and follows its author. "
+                    + "Publishing it would re-issue their pack under your name.";
+            return;
+        }
+
         IsBusy = true;
         Error = null;
 

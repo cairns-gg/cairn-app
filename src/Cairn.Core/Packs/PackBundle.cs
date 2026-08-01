@@ -34,6 +34,18 @@ public sealed class PackBundle
     /// <summary>Where the server said this lives. See <see cref="PublishedBy"/>.</summary>
     [JsonPropertyName("canonicalUrl")] public string? CanonicalUrl { get; set; }
 
+    /// <summary>Which published revision this copy is. See <see cref="PublishedBy"/>.</summary>
+    [JsonPropertyName("revision")] public int? Revision { get; set; }
+
+    /// <summary>
+    /// Whether this came off a server rather than out of a file somebody exported.
+    ///
+    /// The distinction decides whether importing it makes you a follower of someone else's
+    /// pack or simply gives you a copy: a document with a canonical URL has an owner, and
+    /// somewhere to check back with.
+    /// </summary>
+    public bool IsPublished => !string.IsNullOrWhiteSpace(CanonicalUrl);
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

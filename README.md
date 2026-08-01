@@ -448,6 +448,18 @@ That mod list comes from the **lockfile**, not the manifest: a mod pulled in to 
 dependency is in one and not the other, so a list built from the manifest would show fewer
 mods than actually get installed. Those rows are marked `dependency`.
 
+### An imported pack stays its author's
+
+Importing a document that carries a canonical URL records the pack as a **follower** of it
+(`cairns.json`, `PackRole.Follower`). The Share button is then absent rather than present
+and refusing, with a line under the pack name saying where it came from — a control that
+simply vanishes reads as a bug, not a rule.
+
+The rule is not the hidden button. `cairn-cli publish` refuses the same packs, and
+`PublishPack` checks before doing anything, because a bindable command is reachable
+whether or not something is drawn for it. A bundle imported from a *file* has no canonical
+URL, so nobody owns it and it stays yours to publish.
+
 That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
 answer to "this could be anything" is to say plainly what it turned out to be. An address
 pasted into the import box gets the same treatment, since a URL from a chat message tells

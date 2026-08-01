@@ -115,4 +115,65 @@ public class PackStoreTests : IDisposable
 
         Assert.Null(_store.DescribeIdProblem("brand-new"));
     }
+
+    /// <summary>A document as a server serves one, with the fields it stamps on.</summary>
+    private static PackBundle Published(string id = "theirs") => PackBundle.Parse($$"""
+        {
+          "formatVersion": 1,
+          "pack": { "id": "{{id}}", "gameVersion": "1.22.5",
+                    "mods": [ { "modid": "glassview" } ] },
+          "publishedBy": "someone-else",
+          "canonicalUrl": "https://cairns.gg/someone-else/{{id}}",
+          "revision": 4
+        }
+        """);
+
+    [Fact]
+    public void Importing_a_published_pack_records_that_it_belongs_to_someone_else()
+    {
+        var manifest = _store.Import(Published());
+        var link = _store.LoadLink(manifest.Id);
+
+        // Without this the pack is indistinguishable from one you made, and Share offers
+        // to publish somebody else's curation under your name.
+        Assert.NotNull(link);
+        Assert.Equal(PackRole.Follower, link!.Role);
+        Assert.True(link.Following);
+        Assert.Equal("https://cairns.gg/someone-else/theirs", link.Url);
+        Assert.Equal(4, link.Revision);
+
+        Assert.False(_store.ShareStateFor(manifest.Id).IsOffered);
+    }
+
+    [Fact]
+    public void Importing_a_file_somebody_exported_leaves_it_yours()
+    {
+        // No canonical URL, so there is no owner and nowhere to check back with. A bundle
+        // handed over as a file is a starting point, not somebody's published pack.
+        var bundle = PackBundle.Parse("""
+            {"formatVersion":1,
+             "pack":{"id":"handed-over","gameVersion":"1.22.5","mods":[{"modid":"glassview"}]}}
+            """);
+
+        var manifest = _store.Import(bundle);
+
+        Assert.Null(_store.LoadLink(manifest.Id));
+        Assert.True(_store.ShareStateFor(manifest.Id).IsOffered);
+    }
+
+    [Fact]
+    public void A_pack_you_published_stays_yours_to_republish()
+    {
+        var manifest = _store.Create("mine", "1.22.5");
+
+        _store.SaveLink(manifest.Id, new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/me/mine",
+            Revision = 1,
+            Published = new PublishRecord { Fingerprint = "sha256:whatever" },
+        });
+
+        Assert.True(_store.ShareStateFor(manifest.Id).IsOffered);
+    }
 }

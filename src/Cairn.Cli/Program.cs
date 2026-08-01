@@ -687,6 +687,13 @@ internal static class Program
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
 
+        // A pack imported from someone else is theirs. Checked here as well as in the
+        // launcher, which hides its button: a hidden button is a courtesy, and this is the
+        // rule.
+        if (store.LoadLink(id) is { Role: PackRole.Follower, Following: true } following)
+            return Fail($"'{id}' was imported from {following.Url} and follows its author; "
+                        + "publishing it would re-issue their pack under your name");
+
         if (CairnsSession.Load() is not { } session)
             return Fail("not signed in — run: cairn-cli login");
 

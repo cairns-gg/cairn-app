@@ -186,6 +186,22 @@ public sealed class PackStore
         // the recipient gets identical bytes now and is still offered updates later.
         if (reproduce) bundle.Lock?.Save(LockPath(manifest.Id));
 
+        // A published pack arrives with an owner, and this copy follows theirs. Recorded
+        // now, at the one moment it is knowable — without it the pack looks exactly like
+        // one you made yourself, and Share would offer to publish somebody else's curation
+        // under your name.
+        //
+        // A bundle from a file gets no link: nobody's URL is behind it, so there is
+        // nothing to follow and nothing to take over.
+        if (bundle.IsPublished)
+            SaveLink(manifest.Id, new PackLink
+            {
+                Role = PackRole.Follower,
+                Url = bundle.CanonicalUrl!,
+                Revision = bundle.Revision ?? 0,
+                Following = true,
+            });
+
         return manifest;
     }
 

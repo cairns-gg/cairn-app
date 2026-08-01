@@ -203,7 +203,12 @@ public class MainWindowTests : IDisposable
         Assert.False(vm.Detail!.ShareOffered);
         Assert.True(vm.Detail.IsFollowing);
         Assert.False(vm.Detail.HasShareUrl);
-        Assert.Contains("following cairns.gg/dizzyd/anego", VisibleText(window));
+
+        // And it says so where the button would have been. A control that is simply
+        // missing reads as a bug rather than as a rule.
+        Assert.Contains(VisibleText(window),
+            t => t.Contains("imported from cairns.gg/dizzyd/anego")
+                 && t.Contains("stays theirs"));
     }
 
     [AvaloniaFact]
@@ -506,6 +511,22 @@ public class MainWindowTests : IDisposable
         // the pack goes — exported, published, imported.
         var shared = PackBundle.Parse(PackBundle.Serialize(detail.Manifest));
         Assert.Equal("Quality of life and building, no magic.", shared.Pack!.Description);
+    }
+
+    [AvaloniaFact]
+    public void A_description_is_on_the_pack_itself_not_only_in_settings()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+
+        vm.Detail!.EditDescription = "Quality of life and building, no magic.";
+        vm.Detail.SaveSettingsCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Under the name, where somebody reads it — on an imported pack this is the
+        // author's account of what the pack is, and opening an editing tab to find it is
+        // the wrong way round.
+        Assert.Contains(VisibleText(window), t => t.Contains("no magic"));
     }
 
     [AvaloniaFact]
@@ -2545,6 +2566,38 @@ public class MainWindowTests : IDisposable
 
         // And saying no means no.
         Assert.Equal(before, vm.Packs.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task An_imported_pack_cannot_be_published_as_your_own()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/anego-server.json", Published());
+
+        var (window, vm) = Show(http);
+        vm.ConfirmImport = _ => Task.FromResult(true);
+
+        await vm.FollowLinkAsync("cairn://cairns.gg/dizzyd/anego-server");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var detail = vm.Detail!;
+        Assert.Equal("anego-server", detail.Id);
+
+        // The button is gone, and something says why — a control that vanishes with no
+        // explanation reads as a bug rather than as a rule.
+        Assert.True(detail.IsFollowing);
+        Assert.False(detail.ShareOffered);
+        Assert.Contains("stays theirs", detail.FollowingLine);
+        Assert.DoesNotContain(VisibleText(window), t => t == "Share…");
+
+        // And the command itself refuses, because a hidden button is a courtesy and this
+        // is the rule. It is still bindable.
+        detail.ConfirmPublish = _ => Task.FromResult(true);
+        await detail.PublishPackCommand.ExecuteAsync(null);
+
+        Assert.NotNull(detail.Error);
+        Assert.Contains("under your name", detail.Error!);
+        Assert.Null(detail.Publish);
     }
 
     [AvaloniaFact]

@@ -187,6 +187,15 @@
 
                 <StackPanel DockPanel.Dock="Top" Spacing="4">
                     <TextBlock Text="{Binding Detail.Title}" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+
+                    <!-- Under the name and above everything else, because on an imported
+                         pack it is the author's account of what this is — and it should not
+                         take opening Settings to read it. Capped in width so a long one
+                         stays a line or two rather than a wall. -->
+                    <TextBlock Text="{Binding Detail.Description}" FontSize="12"
+                               TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left"
+                               IsVisible="{Binding Detail.HasDescription, FallbackValue=False}" />
+
                     <TextBlock Text="{Binding Detail.Subtitle}" Opacity="0.7" FontSize="12" />
                     <TextBlock Text="{Binding Detail.ServerLine}" Opacity="0.7" FontSize="12"
                                IsVisible="{Binding Detail.HasServer, FallbackValue=False}" />
