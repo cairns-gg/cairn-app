@@ -600,6 +600,17 @@ Signing gets past "unidentified developer". Only **notarisation** gets past the 
 warning on a downloaded file, and only **stapling** makes that work for somebody whose
 first launch is offline — so all three happen, in that order, before packaging.
 
+#### The macOS bundle must stay non-single-file
+
+`build-macos-app.sh` publishes a directory rather than a single file, and while the reason
+written there is startup — a single-file build self-extracts before the window can appear —
+it is also what makes notarisation possible at all. A single-file .NET app unpacks its
+native libraries to `~/.net/<app>` on first run, so the binaries that actually execute do
+not exist at signing time and cannot be notarised. Apple has nothing to inspect and the
+extracted copies carry no signature.
+
+The Windows and Linux artifacts are single-file, which is fine: neither platform checks.
+
 #### Why `--deep`, which Apple discourages
 
 .NET's apphost requires `cairn.runtimeconfig.json` and `cairn.deps.json` to sit beside the
@@ -616,6 +627,20 @@ In subcomponent: .../Contents/MacOS/cairn.runtimeconfig.json
 Moving the payload out of `MacOS/` would mean replacing the apphost. The cost of `--deep`
 is that the entitlements below reach nested code as well as the app; they are narrow, and
 the notary service is the real arbiter of whether Apple minds.
+
+What `--deep` does get right, checked rather than assumed: the hardened runtime reaches
+every nested binary too, which is what notarisation requires.
+
+```
+libcoreclr.dylib     flags=0x10002(adhoc,runtime)
+libSkiaSharp.dylib   flags=0x10002(adhoc,runtime)
+cairn-cli            flags=0x10002(adhoc,runtime)
+createdump           flags=0x10002(adhoc,runtime)
+```
+
+No Mach-O in the bundle is left unsigned, and `get-task-allow` — the debug entitlement that
+guarantees rejection — is absent. `spctl -a` rejects an ad-hoc build, which is the expected
+answer and the thing a real certificate changes.
 
 #### Entitlements
 
