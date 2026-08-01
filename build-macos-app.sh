@@ -124,23 +124,49 @@ PLIST
 
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 
-# codesign classifies managed .dll files as nested code by extension, so signing only the
-# bundle leaves them unsigned and --verify --strict fails with "code object is not signed
-# at all". --deep signs them along with the native dylibs.
+# Signing.
 #
-# Apple discourages --deep for Developer ID submissions; if this ever gets notarised,
-# sign each nested binary explicitly and drop the flag.
+# --deep, which Apple discourages, after establishing that the alternative does not work
+# here. .NET's apphost requires cairn.runtimeconfig.json and cairn.deps.json to sit beside
+# the executable, and codesign treats every non-code file in Contents/MacOS as nested code
+# that must carry its own signature. A .json cannot, so signing nested binaries
+# individually and then the bundle fails at the last step with
+#
+#   code object is not signed at all
+#   In subcomponent: .../Contents/MacOS/cairn.runtimeconfig.json
+#
+# every time, on a clean tree. Moving the payload out of MacOS/ would mean replacing the
+# apphost, which is a much larger change than this is worth.
+#
+# The cost of --deep is that these entitlements reach nested code as well as the app. They
+# are narrow, and the notary service is the actual arbiter of whether Apple minds — if it
+# ever objects, the fix is restructuring the bundle rather than a different flag.
+#
+# The hardened runtime is required for notarisation, and is applied for ad-hoc builds too:
+# a local build should fail the way a released one would, not save the surprise. Verified
+# it still launches — CoreCLR needs the JIT entitlements or it dies immediately.
 if [ "${SKIP_SIGN:-0}" = 1 ]; then
   # Unsigned is fine for a local dev build; macOS only insists for distribution.
   echo "  signing: skipped (SKIP_SIGN=1)"
 else
   IDENTITY="${SIGN_IDENTITY:--}"
-  [ "$IDENTITY" = "-" ] && echo "  signing: ad-hoc (set SIGN_IDENTITY to sign properly)" \
-                        || echo "  signing: $IDENTITY"
 
-  codesign --force --deep --timestamp=none --sign "$IDENTITY" "$APP"
+  # A secure timestamp is required for notarisation, and is a round trip to Apple's
+  # server — worth skipping for the ad-hoc builds that are never notarised.
+  if [ "$IDENTITY" = "-" ]; then
+    echo "  signing: ad-hoc (set SIGN_IDENTITY to sign properly)"
+    STAMP=(--timestamp=none)
+  else
+    echo "  signing: $IDENTITY"
+    STAMP=(--timestamp)
+  fi
+
+  codesign --force --deep --options runtime "${STAMP[@]}" \
+    --entitlements macos-entitlements.plist --sign "$IDENTITY" "$APP"
+
   echo
-  codesign --verify --strict --verbose=2 "$APP" 2>&1 | sed 's/^/  /'
+  codesign --verify --strict --verbose=2 "$APP" 2>&1 | tail -2 | sed 's/^/  /'
+  codesign -d --verbose=2 "$APP" 2>&1 | grep -i "flags=" | sed 's/^/  /'
 fi
 
 echo "  size: $(du -sh "$APP" | cut -f1)"

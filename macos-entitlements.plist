@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  What the hardened runtime has to be asked to allow.
+
+  Notarisation requires the hardened runtime, and the hardened runtime forbids by default
+  several things the .NET runtime does as a matter of course. Each of these is a hole in
+  that protection, so each is here for a stated reason rather than because a forum post
+  listed it:
+
+  * allow-jit — CoreCLR compiles IL to machine code at runtime and needs pages that are
+    both writable and executable. Without this the app dies on launch.
+
+  * allow-unsigned-executable-memory — the same requirement in the older, blunter form.
+    CoreCLR still trips the check that allow-jit alone does not cover, and the failure is
+    an immediate crash rather than anything diagnosable.
+
+  * disable-library-validation — Avalonia loads native libraries (Skia, HarfBuzz) that
+    ship inside the bundle. They are signed here with the same identity, so this ought to
+    be unnecessary; it is included because library validation also rejects loads that
+    happen through dlopen paths the check cannot attribute, and a launcher that fails to
+    draw is worse than one entitlement broader than strictly required.
+
+  Worth revisiting: try removing disable-library-validation and see whether a notarised
+  build still starts. If it does, drop it.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

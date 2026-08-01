@@ -568,12 +568,65 @@ Three details that are load-bearing:
   automatically would make that decision once, silently, for good. The generated notes
   carry the `xattr -dr com.apple.quarantine` workaround.
 
-Notarising properly needs an Apple Developer ID in repository secrets, and dropping
-`--deep` in favour of signing each nested binary — Apple discourages `--deep` for Developer
-ID. Until then the macOS downloads have a rough first run.
-
 `workflow_dispatch` builds everything without publishing, which is how to find out a build
 is broken before there is a tag claiming otherwise.
+
+### Signing and notarising the macOS builds
+
+Five repository secrets turn it on. With none of them the workflow ad-hoc signs exactly as
+it did before, and the release notes say so — there is no flag to remember.
+
+| secret | what it is |
+|---|---|
+| `MACOS_CERTIFICATE` | the **Developer ID Application** certificate and key, exported as `.p12`, then `base64 -i cert.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_PASSWORD` | the password set when exporting the `.p12` |
+| `APPLE_NOTARY_KEY` | an App Store Connect API key (`.p8`), base64-encoded the same way |
+| `APPLE_NOTARY_KEY_ID` | the key's ID, e.g. `ABCD123456` |
+| `APPLE_NOTARY_ISSUER` | the issuer UUID from App Store Connect → Users and Access → Integrations |
+
+**Developer ID Application**, not "Apple Development" or "Mac App Distribution" — those
+cannot sign software distributed outside the App Store, and the difference is not visible
+until notarisation refuses. Create it in the developer portal or Xcode → Settings →
+Accounts → Manage Certificates, then export it *with its private key* from Keychain Access.
+
+An **API key** rather than an app-specific password because it can be revoked on its own
+and does not stop working when the Apple ID password changes.
+
+The workflow imports the certificate into a keychain of its own, unlocked for that job
+only, and calls `security set-key-partition-list` — without which `codesign` waits on a GUI
+prompt nobody is there to answer and the job hangs until it times out.
+
+Signing gets past "unidentified developer". Only **notarisation** gets past the quarantine
+warning on a downloaded file, and only **stapling** makes that work for somebody whose
+first launch is offline — so all three happen, in that order, before packaging.
+
+#### Why `--deep`, which Apple discourages
+
+.NET's apphost requires `cairn.runtimeconfig.json` and `cairn.deps.json` to sit beside the
+executable, and `codesign` treats every non-code file in `Contents/MacOS` as nested code
+that must carry its own signature. A `.json` cannot. Signing each nested binary and then
+the bundle — the arrangement Apple actually recommends — fails at the last step, every
+time, on a clean tree:
+
+```
+code object is not signed at all
+In subcomponent: .../Contents/MacOS/cairn.runtimeconfig.json
+```
+
+Moving the payload out of `MacOS/` would mean replacing the apphost. The cost of `--deep`
+is that the entitlements below reach nested code as well as the app; they are narrow, and
+the notary service is the real arbiter of whether Apple minds.
+
+#### Entitlements
+
+`macos-entitlements.plist`, and each line is a hole in the hardened runtime, so each has a
+reason written next to it. `allow-jit` and `allow-unsigned-executable-memory` are what
+CoreCLR needs to compile IL at runtime — without them the app dies on launch rather than
+degrading. `disable-library-validation` is the one worth trying to remove once notarisation
+is working.
+
+The hardened runtime is applied to ad-hoc builds too, so a local build fails the way a
+released one would rather than saving the surprise. Verified by launching one: it starts.
 
 ### macOS application bundle
 

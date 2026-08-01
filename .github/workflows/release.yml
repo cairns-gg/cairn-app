@@ -41,6 +41,20 @@ jobs:
   macos:
     needs: test
     runs-on: macos-latest
+
+    # Lifted to the job so the steps below can test them in `if`. A step's own `env` is not
+    # visible to that step's condition, which fails open — the step runs, and signing dies
+    # somewhere less obvious.
+    env:
+      CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+
+    outputs:
+      notarised: ${{ steps.notarise.outputs.done }}
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -50,6 +64,40 @@ jobs:
       - name: Work out the version
         id: version
         run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # All of this degrades: with no certificate the build is ad-hoc signed exactly as it
+      # was before any of it existed, and the release notes say so. Adding the secrets is
+      # what turns signing on — no code change, no flag.
+      - name: Import the signing certificate
+        id: cert
+        if: env.CERTIFICATE != ''
+        run: |
+          # A keychain of its own, unlocked only for this job, with a password nobody needs
+          # to know because nothing outlives the runner.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 900 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # Without this codesign blocks on a GUI prompt that nobody is there to answer,
+          # and the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | grep 'Developer ID Application' | head -1 | sed 's/.*"\(.*\)"/\1/')"
+
+          [ -n "$identity" ] || { echo "no Developer ID Application identity in the p12"; exit 1; }
+
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "signing as: $identity"
 
       # A bundle rather than the bare binary: it gets a Dock icon and a real app name, it
       # avoids the self-extraction pause a single-file build has on first run, and it is
@@ -63,9 +111,43 @@ jobs:
       - name: Build the app bundles
         env:
           VERSION: ${{ steps.version.outputs.value }}
+          SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
         run: |
           ./build-macos-app.sh osx-arm64
           ./build-macos-app.sh osx-x64
+
+      # Signing gets past "unidentified developer"; only notarisation gets past the
+      # quarantine warning on a downloaded file, and only stapling makes that work for
+      # somebody whose first launch is offline.
+      - name: Notarise and staple
+        id: notarise
+        if: steps.cert.outputs.identity != '' && env.NOTARY_KEY != ''
+        run: |
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+
+          for arch in arm64 x64; do
+            app="artifacts/osx-$arch/Cairn.app"
+
+            # Submitted as a zip, and ditto for the same reason it is used to package:
+            # anything that flattens the bundle produces a rejection about a malformed
+            # archive rather than about the app.
+            ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/notarize-$arch.zip"
+
+            xcrun notarytool submit "$RUNNER_TEMP/notarize-$arch.zip" \
+              --key "$RUNNER_TEMP/notary.p8" \
+              --key-id "$NOTARY_KEY_ID" \
+              --issuer "$NOTARY_ISSUER" \
+              --wait --timeout 30m
+
+            # Staples the ticket into the bundle, so Gatekeeper can check it without the
+            # network. Done after notarisation and before packaging, or the archive people
+            # download contains an unstapled app.
+            xcrun stapler staple "$app"
+            xcrun stapler validate "$app"
+          done
+
+          rm -f "$RUNNER_TEMP/notary.p8"
+          echo "done=true" >> "$GITHUB_OUTPUT"
 
       # ditto, not zip. A .app contains symlinks and extended attributes, and plain zip
       # quietly flattens them into a bundle macOS then calls damaged.
@@ -132,6 +214,8 @@ jobs:
           merge-multiple: true
 
       - name: Write the release notes
+        env:
+          NOTARISED: ${{ needs.macos.outputs.notarised }}
         run: |
           cat > notes.md <<'NOTES'
           ## Downloads
@@ -146,17 +230,30 @@ jobs:
           Each contains the launcher; the Windows and Linux archives also contain
           `cairn-cli`. Nothing else needs installing — Cairn fetches the game and the
           .NET runtime itself.
+          NOTES
+
+          # Said by the build rather than by whoever writes the notes, because the two
+          # drift: a release that quietly stopped being notarised while still claiming to
+          # be would send people past a warning they should have taken seriously.
+          if [ "$NOTARISED" = "true" ]; then
+            cat >> notes.md <<'NOTES'
+
+          The macOS builds are signed and notarised, so they open normally.
+          NOTES
+          else
+            cat >> notes.md <<'NOTES'
 
           ### macOS: these builds are not notarised
 
           They are ad-hoc signed, so Gatekeeper refuses them on first open with "Cairn is
-          damaged" or "cannot be opened because the developer cannot be verified". Until
-          there is a Developer ID certificate to sign with:
+          damaged" or "cannot be opened because the developer cannot be verified":
 
           ```
           xattr -dr com.apple.quarantine /Applications/Cairn.app
           ```
           NOTES
+          fi
+
           cat notes.md
 
       - name: Publish the release
