@@ -166,6 +166,42 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void A_pack_that_was_never_shared_offers_a_share_button()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        Assert.True(vm.Detail!.ShareOffered);
+        Assert.Equal("Share…", vm.Detail.ShareLabel);
+
+        // Not accented: Play is what the app was opened for.
+        Assert.False(vm.Detail.ShareIsUrgent);
+        Assert.False(vm.Detail.HasShareUrl);
+        Assert.Contains("Share…", VisibleText(window));
+    }
+
+    [AvaloniaFact]
+    public void A_followed_pack_says_who_it_follows_instead_of_offering_to_share()
+    {
+        WritePack("followed", "Followed", "1.22.5", null, ["glassview"]);
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "followed", "cairns.json"),
+            """
+            {"role":"Follower","url":"https://cairns.gg/dizzyd/anego","revision":4,"following":true}
+            """);
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "followed");
+
+        // Publishing a pack you follow would republish someone else's curation under your
+        // own name, so the button is absent rather than present and refusing.
+        Assert.False(vm.Detail!.ShareOffered);
+        Assert.True(vm.Detail.IsFollowing);
+        Assert.False(vm.Detail.HasShareUrl);
+        Assert.Contains("following cairns.gg/dizzyd/anego", VisibleText(window));
+    }
+
+    [AvaloniaFact]
     public void A_dependency_is_shown_under_the_mod_that_requires_it()
     {
         WritePack("deps", "Deps", "1.22.5", null, ["carryon"]);

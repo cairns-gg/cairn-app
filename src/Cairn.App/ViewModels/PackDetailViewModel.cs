@@ -334,6 +334,46 @@ public partial class PackDetailViewModel : ViewModelBase
 
     public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
 
+    // ---- sharing ----
+
+    /// <summary>
+    /// Recomputed rather than cached, because it depends on the manifest and lock: adding
+    /// a mod or syncing one is exactly what turns "Shared" into "Publish changes", and a
+    /// button that remembers is a button that lies about the pack.
+    /// </summary>
+    [ObservableProperty] public partial ShareState Share { get; set; } = ShareState.NotShared;
+
+    partial void OnShareChanged(ShareState value)
+    {
+        OnPropertyChanged(nameof(ShareLabel));
+        OnPropertyChanged(nameof(ShareOffered));
+        OnPropertyChanged(nameof(ShareIsUrgent));
+        OnPropertyChanged(nameof(HasShareUrl));
+        OnPropertyChanged(nameof(ShareUrlLine));
+        OnPropertyChanged(nameof(IsFollowing));
+        OnPropertyChanged(nameof(FollowingLine));
+    }
+
+    public string ShareLabel => Share.Label;
+
+    public bool ShareOffered => Share.IsOffered;
+
+    public bool ShareIsUrgent => Share.IsUrgent;
+
+    public bool HasShareUrl => Share.HasUrl && !IsFollowing;
+
+    /// <summary>Shown without its scheme: this is a thing people read and retype.</summary>
+    public string ShareUrlLine => Share.Url is null
+        ? ""
+        : Share.Url.Replace("https://", "").Replace("http://", "");
+
+    public bool IsFollowing => Share.Status == ShareStatus.Following;
+
+    public string FollowingLine =>
+        IsFollowing ? $"following {ShareUrlLine}" : "";
+
+    private void ReloadShare() => Share = _store.ShareStateFor(Id);
+
     public string ModsDirectory => _store.ModsDir(Id);
 
     /// <summary>The install this pack will actually launch, or null when its version is absent.</summary>
@@ -409,6 +449,11 @@ public partial class PackDetailViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(ListHeading));
+
+        // Every path that changes what a pack contains ends here — adding, removing,
+        // pinning, syncing — which makes it the one place the Share button has to be
+        // recomputed from.
+        ReloadShare();
 
         // Not awaited: the pack list must draw immediately, with names and icons
         // following as ModDB answers.
@@ -985,6 +1030,32 @@ public partial class PackDetailViewModel : ViewModelBase
 
         if (!Browser.Open(ModDbUrls.Page(info.AssetId, info.UrlAlias)))
             Error = $"Could not open the ModDB page for {row.ModId}.";
+    }
+
+    // ---- sharing ----
+
+    /// <summary>
+    /// Opens the pack's page on cairns.gg. Only reachable once a pack has been published,
+    /// since that is the only time there is a page.
+    /// </summary>
+    [RelayCommand]
+    private void OpenSharePage()
+    {
+        if (Share.Url is not null && !Browser.Open(Share.Url))
+            Error = $"Could not open {ShareUrlLine}.";
+    }
+
+    /// <summary>
+    /// Publishing, once there is somewhere to publish to. The button, its states and the
+    /// change detection behind them are real; what they open is not built yet, and saying
+    /// so beats a button that swallows the click.
+    /// </summary>
+    [RelayCommand]
+    private void PublishPack()
+    {
+        _log(Share.Status == ShareStatus.Unshared
+            ? "sharing is not built yet — see docs/sharing.md"
+            : $"publishing changes to {ShareUrlLine} is not built yet — see docs/sharing.md");
     }
 
     /// <summary>

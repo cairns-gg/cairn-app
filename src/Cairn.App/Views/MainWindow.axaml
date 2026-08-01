@@ -190,6 +190,20 @@
                     <TextBlock Text="{Binding Detail.Subtitle}" Opacity="0.7" FontSize="12" />
                     <TextBlock Text="{Binding Detail.ServerLine}" Opacity="0.7" FontSize="12"
                                IsVisible="{Binding Detail.HasServer, FallbackValue=False}" />
+
+                    <!-- The published URL belongs here beside the server line, not on the
+                         button: it is persistent state about the pack and the thing people
+                         copy repeatedly, which leaves the button free to be an action. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                IsVisible="{Binding Detail.HasShareUrl, FallbackValue=False}">
+                        <TextBlock Text="{Binding Detail.ShareUrlLine}" Opacity="0.7" FontSize="12"
+                                   VerticalAlignment="Center" />
+                        <Button Content="Open" Padding="8,1" FontSize="11"
+                                Command="{Binding Detail.OpenSharePageCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding Detail.FollowingLine}" Opacity="0.7" FontSize="12"
+                               IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}" />
                 </StackPanel>
 
                 <Border DockPanel.Dock="Top" Margin="0,12,0,0" Padding="10,8" CornerRadius="1"
@@ -199,11 +213,24 @@
                 </Border>
 
                 <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,14,0,0">
-                    <!-- Play is the only way in. It syncs first, so a separate sync
-                         button was an action defined by what it did not do. -->
-                    <Button Content="{Binding Detail.PlayLabel}" Command="{Binding Detail.PlayCommand}"
-                            Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96"
-                            HorizontalAlignment="Left" />
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- Play is the only way in. It syncs first, so a separate sync
+                             button was an action defined by what it did not do. -->
+                        <Button Grid.Column="0"
+                                Content="{Binding Detail.PlayLabel}" Command="{Binding Detail.PlayCommand}"
+                                Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96"
+                                HorizontalAlignment="Left" />
+
+                        <!-- Opposite Play so it is findable — a sharing site nobody
+                             notices they can publish to has no packs on it — but not
+                             accented, because Play is what the app was opened for and
+                             Share is roughly once per pack. -->
+                        <Button Grid.Column="2" Padding="16,6" MinWidth="96"
+                                Content="{Binding Detail.ShareLabel}"
+                                Command="{Binding Detail.PublishPackCommand}"
+                                IsVisible="{Binding Detail.ShareOffered, FallbackValue=False}"
+                                Classes.accent="{Binding Detail.ShareIsUrgent, FallbackValue=False}" />
+                    </Grid>
 
                     <!-- Syncing and process start take seconds; say what is happening. -->
                     <Border IsVisible="{Binding Detail.IsShowingLaunchStage, FallbackValue=False}"

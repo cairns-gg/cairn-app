@@ -16,6 +16,50 @@ public sealed class PackStore
     public string LockPath(string id) => Path.Combine(PackDir(id), "pack.lock.json");
     public string ModsDir(string id) => Path.Combine(PackDir(id), "Mods");
 
+    /// <summary>Where this pack came from, or where it is published. See PackLink.</summary>
+    public string LinkPath(string id) => Path.Combine(PackDir(id), "cairns.json");
+
+    public PackLink? LoadLink(string id) => PackLink.Load(LinkPath(id));
+
+    public void SaveLink(string id, PackLink link) => link.Save(LinkPath(id));
+
+    /// <summary>
+    /// Exactly what publishing this pack right now would send. Always carries the lock —
+    /// a published pack is reproducible or it is not worth publishing.
+    /// </summary>
+    /// <param name="stripConnect">
+    /// Leave the pack's server address out. Loading gives a fresh manifest each time, so
+    /// clearing it here does not touch the file.
+    /// </param>
+    public string PublishedDocument(string id, bool stripConnect)
+    {
+        var manifest = Load(id);
+        if (stripConnect) manifest.Connect = null;
+
+        return PackBundle.Serialize(manifest, LoadLock(id));
+    }
+
+    /// <summary>The Share button's state for this pack. See <see cref="ShareState"/>.</summary>
+    public ShareState ShareStateFor(string id)
+    {
+        var link = LoadLink(id);
+        if (link?.Published is null) return ShareState.For(link, null);
+
+        string? now;
+        try
+        {
+            now = PublishedDocument(id, link.Published.Connect == "stripped");
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException)
+        {
+            // Unreadable pack: report it unchanged rather than inventing a difference and
+            // inviting someone to publish over a good revision with a broken one.
+            now = null;
+        }
+
+        return ShareState.For(link, now);
+    }
+
     /// <summary>
     /// This pack's game data path — its worlds, mod configs and settings. Inside the pack
     /// because the pack is the instance: see PackData for why they are no longer shared.
