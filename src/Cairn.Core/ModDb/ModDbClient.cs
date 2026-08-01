@@ -64,6 +64,24 @@ public sealed class ModDbClient(HttpClient http)
         return resp.Mod;
     }
 
+    /// <summary>
+    /// Whether ModDB publishes this mod at all — not whether it has a release for any
+    /// particular game version.
+    ///
+    /// Separate from <see cref="GetModAsync"/> because "no such mod" and "ModDB could not
+    /// be reached" both arrive as a ModDbException there, and a caller asking this question
+    /// needs them apart: one means recipients cannot install it, the other means we do not
+    /// know. Transport failures are rethrown rather than reported as absence.
+    /// </summary>
+    public async Task<bool> ExistsAsync(string modId, CancellationToken ct = default)
+    {
+        var resp = await http.GetFromJsonAsync<ModDbModResponse>(
+                $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", Json, ct)
+            .ConfigureAwait(false);
+
+        return resp?.Mod is not null;
+    }
+
     /// <summary>Every game version ModDB knows, with the tag ids searching by version needs.</summary>
     public async Task<IReadOnlyList<ModDbGameVersion>> GetGameVersionsAsync(CancellationToken ct = default)
     {
