@@ -467,15 +467,15 @@ public partial class MainViewModel : ViewModelBase
         {
             var source = ImportText.Trim();
 
-            // https only: a pack decides which mods get installed, so it must not
-            // arrive over a connection anyone on the path can rewrite.
-            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            // A pack decides which mods get installed, so it must not arrive over a
+            // connection anyone on the path can rewrite. Loopback has no such path.
+            if (PackSources.IsRewritableInFlight(source))
             {
                 ImportError = "Refusing to import over http — use an https:// address.";
                 return;
             }
 
-            var json = source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            var json = PackSources.IsRemote(source)
                 ? await _http.GetStringAsync(source)
                 : File.Exists(source) ? File.ReadAllText(source) : source;
 

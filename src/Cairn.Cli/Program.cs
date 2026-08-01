@@ -512,12 +512,12 @@ internal static class Program
 
         try
         {
-            // https only: a pack decides which mods get installed, so it must not
-            // arrive over a connection anyone on the path can rewrite.
-            if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            // A pack decides which mods get installed, so it must not arrive over a
+            // connection anyone on the path can rewrite. Loopback has no such path.
+            if (PackSources.IsRewritableInFlight(source))
                 return Fail("refusing to import over http; use https");
 
-            json = source.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            json = PackSources.IsRemote(source)
                 ? await http.GetStringAsync(source)
                 : File.ReadAllText(source);
         }

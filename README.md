@@ -413,6 +413,12 @@ set them separately.
 
 Sign-in mail is printed to the server's terminal rather than sent — see the cairns README.
 
+Import refuses plain `http://` — a pack names the mods, their download URLs *and* their
+hashes, so anyone able to rewrite one in flight picks what gets installed and writes
+hashes to match. **Loopback is exempt**, because those packets never leave the machine:
+`http://localhost:5080/you/pack.json` imports, `http://cairns.gg/…` does not. The check
+is `PackSources`, in Core, so both front-ends answer it the same way.
+
 Release artifacts, all platforms at once:
 
 ```bash
