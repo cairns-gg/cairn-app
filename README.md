@@ -573,6 +573,16 @@ is broken before there is a tag claiming otherwise.
 
 ### Signing and notarising the macOS builds
 
+This is the **direct-download** path, not the App Store one: somebody downloads a zip and
+it opens. Nothing here submits an app anywhere, and none of it requires the sandboxing the
+App Store insists on.
+
+Two names in the table below suggest otherwise and are worth reading past. *Developer ID
+Application* is the certificate Apple provides **for distribution outside the App Store** —
+the store uses a different one. And an *App Store Connect API key* is just Apple's
+credential system for their APIs; `notarytool` authenticates with it whether or not the
+App Store is ever involved.
+
 Five repository secrets turn it on. With none of them the workflow ad-hoc signs exactly as
 it did before, and the release notes say so — there is no flag to remember.
 
@@ -596,9 +606,17 @@ The workflow imports the certificate into a keychain of its own, unlocked for th
 only, and calls `security set-key-partition-list` — without which `codesign` waits on a GUI
 prompt nobody is there to answer and the job hangs until it times out.
 
-Signing gets past "unidentified developer". Only **notarisation** gets past the quarantine
-warning on a downloaded file, and only **stapling** makes that work for somebody whose
-first launch is offline — so all three happen, in that order, before packaging.
+All three steps are needed for a download that simply opens, and each covers a different
+refusal:
+
+| step | what it gets past |
+|---|---|
+| sign | "cannot be opened because the developer cannot be verified" |
+| notarise | the quarantine warning macOS attaches to anything downloaded |
+| staple | the same warning, for somebody whose first launch is offline |
+
+They happen in that order, and stapling happens before packaging — staple afterwards and
+the archive people download contains an app without its ticket.
 
 #### The macOS bundle must stay non-single-file
 
