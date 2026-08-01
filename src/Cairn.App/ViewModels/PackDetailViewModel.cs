@@ -9,6 +9,7 @@ using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
+using Cairn.Core.Cairns;
 
 namespace Cairn.App.ViewModels;
 
@@ -1058,10 +1059,11 @@ public partial class PackDetailViewModel : ViewModelBase
     public Func<ShareViewModel, Task<bool>>? ConfirmPublish { get; set; }
 
     /// <summary>
-    /// Works out what publishing would send, shows it, and — for now — stops there.
+    /// Works out what publishing would send, shows it, and sends it if that is confirmed.
     ///
-    /// The plan and everything on the screen are real and read from the pack; only the
-    /// upload has nowhere to go yet, and saying so beats a button that swallows the click.
+    /// The document that goes up is the one the window fingerprinted, not one rebuilt
+    /// afterwards — a document assembled a second time is a document that can differ from
+    /// the one somebody agreed to.
     /// </summary>
     [RelayCommand(CanExecute = nameof(NotBusy))]
     private async Task PublishPack()
@@ -1071,14 +1073,42 @@ public partial class PackDetailViewModel : ViewModelBase
 
         try
         {
+            var session = await SignInAsync();
+            if (session is null) return;
+
             var plan = await PublishPlan.PrepareAsync(
                 Manifest, _store.LoadLock(Id), _moddb,
                 new Progress<string>(id => LaunchStage = $"Checking {id}…"));
 
-            Publish = ShareViewModel.From(plan, Title, username: null, _store.LoadLink(Id));
+            Publish = ShareViewModel.From(plan, Title, session.Username, _store.LoadLink(Id));
 
-            if (ConfirmPublish is not null && await ConfirmPublish(Publish))
-                _log("uploading is not built yet — see docs/sharing.md");
+            if (ConfirmPublish is null || !await ConfirmPublish(Publish)) return;
+
+            LaunchStage = "Publishing…";
+
+            var document = _store.PublishedDocument(Id, Publish.StripConnect);
+            var client = new CairnsClient(_http, session.Server);
+
+            var result = await client.PublishAsync(
+                session, document, Publish.Slug, Publish.IsPublic);
+
+            // Recorded so the pack knows where it lives, and so the button can tell
+            // "Shared" from "Publish changes" without asking the server.
+            _store.SaveLink(Id, new PackLink
+            {
+                Role = PackRole.Author,
+                Url = result.Url,
+                Revision = result.Revision,
+                Published = new PublishRecord
+                {
+                    Fingerprint = PackLink.Fingerprint(document),
+                    Visibility = result.Visibility,
+                    Connect = Publish.StripConnect ? "stripped" : "included",
+                },
+            });
+
+            _log($"published {result.Url} (revision {result.Revision}, {result.Visibility})");
+            ReloadShare();
         }
         catch (Exception e)
         {
@@ -1088,6 +1118,43 @@ public partial class PackDetailViewModel : ViewModelBase
         {
             LaunchStage = "";
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// The stored session, signing in first if there is not one.
+    ///
+    /// The code goes in the same banner a launch uses, rather than in a window of its own:
+    /// it is a short wait with one instruction, and a second modal in front of the one the
+    /// user actually asked for is a poor trade. Returns null if the sign-in did not
+    /// complete, having already said why.
+    /// </summary>
+    private async Task<CairnsSession?> SignInAsync()
+    {
+        if (CairnsSession.Load() is { } existing) return existing;
+
+        var client = new CairnsClient(_http);
+        var flow = await client.StartSignInAsync();
+
+        LaunchStage = $"Enter {flow.UserCode} at {flow.VerificationUri}";
+        _log($"sign in at {flow.VerificationUri} with code {flow.UserCode}");
+
+        Browser.Open($"{flow.VerificationUri}?code={flow.UserCode}");
+
+        try
+        {
+            var session = await client.AwaitSignInAsync(
+                flow, new Progress<string>(s => LaunchStage = $"{flow.UserCode} — {s}"));
+
+            session.Save();
+            _log($"signed in to {session.Server} as {session.Username}");
+
+            return session;
+        }
+        catch (CairnsException e)
+        {
+            Error = e.Message;
+            return null;
         }
     }
 

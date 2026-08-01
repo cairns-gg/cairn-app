@@ -43,6 +43,12 @@ public static class CairnPaths
     /// <summary>Cairn's own preferences, as opposed to any pack's.</summary>
     public static string SettingsPath => Path.Combine(Root, "settings.json");
 
+    /// <summary>
+    /// The token this machine holds for cairns.gg. Kept apart from settings because it is
+    /// a credential rather than a preference, and written owner-only for the same reason.
+    /// </summary>
+    public static string AuthPath => Path.Combine(Root, "auth.json");
+
     /// <summary>This pack's game data path — worlds, mod configs and settings.</summary>
     public static string DataDir(string id) => Path.Combine(PackDir(id), "data");
 

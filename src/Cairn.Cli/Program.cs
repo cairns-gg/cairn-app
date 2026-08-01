@@ -4,6 +4,7 @@ using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
+using Cairn.Core.Cairns;
 
 namespace Cairn.Cli;
 
@@ -42,6 +43,11 @@ internal static class Program
                 "sync" => await Sync(store, moddb, http, args),
                 "update" => await Update(store, moddb, http, args),
                 "launch" => await LaunchPack(store, games, runtimes, moddb, http, args),
+                "login" => await Login(http, args),
+                "logout" => Logout(),
+                "whoami" => await WhoAmI(http),
+                "publish" => await Publish(store, moddb, http, args),
+                "unpublish" => await Unpublish(store, http, args),
                 "-h" or "--help" or "help" => Ok(Usage),
                 _ => Fail($"unknown command '{args[0]}'"),
             };
@@ -77,8 +83,14 @@ internal static class Program
               cairn-cli update <id> [modid...]     move followed mods to their newest
               cairn-cli update <id> --check        report updates without installing
               cairn-cli launch <id> [--dry-run] [--no-install]  sync, then start the game
+              cairn-cli login [--no-browser]          sign in to cairns.gg
+              cairn-cli logout                        forget this machine's token
+              cairn-cli whoami                        who this machine is signed in as
+              cairn-cli publish <id> [--slug x] [--public] [--keep-server]  share a pack
+              cairn-cli unpublish <id>                withdraw a published pack
 
             Packs live under $CAIRN_HOME (default ~/.cairn/packs/<id>).
+            Set CAIRNS_SERVER to publish somewhere other than https://cairns.gg.
             """);
     }
 
@@ -611,6 +623,127 @@ internal static class Program
 
         store.Delete(id);
         Console.WriteLine($"deleted pack '{id}' and its downloaded mods");
+        return 0;
+    }
+
+    // ---- cairns.gg ----
+
+    private static async Task<int> Login(HttpClient http, string[] args)
+    {
+        var client = new CairnsClient(http);
+        var flow = await client.StartSignInAsync();
+
+        Console.WriteLine($"""
+
+            Open {flow.VerificationUri} and enter this code:
+
+                {flow.UserCode}
+
+            Waiting…
+            """);
+
+        // Opened as a convenience, not as the mechanism: the URL is printed above, so a
+        // headless box, an unhelpful desktop or --no-browser all cost nothing.
+        if (!args.Contains("--no-browser"))
+            Browser.Open($"{flow.VerificationUri}?code={flow.UserCode}");
+
+        var session = await client.AwaitSignInAsync(flow);
+        session.Save();
+
+        Console.WriteLine($"signed in to {session.Server} as {session.Username}");
+        return 0;
+    }
+
+    private static int Logout()
+    {
+        CairnsSession.Clear();
+        Console.WriteLine("signed out; this machine's token is gone");
+        return 0;
+    }
+
+    private static async Task<int> WhoAmI(HttpClient http)
+    {
+        if (CairnsSession.Load() is not { } session)
+            return Fail("not signed in — run: cairn-cli login");
+
+        var who = await new CairnsClient(http, session.Server).WhoAmIAsync(session);
+
+        if (who is null) return Fail("the stored token is not valid any more — sign in again");
+
+        Console.WriteLine($"{who} at {session.Server}");
+        return 0;
+    }
+
+    private static async Task<int> Publish(
+        PackStore store, ModDbClient moddb, HttpClient http, string[] args)
+    {
+        if (args.Length < 2) return Fail("usage: cairn-cli publish <id> [--slug x] [--public]");
+
+        var id = args[1];
+        if (!store.Exists(id)) return Fail($"no pack '{id}'");
+
+        if (CairnsSession.Load() is not { } session)
+            return Fail("not signed in — run: cairn-cli login");
+
+        // The same plan the launcher's Share window shows, so both front-ends refuse the
+        // same packs for the same reasons.
+        var plan = await PublishPlan.PrepareAsync(store.Load(id), store.LoadLock(id), moddb);
+
+        if (!plan.CanPublish) return Fail(plan.LockProblem ?? "this pack cannot be published");
+
+        foreach (var mod in plan.Unresolvable)
+            Console.WriteLine($"  ! {mod.ModId} is not on ModDB — recipients cannot install it");
+
+        var isPublic = args.Contains("--public");
+
+        // A public pack almost never wants a real server address in it, and an unlisted one
+        // usually does. --keep-server overrides, because sometimes it is deliberate.
+        var strip = isPublic && !args.Contains("--keep-server");
+
+        if (plan.HasConnect)
+            Console.WriteLine(strip
+                ? $"  server address {plan.Connect} will be stripped"
+                : $"  server address {plan.Connect} will be included");
+
+        var document = store.PublishedDocument(id, strip);
+        var slug = ArgValue(args, "--slug") ?? id;
+
+        var client = new CairnsClient(http, session.Server);
+        var result = await client.PublishAsync(session, document, slug, isPublic);
+
+        // Recorded so the pack knows where it lives and whether it has changed since.
+        store.SaveLink(id, new PackLink
+        {
+            Role = PackRole.Author,
+            Url = result.Url,
+            Revision = result.Revision,
+            Published = new PublishRecord
+            {
+                Fingerprint = PackLink.Fingerprint(document),
+                Visibility = result.Visibility,
+                Connect = strip ? "stripped" : "included",
+            },
+        });
+
+        Console.WriteLine($"published {result.Url} (revision {result.Revision}, {result.Visibility})");
+        return 0;
+    }
+
+    private static async Task<int> Unpublish(PackStore store, HttpClient http, string[] args)
+    {
+        if (args.Length < 2) return Fail("usage: cairn-cli unpublish <id>");
+
+        var id = args[1];
+        if (CairnsSession.Load() is not { } session)
+            return Fail("not signed in — run: cairn-cli login");
+
+        if (store.LoadLink(id) is not { Role: PackRole.Author } link)
+            return Fail($"'{id}' has not been published from this machine");
+
+        var slug = link.Url[(link.Url.LastIndexOf('/') + 1)..];
+        await new CairnsClient(http, session.Server).WithdrawAsync(session, session.Username, slug);
+
+        Console.WriteLine($"withdrew {link.Url}");
         return 0;
     }
 

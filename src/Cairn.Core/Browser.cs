@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Cairn.App;
+namespace Cairn.Core;
 
 /// <summary>Opens a link in whatever the machine considers its browser.</summary>
 public static class Browser
