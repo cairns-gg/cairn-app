@@ -1,0 +1,175 @@
+name: Release
+
+# Cutting a release is pushing a tag. Everything else follows from that, so there is one
+# place where a version is decided rather than a tag, a workflow input and a file that can
+# disagree with each other.
+#
+# workflow_dispatch builds the same artifacts without publishing anything, which is how to
+# find out that a build is broken before a tag exists claiming otherwise.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write        # only the release job needs this; see its own permissions block
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  # Nothing is published until this passes. A release that fails its own test suite is
+  # worse than a late one, and it is the only gate between a tag and something people
+  # download.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - run: dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj -c Release
+
+      # Run through the built dll rather than `dotnet test`: this suite is xunit v3 with
+      # Avalonia's headless backend, which needs no display but does want its own runner.
+      - run: dotnet build tests/Cairn.App.Tests -c Release
+      - run: dotnet tests/Cairn.App.Tests/bin/Release/net10.0/Cairn.App.Tests.dll
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Work out the version
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # A bundle rather than the bare binary: it gets a Dock icon and a real app name, it
+      # avoids the self-extraction pause a single-file build has on first run, and it is
+      # what carries CFBundleURLTypes — without which cairn:// links do nothing.
+      #
+      # Both architectures, because Intel Macs are still out there and an arm64-only
+      # download simply refuses to start on one.
+      # No make-icons.sh here: the rendered icons are committed, and that script exists for
+      # when the artwork changes. Re-rendering on every release would make the icon a build
+      # output that depends on whatever the runner's qlmanage does today.
+      - name: Build the app bundles
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          ./build-macos-app.sh osx-arm64
+          ./build-macos-app.sh osx-x64
+
+      # ditto, not zip. A .app contains symlinks and extended attributes, and plain zip
+      # quietly flattens them into a bundle macOS then calls damaged.
+      - name: Package
+        run: |
+          mkdir -p dist
+          for arch in arm64 x64; do
+            ditto -c -k --sequesterRsrc --keepParent \
+              "artifacts/osx-$arch/Cairn.app" \
+              "dist/cairn-${GITHUB_REF_NAME#v}-macos-$arch.zip"
+          done
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+
+  # Windows and Linux cross-publish from one runner: these are single-file binaries with
+  # no platform tooling behind them, unlike the macOS bundle.
+  cross:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - run: ./build-release.sh win-x64 linux-x64
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+
+          # The CLI ships alongside the launcher rather than separately: one download,
+          # and the pair are only ever useful at the same version.
+          tar -czf "dist/cairn-$version-linux-x64.tar.gz" \
+            -C artifacts/linux-x64 cairn cairn-cli
+
+          (cd artifacts/win-x64 && zip -q "../../dist/cairn-$version-windows-x64.zip" \
+            cairn.exe cairn-cli.exe)
+
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cross
+          path: dist/*
+
+  release:
+    needs: [macos, cross]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Downloads
+
+          | platform | file |
+          |---|---|
+          | macOS (Apple silicon) | `cairn-*-macos-arm64.zip` |
+          | macOS (Intel) | `cairn-*-macos-x64.zip` |
+          | Windows | `cairn-*-windows-x64.zip` |
+          | Linux | `cairn-*-linux-x64.tar.gz` |
+
+          Each contains the launcher; the Windows and Linux archives also contain
+          `cairn-cli`. Nothing else needs installing — Cairn fetches the game and the
+          .NET runtime itself.
+
+          ### macOS: these builds are not notarised
+
+          They are ad-hoc signed, so Gatekeeper refuses them on first open with "Cairn is
+          damaged" or "cannot be opened because the developer cannot be verified". Until
+          there is a Developer ID certificate to sign with:
+
+          ```
+          xattr -dr com.apple.quarantine /Applications/Cairn.app
+          ```
+          NOTES
+          cat notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -lh dist
+
+          # A draft, deliberately. The macOS bundles are ad-hoc signed, so somebody has to
+          # look at what is being shipped and decide it is acceptable. Publishing straight
+          # to the world would make that decision by default, once, silently, forever.
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --generate-notes

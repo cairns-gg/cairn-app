@@ -22,7 +22,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 RID="${1:-osx-arm64}"
-VERSION="0.1.0"
+
+# Overridable so a release can stamp the tag it was cut from. The bundle's version is what
+# Finder shows and what macOS compares when deciding whether an install is an upgrade, so
+# every build claiming 0.1.0 forever is a small lie that gets harder to correct later.
+VERSION="${VERSION:-0.1.0}"
 BUNDLE_ID="${BUNDLE_ID:-com.dizzyd.cairn}"
 APP="artifacts/$RID/Cairn.app"
 EXE="cairn"

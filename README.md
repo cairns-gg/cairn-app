@@ -536,6 +536,45 @@ the launcher per platform. Cross-publishing works from any host. Note the RIDs h
 Cairn's *own* binary: the arm64 build exists so the launcher runs natively on Apple
 Silicon, and it still resolves an x64 runtime for the x64 game.
 
+### Cutting a release
+
+Push a tag. `.github/workflows/release.yml` runs the tests, builds all four artifacts and
+opens a **draft** release with them attached.
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0
+```
+
+| platform | artifact | built on |
+|---|---|---|
+| macOS (Apple silicon) | `cairn-<v>-macos-arm64.zip` | `macos-latest` |
+| macOS (Intel) | `cairn-<v>-macos-x64.zip` | `macos-latest` |
+| Windows | `cairn-<v>-windows-x64.zip` | `ubuntu-latest`, cross-published |
+| Linux | `cairn-<v>-linux-x64.tar.gz` | `ubuntu-latest`, cross-published |
+
+Only macOS needs its own runner, because the `.app` bundle needs `codesign` and `plutil`;
+the others are single-file binaries with no platform tooling behind them. The tag becomes
+`CFBundleShortVersionString`, which is what Finder shows and what macOS compares to decide
+whether an install is an upgrade.
+
+Three details that are load-bearing:
+
+- **`ditto`, not `zip`,** for the bundle. A `.app` holds symlinks and extended attributes,
+  and plain `zip` flattens them into something macOS calls damaged.
+- **`.tar.gz` for Linux**, because zip does not carry the executable bit and a download
+  that needs `chmod +x` before it runs is a download that gets reported as broken.
+- **Draft, not published.** The macOS bundles are ad-hoc signed, so Gatekeeper refuses them
+  on first open; somebody has to look at that and decide it is acceptable. Publishing
+  automatically would make that decision once, silently, for good. The generated notes
+  carry the `xattr -dr com.apple.quarantine` workaround.
+
+Notarising properly needs an Apple Developer ID in repository secrets, and dropping
+`--deep` in favour of signing each nested binary — Apple discourages `--deep` for Developer
+ID. Until then the macOS downloads have a rough first run.
+
+`workflow_dispatch` builds everything without publishing, which is how to find out a build
+is broken before there is a tag claiming otherwise.
+
 ### macOS application bundle
 
 ```bash
