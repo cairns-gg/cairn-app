@@ -36,18 +36,35 @@ echo "building $APP ($RID)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# Quiet while it works, and everything it said when it does not.
+#
+# This used to redirect to /dev/null unconditionally, which is fine on a machine where you
+# can just run it again — and useless on a build runner, where it turns a failure into an
+# exit code and two seconds of silence.
+publish() {
+  local log
+  log="$(mktemp)"
+
+  if ! dotnet publish "$1" \
+      -c Release -r "$RID" --self-contained true \
+      -p:PublishSingleFile=false -p:DebugType=none \
+      -o "$APP/Contents/MacOS" --nologo -v quiet > "$log" 2>&1; then
+    echo "  dotnet publish failed:"
+    sed 's/^/    /' "$log"
+    rm -f "$log"
+    exit 1
+  fi
+
+  rm -f "$log"
+}
+
 # Not single-file: a bundle is already a directory, and avoiding self-extraction is the
-# whole point of doing this.
-dotnet publish src/Cairn.App/Cairn.App.csproj \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=false -p:DebugType=none \
-  -o "$APP/Contents/MacOS" --nologo -v quiet >/dev/null
+# whole point of doing this — and it is also what makes the result notarisable, since a
+# single-file build unpacks binaries at runtime that were never signed.
+publish src/Cairn.App/Cairn.App.csproj
 
 # Ship the CLI alongside, so one download provides both.
-dotnet publish src/Cairn.Cli/Cairn.Cli.csproj \
-  -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=false -p:DebugType=none \
-  -o "$APP/Contents/MacOS" --nologo -v quiet >/dev/null
+publish src/Cairn.Cli/Cairn.Cli.csproj
 
 ICON_KEY=""
 ICON_KEY_TEXT='    <key>CFBundleIconFile</key>

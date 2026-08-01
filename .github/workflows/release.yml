@@ -61,9 +61,68 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      # On a tag this is the tag. On a manual run there is no version to speak of, and
+      # GITHUB_REF_NAME is the branch — which is how a dispatch build ended up stamping
+      # CFBundleShortVersionString as "main".
       - name: Work out the version
         id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/*) version="${GITHUB_REF_NAME#v}" ;;
+            *)           version="0.0.0-$(git rev-parse --short HEAD)" ;;
+          esac
+
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "version: $version"
+
+      # Before the build, because every way of getting this wrong otherwise costs a full
+      # build first and then fails somewhere that does not name the missing secret.
+      #
+      # Nothing configured is a valid answer — that is the ad-hoc path. Half-configured is
+      # not: it means somebody meant to sign, and finding out from a Gatekeeper dialog
+      # weeks later is the worst place to learn it did not happen.
+      - name: Check the signing configuration
+        run: |
+          missing() { echo "  missing: $1"; FAILED=1; }
+          FAILED=0
+
+          have_cert=0
+          [ -n "$CERTIFICATE" ] || [ -n "$CERTIFICATE_PASSWORD" ] && have_cert=1
+
+          have_notary=0
+          [ -n "$NOTARY_KEY" ] || [ -n "$NOTARY_KEY_ID" ] || [ -n "$NOTARY_ISSUER" ] && have_notary=1
+
+          if [ "$have_cert" = 0 ] && [ "$have_notary" = 0 ]; then
+            echo "No signing secrets — building ad-hoc signed, as before."
+            echo "The release notes will say the macOS builds are not notarised."
+            exit 0
+          fi
+
+          if [ "$have_cert" = 1 ]; then
+            echo "Signing configuration:"
+            [ -n "$CERTIFICATE" ] || missing "MACOS_CERTIFICATE"
+            [ -n "$CERTIFICATE_PASSWORD" ] || missing "MACOS_CERTIFICATE_PASSWORD"
+          fi
+
+          if [ "$have_notary" = 1 ]; then
+            echo "Notarisation configuration:"
+            [ -n "$NOTARY_KEY" ] || missing "APPLE_NOTARY_KEY"
+            [ -n "$NOTARY_KEY_ID" ] || missing "APPLE_NOTARY_KEY_ID"
+            [ -n "$NOTARY_ISSUER" ] || missing "APPLE_NOTARY_ISSUER"
+
+            # Notarisation is Apple checking something signed with a Developer ID. There
+            # is nothing to submit without one, and the notarise step would simply be
+            # skipped — quietly producing the ad-hoc build the secrets were meant to avoid.
+            [ "$have_cert" = 1 ] || missing "MACOS_CERTIFICATE (notarising needs a signed app)"
+          fi
+
+          if [ "$FAILED" = 1 ]; then
+            echo
+            echo "Set the rest, or none of them — half is the one case that cannot work."
+            exit 1
+          fi
+
+          echo "  complete"
 
       # All of this degrades: with no certificate the build is ad-hoc signed exactly as it
       # was before any of it existed, and the release notes say so. Adding the secrets is
@@ -181,7 +240,13 @@ jobs:
 
       - name: Package
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          # Same rule as the macOS job: a manual run has no version, and the branch name
+          # is not one.
+          case "$GITHUB_REF" in
+            refs/tags/*) version="${GITHUB_REF_NAME#v}" ;;
+            *)           version="0.0.0-$(git rev-parse --short HEAD)" ;;
+          esac
+
           mkdir -p dist
 
           # The CLI ships alongside the launcher rather than separately: one download,
