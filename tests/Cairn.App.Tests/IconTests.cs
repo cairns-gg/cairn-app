@@ -12,6 +12,7 @@ namespace Cairn.App.Tests;
 /// the machine that builds it — so these check the container is genuinely decodable
 /// rather than merely present. A malformed icon is easy to ship and hard to notice.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class IconTests
 {
     private static Stream OpenIcon() =>

@@ -14,6 +14,7 @@ namespace Cairn.App.Tests;
 /// is a real server address, and what recipients will not be able to install. Its job is to
 /// be read before Publish is pressed.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class ShareWindowTests
 {
     private static PublishPlan Plan(

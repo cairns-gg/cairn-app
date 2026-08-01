@@ -20,6 +20,7 @@ namespace Cairn.App.Tests;
 ///
 /// Colours come from the game's Vintagestory.API.Client.GuiStyle.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class ThemeTests : IDisposable
 {
     private readonly string _home = Path.Combine(

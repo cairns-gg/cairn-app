@@ -14,6 +14,7 @@ namespace Cairn.App.Tests;
 /// scrolling tab, so arming it drew the warning below the fold — the one place a
 /// destructive prompt must never be.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class ConfirmWindowTests
 {
     private static ConfirmViewModel Prompt(string? message = null) => new(

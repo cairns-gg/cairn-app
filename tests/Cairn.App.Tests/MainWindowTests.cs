@@ -17,6 +17,7 @@ namespace Cairn.App.Tests;
 /// runtime, so a stale binding path fails silently — these render the window and assert
 /// on the visual tree to catch that.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class MainWindowTests : IDisposable
 {
     private readonly string _home = Path.Combine(

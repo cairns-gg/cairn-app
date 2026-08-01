@@ -13,6 +13,7 @@ namespace Cairn.App.Tests;
 /// Making the interface bigger. Scaling the window rather than the font size: a larger
 /// label inside a same-sized button is more cramped, not more readable.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class UiScaleTests : IDisposable
 {
     private readonly double _original = UiScale.Current;

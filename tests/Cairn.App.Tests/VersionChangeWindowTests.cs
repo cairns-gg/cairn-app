@@ -13,6 +13,7 @@ namespace Cairn.App.Tests;
 /// The confirmation dialog. It exists because a pack can have dozens of mods: inline in
 /// the Settings tab, a long verdict list pushed the buttons that act on it out of reach.
 /// </summary>
+[Collection(AvaloniaTests.Collection)]
 public class VersionChangeWindowTests
 {
     private static VersionChangeViewModel Change(int mods, bool downgrade = false)
