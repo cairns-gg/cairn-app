@@ -571,6 +571,53 @@ Three details that are load-bearing:
 `workflow_dispatch` builds everything without publishing, which is how to find out a build
 is broken before there is a tag claiming otherwise.
 
+### Publishing to DigitalOcean Spaces
+
+So cairns.gg can offer a download rather than a link to a repository. Two secrets and three
+variables; with `SPACES_KEY` unset the job says so and does nothing.
+
+| name | kind | what it is |
+|---|---|---|
+| `SPACES_KEY` | secret | Spaces access key |
+| `SPACES_SECRET` | secret | Spaces secret key |
+| `SPACES_ENDPOINT` | variable | e.g. `https://nyc3.digitaloceanspaces.com` |
+| `SPACES_BUCKET` | variable | the Space's name |
+| `SPACES_PUBLIC_URL` | variable | optional — the CDN domain, if there is one |
+
+The endpoint and bucket are variables rather than secrets so they appear in the logs. A
+masked bucket name makes a failed upload much harder to read, and neither is a secret.
+The region the AWS CLI insists on is derived from the endpoint, which already contains it.
+
+Spaces speaks S3, so the client is the AWS CLI that runs on the runner already.
+
+```
+releases/1.2.3/cairn-1.2.3-macos-arm64.zip     immutable, cached for a year
+releases/1.2.3/…                               every other artifact, plus SHA256SUMS
+releases/latest.json                           what to offer, cached for 5 minutes
+```
+
+**Versioned paths, never overwritten.** Somebody who linked a build a year ago should still
+get that build, byte for byte — which is also what makes it safe to cache them forever,
+since a URL cannot come to mean something else.
+
+`latest.json` is the only mutable thing, written last so it never names a file that is not
+up yet:
+
+```json
+{
+  "version": "1.2.3",
+  "publishedAt": "2026-08-01T17:50:51Z",
+  "files": [
+    { "platform": "macos-arm64", "name": "cairn-1.2.3-macos-arm64.zip",
+      "url": "https://…/releases/1.2.3/cairn-1.2.3-macos-arm64.zip",
+      "size": 48291043, "sha256": "f813d49e…" }
+  ]
+}
+```
+
+That is what a downloads page on the site should read, rather than a hardcoded list that
+goes stale the release after somebody remembers to update it.
+
 ### Signing and notarising the macOS builds
 
 This is the **direct-download** path, not the App Store one: somebody downloads a zip and
