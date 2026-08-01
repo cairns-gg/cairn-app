@@ -1046,16 +1046,49 @@ public partial class PackDetailViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Publishing, once there is somewhere to publish to. The button, its states and the
-    /// change detection behind them are real; what they open is not built yet, and saying
-    /// so beats a button that swallows the click.
+    /// The last prepared publish. Nothing has been sent while it is set, which is the
+    /// point of the step — the same arrangement as VersionChange.
     /// </summary>
-    [RelayCommand]
-    private void PublishPack()
+    [ObservableProperty] public partial ShareViewModel? Publish { get; set; }
+
+    /// <summary>
+    /// Shows the plan and returns whether to send it. Supplied by the view; when absent —
+    /// headless tests — the result stays on <see cref="Publish"/> to be inspected.
+    /// </summary>
+    public Func<ShareViewModel, Task<bool>>? ConfirmPublish { get; set; }
+
+    /// <summary>
+    /// Works out what publishing would send, shows it, and — for now — stops there.
+    ///
+    /// The plan and everything on the screen are real and read from the pack; only the
+    /// upload has nowhere to go yet, and saying so beats a button that swallows the click.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotBusy))]
+    private async Task PublishPack()
     {
-        _log(Share.Status == ShareStatus.Unshared
-            ? "sharing is not built yet — see docs/sharing.md"
-            : $"publishing changes to {ShareUrlLine} is not built yet — see docs/sharing.md");
+        IsBusy = true;
+        Error = null;
+
+        try
+        {
+            var plan = await PublishPlan.PrepareAsync(
+                Manifest, _store.LoadLock(Id), _moddb,
+                new Progress<string>(id => LaunchStage = $"Checking {id}…"));
+
+            Publish = ShareViewModel.From(plan, Title, username: null, _store.LoadLink(Id));
+
+            if (ConfirmPublish is not null && await ConfirmPublish(Publish))
+                _log("uploading is not built yet — see docs/sharing.md");
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            LaunchStage = "";
+            IsBusy = false;
+        }
     }
 
     /// <summary>

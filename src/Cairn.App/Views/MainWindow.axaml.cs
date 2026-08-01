@@ -26,8 +26,15 @@ public partial class MainWindow : Window
 
         vm.OpenPreferences = ShowPreferencesAsync;
         vm.ConfirmVersionChange = ConfirmVersionChangeAsync;
+        vm.ConfirmPublish = ConfirmPublishAsync;
         vm.Confirm = ConfirmAsync;
     }
+
+    /// <summary>
+    /// True only if Publish was pressed. Dismissing the window any other way sends nothing.
+    /// </summary>
+    private Task<bool> ConfirmPublishAsync(ShareViewModel share) =>
+        new ShareWindow { DataContext = share }.ShowDialog<bool>(this);
 
     private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
         new PreferencesWindow { DataContext = preferences }.ShowDialog(this);

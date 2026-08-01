@@ -359,6 +359,7 @@ public partial class MainViewModel : ViewModelBase
             knownGameVersions: KnownGameVersionsAsync);
 
         Detail.ConfirmVersionChange = ConfirmVersionChange;
+        Detail.ConfirmPublish = ConfirmPublish;
 
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
@@ -514,6 +515,7 @@ public partial class MainViewModel : ViewModelBase
     public Func<PreferencesViewModel, Task>? OpenPreferences { get; set; }
 
     private Func<VersionChangeViewModel, Task<bool>>? _confirmVersionChange;
+    private Func<ShareViewModel, Task<bool>>? _confirmPublish;
 
     /// <summary>
     /// Set by the view; see PackDetailViewModel.ConfirmVersionChange.
@@ -530,6 +532,17 @@ public partial class MainViewModel : ViewModelBase
         {
             _confirmVersionChange = value;
             if (Detail is not null) Detail.ConfirmVersionChange = value;
+        }
+    }
+
+    /// <summary>Set by the view; same arrangement as ConfirmVersionChange above.</summary>
+    public Func<ShareViewModel, Task<bool>>? ConfirmPublish
+    {
+        get => _confirmPublish;
+        set
+        {
+            _confirmPublish = value;
+            if (Detail is not null) Detail.ConfirmPublish = value;
         }
     }
 
