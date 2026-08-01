@@ -563,18 +563,22 @@ Three details that are load-bearing:
   and plain `zip` flattens them into something macOS calls damaged.
 - **`.tar.gz` for Linux**, because zip does not carry the executable bit and a download
   that needs `chmod +x` before it runs is a download that gets reported as broken.
-- **Draft, not published.** The macOS bundles are ad-hoc signed, so Gatekeeper refuses them
-  on first open; somebody has to look at that and decide it is acceptable. Publishing
-  automatically would make that decision once, silently, for good. The generated notes
-  carry the `xattr -dr com.apple.quarantine` workaround.
+- **Promotion is conditional, publishing is not.** Downloads come from Spaces, not from
+  GitHub — the release here is a record of what was built. Uploading a version reaches
+  nobody, because the files sit at a path nothing links to; moving `releases/latest.json`
+  is what ships them, and that only happens when the macOS builds were notarised. An
+  unnotarised build still uploads, still gets a URL, and simply is not made the download.
+
+  Promote one anyway with a single `aws s3 cp latest.json`, if that is deliberate.
 
 `workflow_dispatch` builds everything without publishing, which is how to find out a build
 is broken before there is a tag claiming otherwise.
 
 ### Publishing to DigitalOcean Spaces
 
-So cairns.gg can offer a download rather than a link to a repository. Two secrets and three
-variables; with `SPACES_KEY` unset the job says so and does nothing.
+**This is the distribution channel.** GitHub holds the source and a copy of each build;
+people download from cairns.gg. Two secrets and three variables; with `SPACES_KEY` unset
+the job says so and does nothing.
 
 | name | kind | what it is |
 |---|---|---|

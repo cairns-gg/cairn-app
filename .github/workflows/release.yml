@@ -264,10 +264,11 @@ jobs:
           name: cross
           path: dist/*
 
-  # Object storage, so cairns.gg can offer a download rather than a link to a repository.
-  # Separate from the GitHub release on purpose: that one is a draft somebody approves,
-  # while these are immutable files at a versioned path that nothing points at until the
-  # manifest moves.
+  # Object storage, which is where downloads actually come from — GitHub is not a public
+  # distribution channel here, so this job is the one that reaches people.
+  #
+  # Uploading a version is safe on its own: the files sit at an immutable path that nothing
+  # links to. Moving latest.json is the act that ships them, and that has a condition on it.
   spaces:
     needs: [macos, cross]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -279,6 +280,7 @@ jobs:
       SPACES_ENDPOINT: ${{ vars.SPACES_ENDPOINT }}
       SPACES_BUCKET: ${{ vars.SPACES_BUCKET }}
       SPACES_PUBLIC_URL: ${{ vars.SPACES_PUBLIC_URL }}
+      NOTARISED: ${{ needs.macos.outputs.notarised }}
 
     steps:
       - uses: actions/download-artifact@v4
@@ -344,13 +346,29 @@ jobs:
 
           cat latest.json
 
+          # Uploading a version reaches nobody; moving this is what ships it. So the one
+          # thing worth stopping for gets checked here rather than left to somebody
+          # remembering — a macOS build that is not notarised greets its first user with
+          # "Cairn is damaged", and that should not become the download by default.
+          #
+          # Tag anyway if that is deliberate: aws s3 cp latest.json, by hand, once.
+          if [ "$NOTARISED" != "true" ]; then
+            echo
+            echo "Uploaded, but NOT promoted: the macOS builds are not notarised."
+            echo "  $public/releases/$version/  is complete and reachable"
+            echo "  releases/latest.json        still points at the previous version"
+            echo
+            echo "Set the signing secrets, or promote it by hand if that is intended."
+            exit 0
+          fi
+
           aws s3 cp latest.json "s3://$SPACES_BUCKET/releases/latest.json" \
             --endpoint-url "$SPACES_ENDPOINT" \
             --acl public-read \
             --content-type application/json \
             --cache-control "public, max-age=300"
 
-          echo "published $public/releases/$version/"
+          echo "published and promoted: $public/releases/$version/"
 
       - name: Say why nothing was uploaded
         if: env.SPACES_KEY == ''
@@ -375,7 +393,8 @@ jobs:
           NOTARISED: ${{ needs.macos.outputs.notarised }}
         run: |
           cat > notes.md <<'NOTES'
-          ## Downloads
+          Built artifacts, kept here as a record. **People download from cairns.gg** — this
+          repository is not the distribution channel.
 
           | platform | file |
           |---|---|
@@ -419,11 +438,11 @@ jobs:
         run: |
           ls -lh dist
 
-          # A draft, deliberately. The macOS bundles are ad-hoc signed, so somebody has to
-          # look at what is being shipped and decide it is acceptable. Publishing straight
-          # to the world would make that decision by default, once, silently, forever.
+          # Not a draft. It was one so somebody would look before the world saw an ad-hoc
+          # signed build — but nobody downloads from here: this is a record of what was
+          # built and a copy of the artifacts, and the gate that matters is on promoting
+          # latest.json in the spaces job, which is what people actually fetch.
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --draft \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md \
             --generate-notes
