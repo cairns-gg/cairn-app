@@ -43,7 +43,14 @@ public partial class App : Application
             // the scheme is ours at all. Off the startup path because it shells out to
             // desktop-integration helpers on Linux, and the window opening in 38 ms is
             // worth more than registering a link a few milliseconds sooner.
-            Task.Run(PackLinkHandler.Register);
+            //
+            // A thread of its own rather than the pool: this waits on child processes, and
+            // blocking a pool thread for that is what the pool is not for.
+            new Thread(PackLinkHandler.Register)
+            {
+                IsBackground = true,
+                Name = "cairn-url-handler",
+            }.Start();
 
             if (PackLinks.FromArguments(desktop.Args ?? []) is { } link)
                 PackLinks.Follow(this, model, link);

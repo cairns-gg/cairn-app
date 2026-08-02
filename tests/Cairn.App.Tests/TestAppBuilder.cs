@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Cairn.App;
 using Cairn.App.Tests;
+using Cairn.Core.Packs;
 
 [assembly: AvaloniaTestApplication(typeof(TestAppBuilder))]
 
@@ -51,6 +52,12 @@ public static class TestAppBuilder
         Environment.SetEnvironmentVariable(
             "CAIRN_HOME",
             Path.Combine(Path.GetTempPath(), "cairn-session-" + Guid.NewGuid().ToString("n")[..8]));
+
+        // For the same reason, one directory further out. Booting the real App class
+        // registers cairn:// with the desktop, and a test run is not an installation —
+        // unchecked, running the suite on Linux leaves a desktop entry in the home
+        // directory of whoever ran it, pointing at a test host that has since exited.
+        Environment.SetEnvironmentVariable(PackLinkHandler.OptOutVariable, "1");
 
         return AppBuilder.Configure<App>()
             .UseSkia()

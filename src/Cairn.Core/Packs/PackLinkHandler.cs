@@ -33,15 +33,30 @@ public static class PackLinkHandler
     public const string DesktopFileName = "cairn-url-handler.desktop";
 
     /// <summary>
+    /// Set to opt out. The headless test suite does, because it boots the real
+    /// <c>App</c> class: without it, running the tests writes a desktop entry into the
+    /// home directory of whoever ran them — which is the same reason the suite points
+    /// <c>CAIRN_HOME</c> at a temporary directory rather than reading the developer's own.
+    ///
+    /// The destination cannot simply follow <c>CAIRN_HOME</c> instead: a desktop entry
+    /// only counts where the XDG spec says to put it, so somewhere harmless is also
+    /// somewhere inert.
+    /// </summary>
+    public const string OptOutVariable = "CAIRN_NO_URL_HANDLER";
+
+    /// <summary>
     /// Registers the running executable as the handler, if this platform needs telling.
     ///
-    /// Safe to call from anywhere at any time: it never throws and never blocks on
-    /// anything slower than a file write, and on macOS it does nothing at all.
+    /// Never throws, and on macOS does nothing at all. It does block — writing a file, and
+    /// on Linux waiting on two helper processes — so callers give it a thread of its own
+    /// rather than the pool.
     /// </summary>
     public static void Register()
     {
         try
         {
+            if (Environment.GetEnvironmentVariable(OptOutVariable) is { Length: > 0 }) return;
+
             // Environment.ProcessPath is the apphost that was actually launched, which is
             // what has to be recorded — Assembly.Location is the managed dll and is empty
             // in a single-file build.
