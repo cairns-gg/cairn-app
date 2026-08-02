@@ -16,8 +16,61 @@
         <TabControl>
 
             <!--
-                Storage is what this pane is really about: Play only ever adds game
-                versions and runtimes, so this is the one place that takes them back.
+                First, so it is what opens — including from the macOS About item, which
+                arriving on a disk-usage screen made look like the wrong menu entry.
+                What this holds is what you come here to read rather than to change: which
+                version this is, where things live, and the one setting that is not about
+                any particular pack.
+            -->
+            <TabItem Header="Overview">
+                <StackPanel Margin="0,14,0,0" Spacing="12">
+                    <!-- First within the tab, because it is what somebody opens this
+                         looking for when reporting that something is broken. -->
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Version" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding Version}" FontSize="11" Opacity="0.75" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Cairn home" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding CairnHome}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   Text="Packs, game versions, runtimes and caches. Set CAIRN_HOME to move it." />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Game install" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding GameInstallPath}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Shared data path" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding SharedDataPath}" FontSize="11" Opacity="0.75"
+                                   TextWrapping="Wrap" />
+                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   Text="Vintage Story's own folder. Packs made before packs had their own data still use it, and Cairn only ever reads it." />
+                    </StackPanel>
+
+                    <Separator Margin="0,4" />
+
+                    <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Left">
+                        <TextBlock Text="Interface size" FontSize="12" Opacity="0.7" />
+
+                        <ComboBox MinWidth="140"
+                                  ItemsSource="{Binding ScaleChoices}"
+                                  SelectedItem="{Binding SelectedScale}" />
+
+                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                                   Text="Scales everything — text, buttons, rows and spacing — rather than only the font, so nothing ends up cramped inside a control that stayed the same size. Applies straight away and is remembered." />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <!--
+                Play only ever adds game versions and runtimes, so this is the one place
+                that takes them back.
             -->
             <TabItem Header="Storage">
                 <DockPanel LastChildFill="True" Margin="0,10,0,0">
@@ -204,54 +257,6 @@
                             </DockPanel>
                         </Grid>
                 </DockPanel>
-            </TabItem>
-
-            <TabItem Header="Locations">
-                <StackPanel Margin="0,14,0,0" Spacing="12">
-                    <!-- First, because it is what somebody opens this looking for when
-                         reporting that something is broken. -->
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Version" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding Version}" FontSize="11" Opacity="0.75" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Cairn home" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding CairnHome}" FontSize="11" Opacity="0.75"
-                                   TextWrapping="Wrap" />
-                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
-                                   Text="Packs, game versions, runtimes and caches. Set CAIRN_HOME to move it." />
-                    </StackPanel>
-
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Game install" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding GameInstallPath}" FontSize="11" Opacity="0.75"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Shared data path" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding SharedDataPath}" FontSize="11" Opacity="0.75"
-                                   TextWrapping="Wrap" />
-                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
-                                   Text="Vintage Story's own folder. Packs made before packs had their own data still use it, and Cairn only ever reads it." />
-                    </StackPanel>
-                </StackPanel>
-            </TabItem>
-
-            <TabItem Header="Appearance">
-                <StackPanel Margin="0,14,0,0" Spacing="10" MaxWidth="460" HorizontalAlignment="Left">
-                    <TextBlock Text="Interface size" FontWeight="SemiBold" FontSize="13" />
-                    <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap"
-                               Text="Scales everything — text, buttons, rows and spacing — rather than only the font, so nothing ends up cramped inside a control that stayed the same size." />
-
-                    <ComboBox MinWidth="140"
-                              ItemsSource="{Binding ScaleChoices}"
-                              SelectedItem="{Binding SelectedScale}" />
-
-                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                               Text="Applies straight away, to this window and the launcher behind it. Remembered for next time." />
-                </StackPanel>
             </TabItem>
 
         </TabControl>

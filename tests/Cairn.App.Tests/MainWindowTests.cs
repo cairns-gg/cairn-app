@@ -746,15 +746,31 @@ public class MainWindowTests : IDisposable
         Assert.Contains("Preferences", Buttons(window).Keys);
     }
 
+    /// <summary>
+    /// The Preferences window with its Storage tab showing.
+    ///
+    /// Overview opens first, and a TabControl only realises the selected tab — so
+    /// anything asserting on storage has to ask for it rather than assume it is on top.
+    /// </summary>
+    private static PreferencesWindow ShowPreferences(PreferencesViewModel model, string tab = "Storage")
+    {
+        var window = new PreferencesWindow { DataContext = model };
+        window.Show();
+
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
+        tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
+            .Single(t => (t.Header as string) == tab);
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        return window;
+    }
+
     [AvaloniaFact]
     public void Preferences_opens_a_window_of_its_own()
     {
         var (_, vm) = Show();
 
-        var preferences = OpenPreferences(vm);
-
-        var window = new PreferencesWindow { DataContext = preferences };
-        window.Show();
+        var window = ShowPreferences(OpenPreferences(vm));
 
         var text = VisibleText(window).ToList();
         Assert.Contains("Storage", text);
@@ -766,8 +782,7 @@ public class MainWindowTests : IDisposable
     public void Preferences_still_manages_game_versions_and_runtimes()
     {
         var (_, vm) = Show();
-        var window = new PreferencesWindow { DataContext = OpenPreferences(vm) };
-        window.Show();
+        var window = ShowPreferences(OpenPreferences(vm));
 
         var buttons = Buttons(window);
         foreach (var label in new[] { "Install", "Refresh list", "Remove", "Install its .NET", "Clean up" })
@@ -1860,8 +1875,7 @@ public class MainWindowTests : IDisposable
     public void The_preferences_bar_animates_on_the_same_rule()
     {
         var (_, vm) = Show();
-        var window = new PreferencesWindow { DataContext = OpenPreferences(vm) };
-        window.Show();
+        var window = ShowPreferences(OpenPreferences(vm));
 
         vm.Games.IsBusy = true;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -2514,16 +2528,20 @@ public class MainWindowTests : IDisposable
         window.Show();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        // A TabControl only realises the selected tab, so the version is not in the visual
-        // tree until its own tab is.
+        // No tab to select: Overview is first, so it is what opens — including from the
+        // macOS About item, which arriving on the disk-usage screen made look like the
+        // wrong menu entry entirely.
         var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
-        tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
-            .Single(t => (t.Header as string) == "Locations");
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Overview", (tabs.SelectedItem as TabItem)?.Header);
 
         var text = VisibleText(window).ToList();
         Assert.Contains("Version", text);
         Assert.Contains(CairnVersion.Current, text);
+
+        // Appearance folded in here rather than being a tab of its own, so the whole of
+        // what this window offers is two screens.
+        Assert.Contains("Interface size", text);
+        Assert.Equal(2, tabs.GetVisualDescendants().OfType<TabItem>().Count());
 
         window.Close();
     }

@@ -24,9 +24,12 @@ cd "$(dirname "$0")"
 RID="${1:-osx-arm64}"
 
 # Overridable so a release can stamp the tag it was cut from. The bundle's version is what
-# Finder shows and what macOS compares when deciding whether an install is an upgrade, so
-# every build claiming 0.1.0 forever is a small lie that gets harder to correct later.
-VERSION="${VERSION:-0.1.0}"
+# Finder shows and what macOS compares when deciding whether an install is an upgrade.
+#
+# 0.0.0 unset, not a plausible-looking number: this is stamped into the assembly too, and
+# the app reads it back to say which version it is. A dev build defaulting to 0.1.0 spent
+# its time claiming to be a release that existed.
+VERSION="${VERSION:-0.0.0}"
 BUNDLE_ID="${BUNDLE_ID:-com.dizzyd.cairn}"
 APP="artifacts/$RID/Cairn.app"
 EXE="cairn"
