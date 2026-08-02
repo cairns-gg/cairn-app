@@ -208,6 +208,13 @@
 
             <TabItem Header="Locations">
                 <StackPanel Margin="0,14,0,0" Spacing="12">
+                    <!-- First, because it is what somebody opens this looking for when
+                         reporting that something is broken. -->
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Version" FontSize="12" Opacity="0.7" />
+                        <TextBlock Text="{Binding Version}" FontSize="11" Opacity="0.75" />
+                    </StackPanel>
+
                     <StackPanel Spacing="2">
                         <TextBlock Text="Cairn home" FontSize="12" Opacity="0.7" />
                         <TextBlock Text="{Binding CairnHome}" FontSize="11" Opacity="0.75"

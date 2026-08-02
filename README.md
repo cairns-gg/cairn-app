@@ -140,6 +140,11 @@ required:
   where that lives. A non-zero exit pulls the errors and warnings in by itself, with
   repeated lines collapsed — a failing render call logs the same line dozens of times a
   second and would otherwise bury the cause.
+- **Preferences → Locations** shows the version, first, because it is what somebody opens
+  that panel looking for when reporting a problem. It is read from the assembly rather than
+  kept in a constant, so there is one place a version is decided — the tag a release was cut
+  from — and a build nobody stamped says `dev` instead of a number that will be believed.
+  On macOS the application menu's **About Cairn** opens the same panel.
 - **Preferences → Appearance** scales the interface, 100% to 200%, applied as you pick it
   and remembered. It scales the whole window rather than the font size, so buttons, rows
   and spacing grow with the text instead of the text getting cramped inside controls that

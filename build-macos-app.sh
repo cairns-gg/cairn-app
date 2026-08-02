@@ -45,8 +45,11 @@ publish() {
   local log
   log="$(mktemp)"
 
+  # -p:Version as well as the plist: the plist is what Finder shows, and this is what the
+  # app itself can read to say which version it is in its own window.
   if ! dotnet publish "$1" \
       -c Release -r "$RID" --self-contained true \
+      -p:Version="$VERSION" \
       -p:PublishSingleFile=false -p:DebugType=none \
       -o "$APP/Contents/MacOS" --nologo -v quiet > "$log" 2>&1; then
     echo "  dotnet publish failed:"

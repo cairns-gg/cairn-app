@@ -75,6 +75,12 @@ public partial class PreferencesViewModel : ViewModelBase
         UiScale.Save();
     }
 
+    /// <summary>
+    /// Which version this is. Read from the assembly rather than held in a constant, so a
+    /// build cannot claim a number nobody stamped — see <see cref="CairnVersion"/>.
+    /// </summary>
+    public string Version => CairnVersion.Current;
+
     public string CairnHome => CairnPaths.Root;
     public string SharedDataPath => GameInstall.DefaultDataPath;
     public string GameInstallPath => GameInstall.TryLocate()?.Directory ?? "(not found)";

@@ -2496,6 +2496,39 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Preferences_says_which_version_this_is()
+    {
+        var (_, vm) = Show();
+
+        PreferencesViewModel? preferences = null;
+        vm.OpenPreferences = p => { preferences = p; return Task.CompletedTask; };
+
+        await vm.ShowPreferencesCommand.ExecuteAsync(null);
+
+        Assert.NotNull(preferences);
+        Assert.Equal(CairnVersion.Current, preferences!.Version);
+
+        // Rendered, not merely present on the view model: Avalonia resolves binding paths
+        // at runtime, so a typo here shows an empty line rather than failing anywhere.
+        var window = new PreferencesWindow { DataContext = preferences };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // A TabControl only realises the selected tab, so the version is not in the visual
+        // tree until its own tab is.
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
+        tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
+            .Single(t => (t.Header as string) == "Locations");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var text = VisibleText(window).ToList();
+        Assert.Contains("Version", text);
+        Assert.Contains(CairnVersion.Current, text);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task Loading_a_dropdown_leaves_an_unpinned_mod_unpinned()
     {
         var (_, vm) = Show();

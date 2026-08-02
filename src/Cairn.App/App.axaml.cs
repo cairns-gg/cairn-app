@@ -8,10 +8,19 @@ namespace Cairn.App;
 
 public partial class App : Application
 {
+    private MainViewModel? _model;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
     }
+
+    /// <summary>
+    /// The macOS About item. Opens Preferences, which is where the version is — rather
+    /// than a window of its own that would exist to say one line.
+    /// </summary>
+    private void OnAbout(object? sender, EventArgs e) =>
+        _model?.ShowPreferencesCommand.Execute(null);
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -22,6 +31,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var model = new MainViewModel();
+            _model = model;
 
             desktop.MainWindow = new MainWindow { DataContext = model };
 

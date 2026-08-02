@@ -19,6 +19,11 @@ RIDS=("${@:-}")
 OUT="artifacts"
 rm -rf "$OUT"
 
+# Stamped into the assembly so the app can report which version it is. Unset means an
+# unstamped build, which says "dev" rather than inventing a number that will be believed.
+VERSION_ARG=()
+[ -n "${VERSION:-}" ] && VERSION_ARG=(-p:Version="$VERSION")
+
 publish() {
   local project="$1" name="$2" rid="$3"
   local dest="$OUT/$rid"
@@ -27,6 +32,7 @@ publish() {
     -c Release \
     -r "$rid" \
     --self-contained true \
+    ${VERSION_ARG+"${VERSION_ARG[@]}"} \
     -p:PublishSingleFile=true \
     -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true \

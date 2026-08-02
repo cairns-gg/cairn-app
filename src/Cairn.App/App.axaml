@@ -10,6 +10,19 @@
         <local:ViewLocator />
     </Application.DataTemplates>
 
+    <!--
+        The macOS application menu. Without this Avalonia supplies its own, whose About
+        item reads "About Avalonia" — the name of the toolkit, in the one menu that is
+        supposed to carry the name of the program.
+
+        Ignored on Windows and Linux, which have no such menu.
+    -->
+    <NativeMenu.Menu>
+        <NativeMenu>
+            <NativeMenuItem Header="About Cairn" Click="OnAbout" />
+        </NativeMenu>
+    </NativeMenu.Menu>
+
     <Application.Styles>
         <FluentTheme />
         <!-- Layered over Fluent rather than replacing it: property setters keep the
