@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
+using Cairn.Core.Packs;
 
 namespace Cairn.App;
 
@@ -37,6 +38,12 @@ public partial class App : Application
 
             // Both routes a cairn:// link can arrive by — see PackLinks.
             PackLinks.Listen(this, model);
+
+            // And the half that is not about receiving one: telling Windows and Linux that
+            // the scheme is ours at all. Off the startup path because it shells out to
+            // desktop-integration helpers on Linux, and the window opening in 38 ms is
+            // worth more than registering a link a few milliseconds sooner.
+            Task.Run(PackLinkHandler.Register);
 
             if (PackLinks.FromArguments(desktop.Args ?? []) is { } link)
                 PackLinks.Follow(this, model, link);

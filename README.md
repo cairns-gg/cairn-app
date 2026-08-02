@@ -395,7 +395,7 @@ clobbering a good one could hurt.
 
 ```bash
 dotnet build
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 402 tests, 406 with the game
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 410 tests, 414 with the game
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 196 UI tests
 ```
 
@@ -538,16 +538,28 @@ The link reaches the app two ways, and both are wired: macOS hands a *running* i
 URL through an activation event, while Windows and Linux launch the handler afresh with it
 in `argv`. Handling either alone leaves half the platforms dead.
 
-### Registration is macOS-only so far
+### Registering the scheme
 
 | platform | how | state |
 |---|---|---|
 | macOS | `CFBundleURLTypes` in the bundle, written by `build-macos-app.sh` | **works** — verified cold and with the app already running |
-| Windows | `HKCU\Software\Classes\cairn`, needing either an installer or self-registration on start | **not done** — the link does nothing |
-| Linux | a `.desktop` file carrying `MimeType=x-scheme-handler/cairn` | **not done** — the link does nothing |
+| Windows | `HKCU\Software\Classes\cairn`, written on startup | **untested on a real machine** |
+| Linux | `~/.local/share/applications/cairn-url-handler.desktop`, written on startup | **untested on a real machine** |
 
-Windows also wants single-instance handling before this is pleasant there: with no installer
+macOS gets this free from the bundle format: LaunchServices reads the plist the first time
+it sees the `.app`, so shipping a bundle *is* the registration. Windows and Linux have no
+equivalent — registering there is an explicit act of installation, and Cairn ships as one
+binary in an archive with no installer to perform one. So `PackLinkHandler` does it for the
+app on startup, off the critical path, and never fails a launch over it.
+
+On every start rather than once, because both mechanisms record an absolute path: somebody
+who moves the binary would otherwise be left with a scheme pointing at where it used to be.
+Nothing is written when the recorded value already matches, so the usual case costs a read.
+
+**Windows still wants single-instance handling**, which this does not add. With no installer
 it launches a *new* copy per click, and two launchers sharing one `~/.cairn` can race.
+Registering the scheme is what makes the link arrive at all; making a second click reach the
+window already open is a separate job.
 
 On macOS the scheme binds once LaunchServices has seen the bundle somewhere it scans, so a
 freshly built `artifacts/` copy may need `lsregister -f` before a link finds it.

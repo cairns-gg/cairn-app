@@ -36,7 +36,7 @@ Rosetta and feels sluggish. `dev.sh` publishes for the host RID, and on macOS pr
 The two suites run **differently**, and getting this wrong looks like success:
 
 ```bash
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~402 tests
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~410 tests
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj --filter "FullyQualifiedName~PackSync"
 
 dotnet build tests/Cairn.App.Tests/Cairn.App.Tests.csproj
