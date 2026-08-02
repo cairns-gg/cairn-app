@@ -140,11 +140,10 @@ required:
   where that lives. A non-zero exit pulls the errors and warnings in by itself, with
   repeated lines collapsed — a failing render call logs the same line dozens of times a
   second and would otherwise bury the cause.
-- **Preferences** is two tabs. **Overview** opens first and holds what you come to read
-  rather than to change: the version, where things live, and the interface scale.
-  **Storage** is the disk-usage screen. On macOS the application menu's **About Cairn**
-  opens Overview — it used to land on the disk-usage screen, which made it look like the
-  wrong menu entry.
+- **Preferences** is two tabs. **Overview** opens first: the version, where Cairn keeps its
+  own files, and the interface scale. **Storage** is the disk-usage screen. On macOS the
+  application menu's **About Cairn** opens Overview — it used to land on the disk-usage
+  screen, which made it look like the wrong menu entry.
 
   The version is read from the assembly rather than kept in a constant, so there is one
   place a version is decided — the tag a release was cut from — and a build nobody stamped

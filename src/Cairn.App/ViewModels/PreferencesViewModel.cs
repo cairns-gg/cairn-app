@@ -82,8 +82,6 @@ public partial class PreferencesViewModel : ViewModelBase
     public string Version => CairnVersion.Current;
 
     public string CairnHome => CairnPaths.Root;
-    public string SharedDataPath => GameInstall.DefaultDataPath;
-    public string GameInstallPath => GameInstall.TryLocate()?.Directory ?? "(not found)";
 
     /// <summary>
     /// Recomputes the storage picture. Directory walks, so it is done on demand rather
