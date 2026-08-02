@@ -210,11 +210,21 @@ jobs:
 
       # ditto, not zip. A .app contains symlinks and extended attributes, and plain zip
       # quietly flattens them into a bundle macOS then calls damaged.
+      #
+      # No --sequesterRsrc here, unlike the notarisation zip above. It writes AppleDouble
+      # sidecars into a __MACOSX/ directory — 235 entries shadowing the bundle — which
+      # Finder hides and every other unzip tool shows as a junk folder beside the app.
+      # Dropping it costs nothing: same size, and the signature still verifies after a
+      # round trip, which was checked rather than assumed.
+      #
+      # The submission zip keeps the flag deliberately. Apple has accepted that exact
+      # command, and the packaging people download is not the place to find out whether
+      # the notary minds a different one.
       - name: Package
         run: |
           mkdir -p dist
           for arch in arm64 x64; do
-            ditto -c -k --sequesterRsrc --keepParent \
+            ditto -c -k --keepParent \
               "artifacts/osx-$arch/Cairn.app" \
               "dist/cairn-${GITHUB_REF_NAME#v}-macos-$arch.zip"
           done
