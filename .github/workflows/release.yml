@@ -280,39 +280,48 @@ jobs:
   #
   # Uploading a version is safe on its own: the files sit at an immutable path that nothing
   # links to. Moving latest.json is the act that ships them, and that has a condition on it.
-  spaces:
+  r2:
     needs: [macos, cross]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     env:
-      SPACES_KEY: ${{ secrets.SPACES_KEY }}
-      SPACES_SECRET: ${{ secrets.SPACES_SECRET }}
-      SPACES_ENDPOINT: ${{ vars.SPACES_ENDPOINT }}
-      SPACES_BUCKET: ${{ vars.SPACES_BUCKET }}
-      SPACES_PUBLIC_URL: ${{ vars.SPACES_PUBLIC_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
       NOTARISED: ${{ needs.macos.outputs.notarised }}
 
     steps:
       - uses: actions/download-artifact@v4
-        if: env.SPACES_KEY != ''
+        if: env.R2_ACCESS_KEY_ID != ''
         with:
           path: dist
           merge-multiple: true
 
-      - name: Upload to Spaces
-        if: env.SPACES_KEY != ''
+      - name: Upload to R2
+        if: env.R2_ACCESS_KEY_ID != ''
         run: |
           version="${GITHUB_REF_NAME#v}"
 
-          # Spaces speaks S3, so the preinstalled AWS CLI is the client. The region is not
-          # meaningful to Spaces but the CLI insists on one, and the endpoint already
-          # contains it — deriving it beats another variable to keep in step.
-          export AWS_ACCESS_KEY_ID="$SPACES_KEY"
-          export AWS_SECRET_ACCESS_KEY="$SPACES_SECRET"
-          export AWS_DEFAULT_REGION="$(echo "$SPACES_ENDPOINT" | sed -E 's#https?://([^.]+)\..*#\1#')"
+          # R2 speaks S3, so the client is the AWS CLI already on the runner.
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+          export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 
-          public="${SPACES_PUBLIC_URL:-$SPACES_ENDPOINT/$SPACES_BUCKET}"
+          # "auto", not derived from the endpoint. R2 has one region and the endpoint's
+          # first label is the account id, so deriving it — which is right for a provider
+          # whose endpoint names its region — would sign requests for a region that does
+          # not exist.
+          export AWS_DEFAULT_REGION=auto
+
+          # Recent AWS CLI versions add integrity checksums by default that not every
+          # S3-compatible provider accepts. Asking for them only when required keeps this
+          # working across CLI updates rather than breaking on one.
+          export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+          export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+
+          public="${R2_PUBLIC_URL:-$R2_ENDPOINT/$R2_BUCKET}"
           public="${public%/}"
 
           cd dist
@@ -325,10 +334,12 @@ jobs:
           # A versioned path, and never overwritten. Somebody who linked a build a year ago
           # should still get that build, byte for byte — which also means these can be
           # cached forever, since the URL cannot come to mean something else.
+          # No --acl: R2 does not implement per-object ACLs, and sending one is an error
+          # rather than a no-op. What makes these readable is the bucket's custom domain,
+          # which is a property of the bucket and not of each file.
           for f in *; do
-            aws s3 cp "$f" "s3://$SPACES_BUCKET/releases/$version/$f" \
-              --endpoint-url "$SPACES_ENDPOINT" \
-              --acl public-read \
+            aws s3 cp "$f" "s3://$R2_BUCKET/releases/$version/$f" \
+              --endpoint-url "$R2_ENDPOINT" \
               --cache-control "public, max-age=31536000, immutable"
           done
 
@@ -373,17 +384,16 @@ jobs:
             exit 0
           fi
 
-          aws s3 cp latest.json "s3://$SPACES_BUCKET/releases/latest.json" \
-            --endpoint-url "$SPACES_ENDPOINT" \
-            --acl public-read \
+          aws s3 cp latest.json "s3://$R2_BUCKET/releases/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" \
             --content-type application/json \
             --cache-control "public, max-age=300"
 
           echo "published and promoted: $public/releases/$version/"
 
       - name: Say why nothing was uploaded
-        if: env.SPACES_KEY == ''
-        run: echo "SPACES_KEY is not set — skipping the upload to object storage."
+        if: env.R2_ACCESS_KEY_ID == ''
+        run: echo "R2_ACCESS_KEY_ID is not set — skipping the upload to object storage."
 
   release:
     needs: [macos, cross]

@@ -563,7 +563,7 @@ Three details that are load-bearing:
   and plain `zip` flattens them into something macOS calls damaged.
 - **`.tar.gz` for Linux**, because zip does not carry the executable bit and a download
   that needs `chmod +x` before it runs is a download that gets reported as broken.
-- **Promotion is conditional, publishing is not.** Downloads come from Spaces, not from
+- **Promotion is conditional, publishing is not.** Downloads come from R2, not from
   GitHub — the release here is a record of what was built. Uploading a version reaches
   nobody, because the files sit at a path nothing links to; moving `releases/latest.json`
   is what ships them, and that only happens when the macOS builds were notarised. An
@@ -574,25 +574,35 @@ Three details that are load-bearing:
 `workflow_dispatch` builds everything without publishing, which is how to find out a build
 is broken before there is a tag claiming otherwise.
 
-### Publishing to DigitalOcean Spaces
+### Publishing to Cloudflare R2
 
 **This is the distribution channel.** GitHub holds the source and a copy of each build;
-people download from cairns.gg. Two secrets and three variables; with `SPACES_KEY` unset
-the job says so and does nothing.
+people download from `downloads.cairns.gg`. Two secrets and three variables; with
+`R2_ACCESS_KEY_ID` unset the job says so and does nothing.
 
 | name | kind | what it is |
 |---|---|---|
-| `SPACES_KEY` | secret | Spaces access key |
-| `SPACES_SECRET` | secret | Spaces secret key |
-| `SPACES_ENDPOINT` | variable | e.g. `https://nyc3.digitaloceanspaces.com` |
-| `SPACES_BUCKET` | variable | the Space's name |
-| `SPACES_PUBLIC_URL` | variable | optional — the CDN domain, if there is one |
+| `R2_ACCESS_KEY_ID` | secret | from an R2 API token with Object Read & Write |
+| `R2_SECRET_ACCESS_KEY` | secret | the other half of it |
+| `R2_ENDPOINT` | variable | `https://<account-id>.r2.cloudflarestorage.com` |
+| `R2_BUCKET` | variable | the bucket name |
+| `R2_PUBLIC_URL` | variable | the custom domain, e.g. `https://downloads.cairns.gg` |
 
 The endpoint and bucket are variables rather than secrets so they appear in the logs. A
 masked bucket name makes a failed upload much harder to read, and neither is a secret.
-The region the AWS CLI insists on is derived from the endpoint, which already contains it.
 
-Spaces speaks S3, so the client is the AWS CLI that runs on the runner already.
+R2 speaks S3, so the client is the AWS CLI that runs on the runner already — with three
+differences from a typical S3 provider, each of which is a way this quietly breaks:
+
+- **No `--acl`.** R2 does not implement per-object ACLs and rejects one rather than
+  ignoring it. What makes a file readable is the bucket's custom domain, which is a
+  property of the bucket rather than of each object.
+- **`AWS_DEFAULT_REGION=auto`.** R2 has one region, and the first label of the endpoint is
+  the account id — so deriving the region from the endpoint, which is right for providers
+  whose endpoint names their region, would sign requests for a region that does not exist.
+- **Checksums only when required.** Recent AWS CLI versions add integrity checksums by
+  default that not every S3-compatible provider accepts; asking for them only when needed
+  survives CLI updates instead of breaking on one.
 
 ```
 releases/1.2.3/cairn-1.2.3-macos-arm64.zip     immutable, cached for a year
