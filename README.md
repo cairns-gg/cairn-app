@@ -618,6 +618,7 @@ differences from a typical S3 provider, each of which is a way this quietly brea
 ```
 releases/1.2.3/cairn-1.2.3-macos-arm64.zip     immutable, cached for a year
 releases/1.2.3/…                               every other artifact, plus SHA256SUMS
+releases/1.2.3/manifest.json                   what that version was
 releases/latest.json                           what to offer, cached for 5 minutes
 ```
 
@@ -625,8 +626,15 @@ releases/latest.json                           what to offer, cached for 5 minut
 get that build, byte for byte — which is also what makes it safe to cache them forever,
 since a URL cannot come to mean something else.
 
-`latest.json` is the only mutable thing, written last so it never names a file that is not
-up yet:
+That includes the manifest. `latest.json` is rewritten every release, so a version's own
+manifest is kept beside its artifacts — otherwise the sizes and checksums of 1.2.3 stop
+existing the moment 1.2.4 ships, while the files they describe are still up. It is written
+whether or not the version is promoted: a version nothing points at is still a version that
+happened.
+
+`latest.json` is the only mutable object, and holds the same bytes as the promoted
+version's manifest rather than a pointer to it — one request for a reader, and no window in
+which it names a manifest that is not up yet:
 
 ```json
 {

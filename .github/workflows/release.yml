@@ -364,27 +364,43 @@ jobs:
             echo
             echo "  ]"
             echo "}"
-          } > latest.json
+          } > manifest.json
 
-          cat latest.json
+          cat manifest.json
 
-          # Uploading a version reaches nobody; moving this is what ships it. So the one
-          # thing worth stopping for gets checked here rather than left to somebody
+          # Kept with the version it describes, immutable like everything else under that
+          # path. latest.json is overwritten every release, so without this the manifest
+          # for a version stops existing the moment the next one ships — and the artifacts
+          # would outlive the only record of their sizes and checksums.
+          #
+          # Uploaded whether or not this becomes the download: it is part of the version's
+          # record, and a version nothing points at is still a version that happened.
+          aws s3 cp manifest.json "s3://$R2_BUCKET/releases/$version/manifest.json" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type application/json \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # Uploading a version reaches nobody; moving latest.json is what ships it. So the
+          # one thing worth stopping for gets checked here rather than left to somebody
           # remembering — a macOS build that is not notarised greets its first user with
           # "Cairn is damaged", and that should not become the download by default.
           #
-          # Tag anyway if that is deliberate: aws s3 cp latest.json, by hand, once.
+          # Ship anyway if that is deliberate: copy the versioned manifest over
+          # latest.json, by hand, once.
           if [ "$NOTARISED" != "true" ]; then
             echo
             echo "Uploaded, but NOT promoted: the macOS builds are not notarised."
-            echo "  $public/releases/$version/  is complete and reachable"
-            echo "  releases/latest.json        still points at the previous version"
+            echo "  complete and reachable:  $public/releases/$version/"
+            echo "  describing it:           $public/releases/$version/manifest.json"
+            echo "  unchanged:               $public/releases/latest.json"
             echo
             echo "Set the signing secrets, or promote it by hand if that is intended."
             exit 0
           fi
 
-          aws s3 cp latest.json "s3://$R2_BUCKET/releases/latest.json" \
+          # The same bytes at both paths rather than a pointer, so a reader needs one
+          # request and cannot catch latest.json naming a manifest that is not up yet.
+          aws s3 cp manifest.json "s3://$R2_BUCKET/releases/latest.json" \
             --endpoint-url "$R2_ENDPOINT" \
             --content-type application/json \
             --cache-control "public, max-age=300"
