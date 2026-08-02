@@ -2534,13 +2534,15 @@ public class MainWindowTests : IDisposable
         var tabs = window.GetVisualDescendants().OfType<TabControl>().First();
         Assert.Equal("Overview", (tabs.SelectedItem as TabItem)?.Header);
 
+        // Labels are written upper-case rather than transformed, since Avalonia has no
+        // text-transform — so the source says what the screen says.
         var text = VisibleText(window).ToList();
-        Assert.Contains("Version", text);
+        Assert.Contains("VERSION", text);
         Assert.Contains(CairnVersion.Current, text);
 
         // Appearance folded in here rather than being a tab of its own, so the whole of
         // what this window offers is two screens.
-        Assert.Contains("Interface size", text);
+        Assert.Contains("INTERFACE SIZE", text);
         Assert.Equal(2, tabs.GetVisualDescendants().OfType<TabItem>().Count());
 
         window.Close();

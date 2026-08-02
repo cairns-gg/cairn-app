@@ -23,32 +23,31 @@
                 any particular pack.
             -->
             <TabItem Header="Overview">
-                <StackPanel Margin="0,14,0,0" Spacing="12">
+                <StackPanel Margin="0,14,0,0" Spacing="16">
                     <!-- First within the tab, because it is what somebody opens this
                          looking for when reporting that something is broken. -->
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Version" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding Version}" FontSize="11" Opacity="0.75" />
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="label" Text="VERSION" />
+                        <TextBlock Classes="value" Text="{Binding Version}" />
                     </StackPanel>
 
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Cairn home" FontSize="12" Opacity="0.7" />
-                        <TextBlock Text="{Binding CairnHome}" FontSize="11" Opacity="0.75"
-                                   TextWrapping="Wrap" />
-                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                    <StackPanel Spacing="3">
+                        <TextBlock Classes="label" Text="CAIRN HOME" />
+                        <TextBlock Classes="value" Text="{Binding CairnHome}" />
+                        <TextBlock Classes="hint"
                                    Text="Packs, game versions, runtimes and caches. Set CAIRN_HOME to move it." />
                     </StackPanel>
 
                     <Separator Margin="0,4" />
 
                     <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Left">
-                        <TextBlock Text="Interface size" FontSize="12" Opacity="0.7" />
+                        <TextBlock Classes="label" Text="INTERFACE SIZE" />
 
                         <ComboBox MinWidth="140"
                                   ItemsSource="{Binding ScaleChoices}"
                                   SelectedItem="{Binding SelectedScale}" />
 
-                        <TextBlock FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                        <TextBlock Classes="hint"
                                    Text="Scales everything — text, buttons, rows and spacing — rather than only the font, so nothing ends up cramped inside a control that stayed the same size. Applies straight away and is remembered." />
                     </StackPanel>
                 </StackPanel>

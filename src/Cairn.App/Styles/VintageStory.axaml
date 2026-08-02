@@ -74,6 +74,35 @@
         <Setter Property="Foreground" Value="{DynamicResource VsParchmentBrush}" />
     </Style>
 
+    <!--
+        A field label with its value underneath.
+
+        The two used to be one point apart in size and nothing else, so a column of them
+        read as a single block of grey with no shape to it. Small, bold and tracked out
+        makes a label look like a label at a glance — and being the *dimmer* of the pair
+        puts the weight on the answer rather than the question, which is the way round
+        somebody scanning for a version number wants.
+    -->
+    <Style Selector="TextBlock.label">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.9" />
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+
+    <Style Selector="TextBlock.value">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource VsParchmentBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- The sentence under a value that explains it: quieter than either. -->
+    <Style Selector="TextBlock.hint">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
     <Style Selector="Button">
         <!-- Fluent leaves button content left-aligned, which only shows when a button is
              wider than its text — a MinWidth, a stretched grid cell, or a label that
