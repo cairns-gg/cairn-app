@@ -577,7 +577,7 @@ is broken before there is a tag claiming otherwise.
 ### Publishing to Cloudflare R2
 
 **This is the distribution channel.** GitHub holds the source and a copy of each build;
-people download from `downloads.cairns.gg`. Two secrets and three variables; with
+people download from `download.cairns.gg`. Two secrets and three variables; with
 `R2_ACCESS_KEY_ID` unset the job says so and does nothing.
 
 | name | kind | what it is |
@@ -586,7 +586,7 @@ people download from `downloads.cairns.gg`. Two secrets and three variables; wit
 | `R2_SECRET_ACCESS_KEY` | secret | the other half of it |
 | `R2_ENDPOINT` | variable | `https://<account-id>.r2.cloudflarestorage.com` |
 | `R2_BUCKET` | variable | the bucket name |
-| `R2_PUBLIC_URL` | variable | the custom domain, e.g. `https://downloads.cairns.gg` |
+| `R2_PUBLIC_URL` | variable | the custom domain, e.g. `https://download.cairns.gg` |
 
 The endpoint and bucket are variables rather than secrets so they appear in the logs. A
 masked bucket name makes a failed upload much harder to read, and neither is a secret.
