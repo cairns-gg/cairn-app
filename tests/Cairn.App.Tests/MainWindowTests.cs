@@ -569,6 +569,121 @@ public class MainWindowTests : IDisposable
         Assert.Equal("0 left", detail.DescriptionRoom);
     }
 
+    /// <summary>A settings field, by the name the XAML gives it.</summary>
+    private static TextBox Field(Visual root, string name) =>
+        root.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == name);
+
+    [AvaloniaFact]
+    public void A_settings_field_is_saved_as_focus_leaves_it()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        ShowSettingsTab(window);
+
+        var name = Field(window, "SettingsName");
+        name.Focus();
+        name.Text = "Renamed Pack";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Nothing has been written yet — the words are still in the box being typed.
+        Assert.DoesNotContain("Renamed Pack", File.ReadAllText(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+
+        // Looking away is what commits it. The LostFocus wiring lives in XAML, so this is
+        // exactly the sort of thing that would fail silently without a test rendering it.
+        Field(window, "SettingsConnect").Focus();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains("Renamed Pack", File.ReadAllText(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+        Assert.Equal("Renamed Pack", vm.Detail!.Title);
+    }
+
+    [AvaloniaFact]
+    public void A_typed_description_survives_selecting_another_pack()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        ShowSettingsTab(window);
+
+        var description = Field(window, "SettingsDescription");
+        description.Focus();
+        description.Text = "Quality of life and building, no magic.";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // The detail pane is rebuilt per selection, so a held edit used to go with it —
+        // and clicking another pack is the same gesture as finishing typing.
+        Field(window, "SettingsName").Focus();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains("no magic", File.ReadAllText(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+
+        // And it went to the pack being edited, not the one now selected.
+        Assert.DoesNotContain("no magic", File.ReadAllText(
+            Path.Combine(_home, "packs", "anego", "pack.json")));
+    }
+
+    [AvaloniaFact]
+    public void An_over_long_description_holds_itself_back_and_lets_the_rest_through()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        detail.EditName = "Renamed Pack";
+        detail.EditDescription = new string('d', PackManifest.MaxDescription + 1);
+        detail.CommitSettings();
+
+        // The name is not held hostage by a description still being worked on.
+        Assert.Equal("Renamed Pack", detail.Manifest.Name);
+        Assert.Null(detail.Manifest.Description);
+
+        // The words stay in the box, and Save is what says so.
+        Assert.True(detail.HasPendingSettings);
+        Assert.False(detail.SaveSettingsCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void Save_is_offered_only_while_something_is_uncommitted()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        // Nothing typed: the fields already say what the manifest says.
+        Assert.False(detail.HasPendingSettings);
+        Assert.False(detail.SaveSettingsCommand.CanExecute(null));
+
+        detail.EditConnect = "newhost:42420";
+        Assert.True(detail.HasPendingSettings);
+        Assert.True(detail.SaveSettingsCommand.CanExecute(null));
+
+        detail.CommitSettings();
+        Assert.False(detail.HasPendingSettings);
+        Assert.False(detail.SaveSettingsCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void Tabbing_through_the_settings_without_changing_anything_writes_nothing()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+
+        var before = File.GetLastWriteTimeUtc(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json"));
+
+        detail.CommitSettings();
+
+        Assert.Equal(before, File.GetLastWriteTimeUtc(
+            Path.Combine(_home, "packs", "vanilla-qol", "pack.json")));
+
+        // And no line claiming a save that did not happen.
+        Assert.DoesNotContain(detail.Log, l => l.Contains("saved settings"));
+    }
+
     [AvaloniaFact]
     public void An_unusable_game_version_can_no_longer_be_typed_in()
     {

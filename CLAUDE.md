@@ -40,7 +40,7 @@ dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2,
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj --filter "FullyQualifiedName~PackSync"
 
 dotnet build tests/Cairn.App.Tests/Cairn.App.Tests.csproj
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~188 tests
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~193 tests
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -method '*Version*'
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -class '*ShareWindowTests'
 ```

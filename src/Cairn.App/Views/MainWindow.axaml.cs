@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
 
@@ -55,6 +56,21 @@ public partial class MainWindow : Window
 
     private Task<bool> ConfirmAsync(ConfirmViewModel confirm) =>
         new ConfirmWindow { DataContext = confirm }.ShowDialog<bool>(this);
+
+    /// <summary>
+    /// Commits a settings field as focus leaves it.
+    ///
+    /// In code-behind for the same reason as the dropdown below: LostFocus is an event
+    /// with no command to bind to. Losing focus is the commit point because the detail
+    /// pane is rebuilt whenever the selected pack changes — so held edits were discarded
+    /// by the act of clicking away from them, which is also the act that looks like
+    /// finishing.
+    /// </summary>
+    private void OnSettingsFieldLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is MainViewModel { Detail: { } detail })
+            detail.CommitSettings();
+    }
 
     /// <summary>
     /// Fetches a mod's versions the moment its dropdown is opened.

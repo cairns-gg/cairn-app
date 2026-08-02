@@ -396,7 +396,7 @@ clobbering a good one could hurt.
 ```bash
 dotnet build
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 393 tests, 397 with the game
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 188 UI tests
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 193 UI tests
 ```
 
 Building to test, on whatever machine you are on:

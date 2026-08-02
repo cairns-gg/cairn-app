@@ -250,8 +250,38 @@ public partial class PackDetailViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(DescriptionRoom));
         OnPropertyChanged(nameof(DescriptionTooLong));
+        SettingsEdited();
+    }
+
+    partial void OnEditNameChanged(string value) => SettingsEdited();
+
+    partial void OnEditConnectChanged(string value) => SettingsEdited();
+
+    private void SettingsEdited()
+    {
+        OnPropertyChanged(nameof(HasPendingSettings));
         SaveSettingsCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary>What a blank name means: the id, which is what the pack is called anyway.</summary>
+    private string NameEdit => string.IsNullOrWhiteSpace(EditName) ? Id : EditName.Trim();
+
+    /// <summary>
+    /// Null rather than "", so an emptied field is omitted from the JSON entirely instead
+    /// of publishing a blank one for a page to render a gap for.
+    /// </summary>
+    private static string? Emptied(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// An edit that is not on disk yet. Normally false — fields commit as focus leaves
+    /// them — so it is true only while one is being typed, and stays true for a
+    /// description too long to commit.
+    /// </summary>
+    public bool HasPendingSettings =>
+        NameEdit != (Manifest.Name ?? Id)
+        || Emptied(EditDescription) != Manifest.Description
+        || Emptied(EditConnect) != Manifest.Connect;
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
 
@@ -632,19 +662,40 @@ public partial class PackDetailViewModel : ViewModelBase
 
     // ---- settings ----
 
-    [RelayCommand(CanExecute = nameof(CanSaveSettings))]
-    private void SaveSettings()
+    /// <summary>
+    /// Commits the settings fields, as focus leaves one of them.
+    ///
+    /// These used to be held until Save. The detail pane is rebuilt whenever the selected
+    /// pack changes, so typing a description and then clicking another pack threw the
+    /// words away without saying anything — and there is nothing here that wants a
+    /// confirmation step: a name is as reversible as retyping it.
+    ///
+    /// Does nothing when the fields already match the manifest, so merely tabbing through
+    /// the form does not write a file or add a line to the log.
+    /// </summary>
+    public void CommitSettings()
     {
-        Manifest.Name = string.IsNullOrWhiteSpace(EditName) ? Id : EditName.Trim();
+        if (!HasPendingSettings) return;
+        WriteSettings();
+    }
 
-        Manifest.Description =
-            string.IsNullOrWhiteSpace(EditDescription) ? null : EditDescription.Trim();
+    [RelayCommand(CanExecute = nameof(CanSaveSettings))]
+    private void SaveSettings() => WriteSettings();
+
+    private void WriteSettings()
+    {
+        Manifest.Name = NameEdit;
+
+        // Left alone while it is too long. That keeps the words in the box with the
+        // counter under them, rather than committing a sentence cut in half — and it lets
+        // the other two fields commit around a description still being worked on.
+        if (!DescriptionTooLong)
+            Manifest.Description = Emptied(EditDescription);
 
         // The game version deliberately does not come from here any more: changing it
         // re-resolves every mod, so it goes through Check → Apply instead.
-        Manifest.Connect = string.IsNullOrWhiteSpace(EditConnect) ? null : EditConnect.Trim();
+        Manifest.Connect = Emptied(EditConnect);
 
-        _releaseCache.Clear();
         Persist();
 
         OnPropertyChanged(nameof(Title));
@@ -652,6 +703,7 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasDescription));
         OnPropertyChanged(nameof(HasServer));
         OnPropertyChanged(nameof(ServerLine));
+        SettingsEdited();
         RefreshGameState();
         _log($"saved settings for '{Id}'");
     }
@@ -801,8 +853,12 @@ public partial class PackDetailViewModel : ViewModelBase
     /// Blocked on an over-long description rather than silently truncating one: a
     /// description cut off mid-sentence on somebody else's screen is worse than being told
     /// now, while the words are still in front of you.
+    ///
+    /// Also blocked when there is nothing outstanding. Fields commit as focus leaves them,
+    /// so a Save that is always available would mostly be a button that does nothing;
+    /// enabled means there is genuinely something in the box that is not on disk.
     /// </summary>
-    private bool CanSaveSettings => NotBusy && !DescriptionTooLong;
+    private bool CanSaveSettings => NotBusy && !DescriptionTooLong && HasPendingSettings;
 
     /// <summary>See <see cref="Export"/> — a file made from a followed pack loses its
     /// author on the way out.</summary>
