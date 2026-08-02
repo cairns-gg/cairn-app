@@ -18,6 +18,19 @@ public enum ShareStatus
     /// offered at all — Take over comes first.
     /// </summary>
     Following,
+
+    /// <summary>
+    /// Published once and then taken down by its author. Distinct from Unshared because
+    /// the pack still has an address: the row survives on the site and the URL answers
+    /// 410 with a tombstone rather than 404, since these links live in chat scrollback
+    /// and committed pack.json files indefinitely.
+    ///
+    /// Reversible, and that is the point of naming it. Publishing again clears the
+    /// tombstone and revives the pack where it was — a pack reported as never shared
+    /// would leave its author guessing whether the old link comes back or a second copy
+    /// appears beside it.
+    /// </summary>
+    Withdrawn,
 }
 
 /// <summary>
@@ -41,7 +54,11 @@ public sealed record ShareState(ShareStatus Status, string? Url, string? Visibil
     /// <summary>False while following, where the button is hidden rather than disabled.</summary>
     public bool IsOffered => Status != ShareStatus.Following;
 
-    /// <summary>Whether there is a published URL to show and copy.</summary>
+    /// <summary>
+    /// Whether there is a URL at all. Not the same as one worth putting in front of
+    /// somebody — a followed pack's belongs to its author and a withdrawn one no longer
+    /// serves the pack — so callers showing it gate on the status too.
+    /// </summary>
     public bool HasUrl => !string.IsNullOrWhiteSpace(Url);
 
     public string Label => Status switch
@@ -49,6 +66,10 @@ public sealed record ShareState(ShareStatus Status, string? Url, string? Visibil
         ShareStatus.Unshared => "Share…",
         ShareStatus.Shared => "Shared",
         ShareStatus.Pending => "Publish changes",
+
+        // Not "Share…", which would read as starting again somewhere new. This one has an
+        // address waiting for it.
+        ShareStatus.Withdrawn => "Publish again",
         _ => "",
     };
 
@@ -73,6 +94,12 @@ public sealed record ShareState(ShareStatus Status, string? Url, string? Visibil
 
         if (link is { Role: PackRole.Follower, Following: true })
             return new ShareState(ShareStatus.Following, link.Url);
+
+        // Before the check below, which this would otherwise fall through: withdrawing
+        // clears the publish record, and reporting the pack as never shared would lose
+        // the one thing its author needs to know — the address is still theirs.
+        if (link is { Role: PackRole.Author, Withdrawn: true })
+            return new ShareState(ShareStatus.Withdrawn, link.Url);
 
         // A taken-over pack is not published until it is published: it points at where it
         // came from, which is not a URL its owner can update.

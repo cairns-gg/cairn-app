@@ -149,6 +149,85 @@ public class ShareStateTests : IDisposable
         Assert.True(state.IsOffered);
     }
 
+    /// <summary>What a withdrawal leaves behind: the address, without the publish record.</summary>
+    private void Withdraw() => _store.MarkWithdrawn("anego");
+
+    [Fact]
+    public void Marking_a_pack_withdrawn_keeps_its_address()
+    {
+        Publish();
+        _store.MarkWithdrawn("anego");
+
+        var link = _store.LoadLink("anego")!;
+
+        // The URL is still theirs — the server revives the pack there, and it is what the
+        // next publish defaults to. Losing it would turn coming back into starting again
+        // somewhere new.
+        Assert.Equal("https://cairns.gg/dizzyd/anego", link.Url);
+        Assert.True(link.Withdrawn);
+        Assert.Null(link.Published);
+    }
+
+    [Fact]
+    public void Marking_a_pack_that_was_never_published_does_nothing()
+    {
+        _store.MarkWithdrawn("anego");
+
+        // No link to move, and inventing one would give an unshared pack an address it
+        // never had.
+        Assert.Null(_store.LoadLink("anego"));
+        Assert.Equal(ShareStatus.Unshared, _store.ShareStateFor("anego").Status);
+    }
+
+    [Fact]
+    public void A_withdrawn_pack_is_not_the_same_as_one_never_shared()
+    {
+        Publish();
+        Withdraw();
+
+        var state = _store.ShareStateFor("anego");
+
+        // The row survives on the site and the URL answers 410, so the address is still
+        // this pack's — and publishing again revives it there rather than starting over.
+        Assert.Equal(ShareStatus.Withdrawn, state.Status);
+        Assert.Equal("Publish again", state.Label);
+        Assert.Equal("https://cairns.gg/dizzyd/anego", state.Url);
+        Assert.True(state.IsOffered);
+        Assert.False(state.IsUrgent);
+    }
+
+    [Fact]
+    public void A_withdrawn_pack_can_be_published_again_unchanged()
+    {
+        Publish();
+        var record = _store.LoadLink("anego")!.Published!;
+        var document = _store.PublishedDocument("anego", stripConnect: true);
+        Withdraw();
+
+        // The document is untouched, so that record would have refused this as a revision
+        // differing from its predecessor in nothing but its number — which is right in
+        // general and wrong for a pack that is down. Clearing it is what leaves both
+        // front-ends nothing to compare against.
+        Assert.False(record.WouldChange(document, @public: false, strip: true));
+        Assert.Null(_store.LoadLink("anego")!.Published);
+    }
+
+    [Fact]
+    public void Taking_over_a_pack_is_not_mistaken_for_withdrawing_one()
+    {
+        _store.SaveLink("anego", new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/someone/anego",
+            Revision = 4,
+        });
+
+        // Author, a URL, nothing published — the same shape a withdrawal leaves, which is
+        // why the withdrawal is recorded rather than inferred. This one never had an
+        // address of its own; it points at where it came from.
+        Assert.Equal(ShareStatus.Unshared, _store.ShareStateFor("anego").Status);
+    }
+
     [Fact]
     public void The_fingerprint_covers_the_lock_as_well_as_the_manifest()
     {

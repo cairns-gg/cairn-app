@@ -416,6 +416,8 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShareUrlLine));
         OnPropertyChanged(nameof(IsFollowing));
         OnPropertyChanged(nameof(FollowingLine));
+        OnPropertyChanged(nameof(IsWithdrawn));
+        OnPropertyChanged(nameof(WithdrawnLine));
         OnPropertyChanged(nameof(CanShareFile));
         OnPropertyChanged(nameof(IsUnlisted));
         ExportCommand.NotifyCanExecuteChanged();
@@ -434,7 +436,12 @@ public partial class PackDetailViewModel : ViewModelBase
 
     public bool ShareIsUrgent => Share.IsUrgent;
 
-    public bool HasShareUrl => Share.HasUrl && !IsFollowing;
+    /// <summary>
+    /// A URL worth showing: one this pack is actually served at. A followed pack's belongs
+    /// to its author, and a withdrawn one answers 410 — offering either to copy would be
+    /// handing somebody a link that does not do what the row says it does.
+    /// </summary>
+    public bool HasShareUrl => Share.HasUrl && !IsFollowing && !IsWithdrawn;
 
     /// <summary>Shown without its scheme: this is a thing people read and retype.</summary>
     public string ShareUrlLine => Share.Url is null
@@ -449,6 +456,16 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public string FollowingLine =>
         IsFollowing ? $"imported from {ShareUrlLine} — it stays theirs to publish" : "";
+
+    public bool IsWithdrawn => Share.Status == ShareStatus.Withdrawn;
+
+    /// <summary>
+    /// Stands in for the URL line, which is not shown while the address serves a
+    /// tombstone. Says the address is still the pack's, because the button beside it
+    /// offers to publish again and the question that raises is where it would land.
+    /// </summary>
+    public string WithdrawnLine =>
+        IsWithdrawn ? $"withdrawn — {ShareUrlLine} is yours until you publish there again" : "";
 
     /// <summary>Whether the export controls are offered at all. See <see cref="Export"/>.</summary>
     public bool CanShareFile => !IsFollowing;
@@ -1212,6 +1229,15 @@ public partial class PackDetailViewModel : ViewModelBase
                 Manifest, _store.LoadLock(Id), _moddb,
                 new Progress<string>(id => LaunchStage = $"Checking {id}…"));
 
+            // Before the window is built, because the window is what would refuse. A
+            // withdrawal made on the site never reaches this machine, so the publish
+            // record it compares against can be describing a pack that is no longer at
+            // that address — and republishing it unchanged is how it comes back.
+            //
+            // Here rather than when the pack is opened: share state is a local projection
+            // by design, and this is the one moment the server's answer changes anything.
+            await ReconcileWithdrawalAsync(session);
+
             Publish = ShareViewModel.From(
                 plan, Title, session.Username, _store.LoadLink(Id),
                 strip => _store.PublishedDocument(Id, strip));
@@ -1253,6 +1279,27 @@ public partial class PackDetailViewModel : ViewModelBase
             LaunchStage = "";
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Asks whether the pack is still served where it was published, and records it if not.
+    ///
+    /// Only for a pack this machine believes is published: a pack with no publish record
+    /// has nothing to reconcile, and one that has changed will be published anyway.
+    /// </summary>
+    private async Task ReconcileWithdrawalAsync(CairnsSession session)
+    {
+        if (_store.LoadLink(Id) is not { Published: not null, Url.Length: > 0 } link) return;
+
+        var slug = link.Url[(link.Url.LastIndexOf('/') + 1)..];
+
+        if (!await new CairnsClient(_http, session.Server)
+                .IsWithdrawnAsync(session.Username, slug))
+            return;
+
+        _store.MarkWithdrawn(Id);
+        ReloadShare();
+        _log($"{link.Url} was withdrawn — publishing brings it back");
     }
 
     /// <summary>

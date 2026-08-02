@@ -395,8 +395,8 @@ clobbering a good one could hurt.
 
 ```bash
 dotnet build
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 393 tests, 397 with the game
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 193 UI tests
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 402 tests, 406 with the game
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 196 UI tests
 ```
 
 Building to test, on whatever machine you are on:
@@ -494,6 +494,31 @@ same one under a different slug does not move it — it creates a second pack an
 first live under the same name, which is how you end up with two identical-looking packs
 and no idea which is which. The Share window makes the field read-only after the first
 publish; `cairn-cli publish --slug` refuses and points at `unpublish`.
+
+**Withdrawing is not deleting, and it is not permanent.** `cairn-cli unpublish` takes the
+pack down; the row survives on the site and the URL answers 410 with a tombstone rather
+than 404, because these links live in chat scrollback and committed `pack.json` files
+indefinitely. Publishing again revives the pack at the same address — that is what
+withdrawing means for an author, as against an administrator withdrawing one, which the
+server refuses to let a republish undo and says so.
+
+Coming back has to survive the unchanged-check above, which would otherwise refuse the one
+publish that matters: the pack is down, and republishing it byte-for-byte is exactly how it
+returns. So a withdrawal clears the local publish record and keeps the URL, and the pack
+reads as **Withdrawn** rather than as one never shared — the launcher says the address is
+still yours and offers **Publish again**. The slug is editable once more, which is also how
+a pack gets renamed: unshare, then re-share under the new name.
+
+**A withdrawal made on the site never reaches your machine**, and that is the case the
+refusal got wrong for longer. Nothing pushes to a launcher, and share state is a local
+projection on purpose — asking the server whether a pack has changed, on every pack, to
+draw a button would be a great deal of network for a question that is almost always "no".
+So the belief is checked at the one moment it is about to block somebody: publishing a pack
+the machine thinks is unchanged first asks whether it is still being served. A 410 there
+clears the record and the publish goes through. Anything else — including a server that
+cannot be reached — leaves the refusal standing, because not knowing is not the same as
+knowing it is gone, and inventing a withdrawal would throw away the record on a flaky
+connection.
 
 An **unlisted** pack is marked as such beside its URL, and on its page on the site. The two
 are indistinguishable from outside, and which one a pack is decides whether passing the

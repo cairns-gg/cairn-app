@@ -738,14 +738,23 @@ internal static class Program
                         + "identity — publishing under another name would leave a second "
                         + $"copy behind. Withdraw it first with: cairn-cli unpublish {id}");
 
+        var client = new CairnsClient(http, session.Server);
+
         // A revision differing from its predecessor in nothing but its number tells every
         // follower there is an update and then has none for them. Visibility and the
         // server address count as changes; the bytes alone are not the whole question.
         if (link is { Published: { } last }
             && !last.WouldChange(document, isPublic, strip))
-            return Fail($"'{id}' has not changed since revision {link.Revision}");
+        {
+            // Unless it is not up any more. A withdrawal made on the site never reaches
+            // this machine, so this refusal can be defending a pack that stopped being
+            // served — and republishing it unchanged is exactly how it comes back.
+            if (!await client.IsWithdrawnAsync(session.Username, slug))
+                return Fail($"'{id}' has not changed since revision {link.Revision}");
 
-        var client = new CairnsClient(http, session.Server);
+            store.MarkWithdrawn(id);
+            Console.WriteLine($"  {link.Url} was withdrawn — publishing brings it back");
+        }
         var result = await client.PublishAsync(session, document, slug, isPublic);
 
         // Recorded so the pack knows where it lives and whether it has changed since.
@@ -780,7 +789,12 @@ internal static class Program
         var slug = link.Url[(link.Url.LastIndexOf('/') + 1)..];
         await new CairnsClient(http, session.Server).WithdrawAsync(session, session.Username, slug);
 
-        Console.WriteLine($"withdrew {link.Url}");
+        // The local record has to move too, and not only for tidiness — see MarkWithdrawn.
+        // The URL stays: it is still their address, the server revives the pack at it, and
+        // the slug is what the next publish defaults to.
+        store.MarkWithdrawn(id);
+
+        Console.WriteLine($"withdrew {link.Url} — publish again to bring it back");
         return 0;
     }
 

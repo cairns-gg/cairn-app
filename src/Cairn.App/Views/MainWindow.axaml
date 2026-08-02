@@ -223,6 +223,13 @@
                                 Command="{Binding Detail.OpenSharePageCommand}" />
                     </StackPanel>
 
+                    <!-- Where the URL line would be. The address still answers, with a
+                         tombstone, so saying nothing would leave the pack looking as if it
+                         had never been shared at all. -->
+                    <TextBlock Text="{Binding Detail.WithdrawnLine}" Opacity="0.7" FontSize="12"
+                               IsVisible="{Binding Detail.IsWithdrawn, FallbackValue=False}"
+                               TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" />
+
                     <TextBlock Text="{Binding Detail.FollowingLine}" Opacity="0.7" FontSize="12"
                                IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}" />
                 </StackPanel>

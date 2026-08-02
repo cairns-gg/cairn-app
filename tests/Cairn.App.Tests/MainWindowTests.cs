@@ -7,6 +7,7 @@ using System.Net;
 using Cairn.App.ViewModels;
 using Cairn.Core;
 using Cairn.App.Views;
+using Cairn.Core.Cairns;
 using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
 using Xunit;
@@ -209,6 +210,32 @@ public class MainWindowTests : IDisposable
         Assert.Contains(VisibleText(window),
             t => t.Contains("imported from cairns.gg/dizzyd/anego")
                  && t.Contains("stays theirs"));
+    }
+
+    [AvaloniaFact]
+    public void A_withdrawn_pack_offers_to_publish_again_rather_than_to_start_over()
+    {
+        WritePack("taken-down", "Taken Down", "1.22.5", null, ["glassview"]);
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "taken-down", "cairns.json"),
+            """
+            {"role":"Author","url":"https://cairns.gg/dizzyd/anego","revision":4,"withdrawn":true}
+            """);
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "taken-down");
+
+        Assert.True(vm.Detail!.IsWithdrawn);
+        Assert.True(vm.Detail.ShareOffered);
+        Assert.Equal("Publish again", vm.Detail.ShareLabel);
+
+        // The address answers 410, so it is not offered as something to copy and hand out.
+        Assert.False(vm.Detail.HasShareUrl);
+
+        // But it is still said, because the button beside it offers to publish again and
+        // the question that raises is where that would land.
+        Assert.Contains(VisibleText(window),
+            t => t.Contains("withdrawn") && t.Contains("cairns.gg/dizzyd/anego"));
     }
 
     [AvaloniaFact]
@@ -2734,6 +2761,96 @@ public class MainWindowTests : IDisposable
 
         // And saying no means no.
         Assert.Equal(before, vm.Packs.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task A_pack_withdrawn_on_the_site_stops_being_refused_as_unchanged()
+    {
+        WritePack("mine", "Mine", "1.22.5", null, ["glassview"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+        store.SaveLink("mine", new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/dizzyd/mine",
+            Revision = 3,
+            Published = new PublishRecord
+            {
+                Visibility = "unlisted",
+                Connect = "included",
+                Fingerprint = PackLink.Fingerprint(
+                    store.PublishedDocument("mine", stripConnect: false)),
+            },
+        });
+
+        new CairnsSession { Server = "https://cairns.gg", Token = "tok", Username = "dizzyd" }
+            .Save();
+
+        // The site says the pack is gone. Nothing local knows that: a withdrawal made
+        // there never reaches this machine.
+        var http = new OfflineHandler();
+        http.Serve("/api/packs/dizzyd/mine", """{"withdrawn":true}""", HttpStatusCode.Gone);
+
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+
+        var detail = vm.Detail!;
+        Assert.Equal(ShareStatus.Shared, detail.Share.Status);
+
+        // Stop at the window rather than publishing — what is being tested is that it
+        // opens willing, where before it would have refused an identical revision.
+        detail.ConfirmPublish = _ => Task.FromResult(false);
+        await detail.PublishPackCommand.ExecuteAsync(null);
+
+        Assert.False(detail.Publish!.NothingToPublish);
+        Assert.Equal("Publish", detail.Publish.PublishLabel);
+
+        // And the pack now reads as what it is, with the address it comes back to.
+        Assert.True(detail.IsWithdrawn);
+        Assert.Equal("Publish again", detail.ShareLabel);
+        Assert.Null(store.LoadLink("mine")!.Published);
+        Assert.Equal("https://cairns.gg/dizzyd/mine", store.LoadLink("mine")!.Url);
+    }
+
+    [AvaloniaFact]
+    public async Task A_pack_still_up_is_left_alone_by_the_withdrawal_check()
+    {
+        WritePack("mine", "Mine", "1.22.5", null, ["glassview"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+        store.SaveLink("mine", new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/dizzyd/mine",
+            Revision = 3,
+            Published = new PublishRecord
+            {
+                Visibility = "unlisted",
+                Connect = "included",
+                Fingerprint = PackLink.Fingerprint(
+                    store.PublishedDocument("mine", stripConnect: false)),
+            },
+        });
+
+        new CairnsSession { Server = "https://cairns.gg", Token = "tok", Username = "dizzyd" }
+            .Save();
+
+        var http = new OfflineHandler();
+        http.Serve("/api/packs/dizzyd/mine",
+            """{"username":"dizzyd","slug":"mine","revision":3}""");
+
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+
+        var detail = vm.Detail!;
+        detail.ConfirmPublish = _ => Task.FromResult(false);
+        await detail.PublishPackCommand.ExecuteAsync(null);
+
+        // The pack is up and unchanged, so the refusal still stands — this check exists to
+        // let a withdrawal through, not to retire the rule.
+        Assert.True(detail.Publish!.NothingToPublish);
+        Assert.False(detail.IsWithdrawn);
+        Assert.NotNull(store.LoadLink("mine")!.Published);
     }
 
     [AvaloniaFact]

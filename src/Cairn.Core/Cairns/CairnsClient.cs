@@ -143,6 +143,38 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
                ?? throw new CairnsException("The server accepted the pack but said nothing about it.");
     }
 
+    /// <summary>
+    /// Whether the site is serving this pack, or a tombstone where it was.
+    ///
+    /// Asked on the one path where the answer changes what happens. Publishing refuses a
+    /// revision identical to its predecessor, which is right while the pack is up and
+    /// exactly wrong once it is not: republishing an unchanged document is how an author
+    /// brings a withdrawn pack back. A withdrawal made on the site never reaches this
+    /// machine, so that refusal can rest on a record describing a pack that stopped being
+    /// served — and it has to be checked against the server before it blocks anybody.
+    ///
+    /// Anonymous, because the tombstone is public. Unlisted packs answer here too: being
+    /// unlisted is being absent from browse, not from its own address.
+    /// </summary>
+    public async Task<bool> IsWithdrawnAsync(
+        string username, string slug, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await http
+                .GetAsync($"{Server}/api/packs/{username}/{slug}", ct).ConfigureAwait(false);
+
+            return response.StatusCode == HttpStatusCode.Gone;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            // Not knowing is not the same as knowing it is live, but inventing a
+            // withdrawal is worse than leaving the refusal standing — and a publish over
+            // this same connection is about to fail and say so anyway.
+            return false;
+        }
+    }
+
     public async Task WithdrawAsync(
         CairnsSession session, string username, string slug, CancellationToken ct = default)
     {

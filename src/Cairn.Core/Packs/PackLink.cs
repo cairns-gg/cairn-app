@@ -76,6 +76,21 @@ public sealed class PackLink
     /// <summary>Author only.</summary>
     [JsonPropertyName("published")] public PublishRecord? Published { get; set; }
 
+    /// <summary>
+    /// Author only: taken down from the site, with <see cref="Published"/> cleared and
+    /// <see cref="Url"/> kept.
+    ///
+    /// Recorded rather than inferred from the absence of a publish record, because a
+    /// taken-over pack looks identical from that angle — Author, a URL, nothing published
+    /// — and the two mean opposite things. This one had an address and gave it up; that
+    /// one never had one.
+    ///
+    /// The server treats an author's withdrawal as reversible: publishing again clears
+    /// the tombstone and revives the pack at the same address. So this is a state to come
+    /// back from, not an ending, and the next publish writes a link without it.
+    /// </summary>
+    [JsonPropertyName("withdrawn")] public bool Withdrawn { get; set; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

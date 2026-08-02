@@ -36,11 +36,11 @@ Rosetta and feels sluggish. `dev.sh` publishes for the host RID, and on macOS pr
 The two suites run **differently**, and getting this wrong looks like success:
 
 ```bash
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~393 tests
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~402 tests
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj --filter "FullyQualifiedName~PackSync"
 
 dotnet build tests/Cairn.App.Tests/Cairn.App.Tests.csproj
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~193 tests
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~196 tests
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -method '*Version*'
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -class '*ShareWindowTests'
 ```
@@ -106,6 +106,10 @@ is drawn.
   published nor exported; `PackRole.Author` is the publishable end. `ShareState` is a
   projection recomputed from the manifest and lock, never cached — a cached one is how a
   button ends up lying about a pack. "Take over" is specced in `TODO.md` and unimplemented.
+  A withdrawn pack keeps its `Url` and sets `Withdrawn` with `Published` cleared, so
+  republishing it unchanged revives it; the flag is stored rather than inferred because a
+  taken-over pack has the same shape (Author + URL + nothing published) and means the
+  opposite.
 - **Every pack has its own data path**, and `PackData` merges seven named session keys into
   each pack's `clientsettings.json` at launch so one login reaches all of them. Merging named
   keys — not copying the file — is what keeps keybinds and graphics settings per-pack. Cairn

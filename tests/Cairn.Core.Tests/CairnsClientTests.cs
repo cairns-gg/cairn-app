@@ -114,6 +114,47 @@ public class CairnsClientTests
     }
 
     [Fact]
+    public async Task A_tombstone_is_recognised_as_a_withdrawal()
+    {
+        var (client, handler) = Make((_, _) =>
+            Json(HttpStatusCode.Gone, """{"withdrawn":true}"""));
+
+        Assert.True(await client.IsWithdrawnAsync("dizzyd", "anego"));
+
+        // Anonymous: the tombstone is public, and this is asked before anything is sent.
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task A_pack_still_being_served_is_not_a_withdrawal()
+    {
+        var (client, _) = Make((_, _) =>
+            Json(HttpStatusCode.OK, """{"username":"dizzyd","slug":"anego","revision":3}"""));
+
+        Assert.False(await client.IsWithdrawnAsync("dizzyd", "anego"));
+    }
+
+    [Fact]
+    public async Task A_pack_that_never_existed_is_not_a_withdrawal()
+    {
+        // 404 and 410 are different answers on purpose — one is "no such pack", the other
+        // "this pack, taken down" — and only the second one unblocks a republish.
+        var (client, _) = Make((_, _) => Json(HttpStatusCode.NotFound, "{}"));
+
+        Assert.False(await client.IsWithdrawnAsync("dizzyd", "anego"));
+    }
+
+    [Fact]
+    public async Task An_unreachable_server_is_not_read_as_a_withdrawal()
+    {
+        var (client, _) = Make((_, _) => throw new HttpRequestException("no route to host"));
+
+        // Not knowing is not knowing. Inventing a withdrawal would clear the local publish
+        // record on nothing better than a flaky connection.
+        Assert.False(await client.IsWithdrawnAsync("dizzyd", "anego"));
+    }
+
+    [Fact]
     public void The_server_can_be_pointed_somewhere_else_for_testing()
     {
         // Which is the only way to exercise any of this before the real one exists.

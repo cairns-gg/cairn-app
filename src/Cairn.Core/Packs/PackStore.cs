@@ -24,6 +24,29 @@ public sealed class PackStore
     public void SaveLink(string id, PackLink link) => link.Save(LinkPath(id));
 
     /// <summary>
+    /// Records that the site no longer serves this pack: the address stays, the publish
+    /// record goes.
+    ///
+    /// Dropping the record is the point rather than tidiness. Publishing refuses a
+    /// revision identical to its predecessor — a revision differing from its predecessor
+    /// in nothing but its number tells every follower there is an update and then has none
+    /// for them — and that refusal is exactly wrong for a pack that is down, where
+    /// republishing it unchanged is how its author brings it back. With nothing to compare
+    /// against, there is nothing to refuse.
+    ///
+    /// Reached two ways: withdrawing from here, and finding out that somebody withdrew it
+    /// from the site. One place for the mutation so both leave the pack in the same state.
+    /// </summary>
+    public void MarkWithdrawn(string id)
+    {
+        if (LoadLink(id) is not { } link) return;
+
+        link.Published = null;
+        link.Withdrawn = true;
+        SaveLink(id, link);
+    }
+
+    /// <summary>
     /// Exactly what publishing this pack right now would send. Always carries the lock —
     /// a published pack is reproducible or it is not worth publishing.
     /// </summary>
