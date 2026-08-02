@@ -444,6 +444,26 @@ jobs:
           .NET runtime itself.
           NOTES
 
+          # Unconditional, because nothing here signs the Windows build: win-x64 is
+          # cross-published on the Linux runner, which has no signtool. Make this
+          # conditional the way the macOS block below is on the day that changes —
+          # notes that claim a state the build did not produce are the failure this is
+          # written to avoid.
+          #
+          # Worth saying even so. SmartScreen reputation attaches to the publisher
+          # certificate as well as the file, so unsigned, the only thing that can earn any
+          # is the exact executable — and every release is a new hash starting from zero.
+          # The warning is therefore not a phase this build grows out of, and a download
+          # that looks blocked with no explanation reads as a broken one.
+          cat >> notes.md <<'NOTES'
+
+          ### Windows: SmartScreen will warn on first run
+
+          The build is not signed, so Windows shows "Windows protected your PC" and hides
+          the way past it behind **More info** → **Run anyway**. It is a statement about
+          the certificate, not about the file: the same download runs normally afterwards.
+          NOTES
+
           # Said by the build rather than by whoever writes the notes, because the two
           # drift: a release that quietly stopped being notarised while still claiming to
           # be would send people past a warning they should have taken seriously.
