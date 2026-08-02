@@ -732,8 +732,10 @@ SIGN_IDENTITY="Developer ID Application: …" ./build-macos-app.sh
 
 Produces a real bundle — `Contents/MacOS`, `Contents/Info.plist`, `Contents/_CodeSignature`
 — so it gets a Dock tile, proper foreground activation and its own name in the menu bar.
-The launcher binary is `Contents/MacOS/cairn`; the CLI ships alongside it at
-`Contents/MacOS/cairn-cli`, so one download provides both.
+The launcher binary is `Contents/MacOS/cairn`, and it is the only program in there. The
+CLI used to ship beside it; it is a development tool with no documentation aimed at
+anybody downloading a launcher, so releases carry the launcher alone and `cairn-cli` is
+run from the source tree.
 
 Deliberately **not** single-file: measured on an M-series machine, warmed, ten runs each,
 

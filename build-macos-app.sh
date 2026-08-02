@@ -61,10 +61,11 @@ publish() {
 # Not single-file: a bundle is already a directory, and avoiding self-extraction is the
 # whole point of doing this — and it is also what makes the result notarisable, since a
 # single-file build unpacks binaries at runtime that were never signed.
+#
+# The launcher only. The CLI used to ship in here too, which meant a download offering a
+# second program nobody was told about; run it from the source tree while it is a
+# development tool rather than a published one.
 publish src/Cairn.App/Cairn.App.csproj
-
-# Ship the CLI alongside, so one download provides both.
-publish src/Cairn.Cli/Cairn.Cli.csproj
 
 ICON_KEY=""
 ICON_KEY_TEXT='    <key>CFBundleIconFile</key>

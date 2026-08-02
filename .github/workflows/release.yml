@@ -249,13 +249,14 @@ jobs:
 
           mkdir -p dist
 
-          # The CLI ships alongside the launcher rather than separately: one download,
-          # and the pair are only ever useful at the same version.
+          # The launcher only. cairn-cli is built above and deliberately left out: it is a
+          # development tool, and shipping it puts a second program in front of people who
+          # were not told it was coming and have no documentation for it.
           tar -czf "dist/cairn-$version-linux-x64.tar.gz" \
-            -C artifacts/linux-x64 cairn cairn-cli
+            -C artifacts/linux-x64 cairn
 
           (cd artifacts/win-x64 && zip -q "../../dist/cairn-$version-windows-x64.zip" \
-            cairn.exe cairn-cli.exe)
+            cairn.exe)
 
           ls -lh dist
 
@@ -403,8 +404,7 @@ jobs:
           | Windows | `cairn-*-windows-x64.zip` |
           | Linux | `cairn-*-linux-x64.tar.gz` |
 
-          Each contains the launcher; the Windows and Linux archives also contain
-          `cairn-cli`. Nothing else needs installing — Cairn fetches the game and the
+          Each contains the launcher and nothing else — Cairn fetches the game and the
           .NET runtime itself.
           NOTES
 
