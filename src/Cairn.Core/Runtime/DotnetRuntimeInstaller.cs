@@ -143,13 +143,24 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         var runtime = releases.Releases.FirstOrDefault()?.Runtime
                       ?? throw new DotnetRuntimeException($"No runtime listed for .NET {major}.");
 
+        // Named, not merely first. Every rid lists an apphost pack alongside the runtime,
+        // and it comes first:
+        //
+        //   dotnet-apphost-pack-linux-x64.tar.gz    5 MB of build-time templates
+        //   dotnet-runtime-linux-x64.tar.gz         the actual runtime
+        //
+        // Taking the first supported archive downloaded and unpacked the apphost pack
+        // quite happily, then failed at the end with nothing that looks like a runtime in
+        // it. On every platform — but only on a machine with no .NET already installed,
+        // which is why the one this was written on never showed it.
         var file = runtime.Files.FirstOrDefault(f =>
             string.Equals(f.Rid, rid, StringComparison.OrdinalIgnoreCase)
-            && ArchiveExtractor.IsSupported(f.Name));
+            && ArchiveExtractor.IsSupported(f.Name)
+            && f.Name.StartsWith("dotnet-runtime", StringComparison.OrdinalIgnoreCase));
 
         if (file?.Url is null)
             throw new DotnetRuntimeException(
-                $".NET {runtime.Version} publishes no archive for {rid}.");
+                $".NET {runtime.Version} publishes no runtime archive for {rid}.");
 
         return new DotnetRuntimeRelease(runtime.Version, rid, file.Url, file.Hash);
     }
