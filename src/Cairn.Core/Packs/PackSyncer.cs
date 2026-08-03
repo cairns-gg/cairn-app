@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Cairn.Core.ModDb;
 
 namespace Cairn.Core.Packs;
@@ -165,7 +166,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 {
                     release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, wanted, ct).ConfigureAwait(false);
                 }
-                catch (Exception e) when (e is ModDbException or HttpRequestException)
+                // JsonException as well as the two the client raises deliberately: a mod
+                // whose ModDB entry cannot be read must fail like any other unresolvable
+                // mod. Escaping here aborts the run before the lock is written, leaving
+                // downloaded zips that nothing accounts for and a pack that re-downloads
+                // them and dies in the same place on every retry.
+                catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)
                 {
                     Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, e.Message)));
                     return null;
@@ -330,7 +336,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 newest = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, null, ct)
                     .ConfigureAwait(false);
             }
-            catch (Exception e) when (e is ModDbException or HttpRequestException)
+            catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)
             {
                 continue;   // unreachable today says nothing about whether an update exists
             }

@@ -51,10 +51,31 @@ public sealed class ModDbClient(HttpClient http)
     /// </summary>
     private IReadOnlyList<ModDbGameVersion>? _gameVersions;
 
+    /// <summary>
+    /// Fetches and parses one API response, reporting a body we cannot read as a
+    /// <see cref="ModDbException"/> rather than a <c>JsonException</c>.
+    ///
+    /// The shapes here mirror a third party's API, so an unreadable field is the same
+    /// class of problem as an unreachable host — something ModDB did, not a bug in the
+    /// caller. Callers already handle ModDbException by failing just the mod they asked
+    /// about; a raw JsonException escaped them all and took the whole operation with it.
+    /// </summary>
+    private async Task<T?> GetAsync<T>(string url, CancellationToken ct)
+    {
+        try
+        {
+            return await http.GetFromJsonAsync<T>(url, Json, ct).ConfigureAwait(false);
+        }
+        catch (JsonException e)
+        {
+            throw new ModDbException($"ModDB returned a response Cairn could not read: {e.Message}");
+        }
+    }
+
     public async Task<ModDbMod> GetModAsync(string modId, CancellationToken ct = default)
     {
-        var resp = await http.GetFromJsonAsync<ModDbModResponse>(
-                           $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", Json, ct)
+        var resp = await GetAsync<ModDbModResponse>(
+                           $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", ct)
                        .ConfigureAwait(false)
                    ?? throw new ModDbException($"ModDB returned no body for '{modId}'.");
 
@@ -75,8 +96,8 @@ public sealed class ModDbClient(HttpClient http)
     /// </summary>
     public async Task<bool> ExistsAsync(string modId, CancellationToken ct = default)
     {
-        var resp = await http.GetFromJsonAsync<ModDbModResponse>(
-                $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", Json, ct)
+        var resp = await GetAsync<ModDbModResponse>(
+                $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", ct)
             .ConfigureAwait(false);
 
         return resp?.Mod is not null;
@@ -87,8 +108,8 @@ public sealed class ModDbClient(HttpClient http)
     {
         if (_gameVersions is not null) return _gameVersions;
 
-        var resp = await http.GetFromJsonAsync<ModDbGameVersionsResponse>(
-            $"{ApiBase}/gameversions", Json, ct).ConfigureAwait(false);
+        var resp = await GetAsync<ModDbGameVersionsResponse>(
+            $"{ApiBase}/gameversions", ct).ConfigureAwait(false);
 
         return _gameVersions = resp?.GameVersions ?? [];
     }
@@ -143,7 +164,7 @@ public sealed class ModDbClient(HttpClient http)
             foreach (var tag in tags) query += $"&gameversions[]={tag}";
         }
 
-        var resp = await http.GetFromJsonAsync<ModDbSearchResponse>(query, Json, ct)
+        var resp = await GetAsync<ModDbSearchResponse>(query, ct)
             .ConfigureAwait(false);
 
         return resp?.Mods ?? [];
@@ -298,6 +319,11 @@ public sealed class ModDbClient(HttpClient http)
     private static List<(ModDbRelease Release, MatchQuality? Quality)> Candidates(
         ModDbMod mod, string gameVersion) =>
         mod.Releases
+            // ModDB keeps the row for a release whose file has gone, serving it with an
+            // empty mainfile. It is not a thing that can be installed, so it must not win
+            // a resolve — picking one would fail the download for a mod that does have a
+            // usable release sitting right behind it.
+            .Where(r => !string.IsNullOrWhiteSpace(r.MainFile))
             .Select(r => (Release: r, Quality: Classify(r, gameVersion)))
             .Where(x => x.Quality is not null)
             .ToList();
@@ -310,7 +336,7 @@ public sealed class ModDbClient(HttpClient http)
 
     private static ResolvedRelease ToResolved(ModDbMod mod, ModDbRelease r, MatchQuality q) =>
         new(string.IsNullOrEmpty(r.ModIdStr) ? mod.Name : r.ModIdStr,
-            r.ModVersion, r.FileName, r.MainFile, r.ReleaseId, r.FileId, q, mod.Side);
+            r.ModVersion, r.FileName, r.MainFile, r.ReleaseId ?? 0, r.FileId ?? 0, q, mod.Side);
 
     private static MatchQuality? Classify(ModDbRelease r, string gameVersion)
     {

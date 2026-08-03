@@ -38,10 +38,24 @@ public sealed class ModDbMod
 
 public sealed class ModDbRelease
 {
-    [JsonPropertyName("releaseid")] public int ReleaseId { get; set; }
-    [JsonPropertyName("fileid")] public int FileId { get; set; }
+    /// <summary>
+    /// Nullable because ModDB keeps the row for a release whose file has gone — jaunt
+    /// 3.0.0-rc.1 is served as <c>"fileid": null</c> with an empty <c>mainfile</c>. As a
+    /// plain int that one row made the whole mod undeserialisable, so every mod requiring
+    /// jaunt failed mid-sync with a JSON error instead of installing.
+    ///
+    /// Both ids are recorded in the lock for provenance and nothing resolves against them,
+    /// so a missing one costs nothing; <see cref="MainFile"/> is what says a release is
+    /// actually installable.
+    /// </summary>
+    [JsonPropertyName("releaseid")] public int? ReleaseId { get; set; }
 
-    /// <summary>Direct download URL, already carrying a ?dl= filename hint.</summary>
+    [JsonPropertyName("fileid")] public int? FileId { get; set; }
+
+    /// <summary>
+    /// Direct download URL, already carrying a ?dl= filename hint. Empty on a release
+    /// whose file is gone, which is the only reliable marker of one.
+    /// </summary>
     [JsonPropertyName("mainfile")] public string MainFile { get; set; } = "";
 
     [JsonPropertyName("filename")] public string FileName { get; set; } = "";
