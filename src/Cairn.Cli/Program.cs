@@ -62,7 +62,7 @@ internal static class Program
     private static void Usage()
     {
         Console.WriteLine("""
-            cairn-cli - Vintage Story client-side modpack manager
+            cairn-cli - Vintage Story modpack manager
 
               cairn-cli info                          show the detected install and data path
               cairn-cli list                          list packs

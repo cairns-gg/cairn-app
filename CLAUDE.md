@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Cairn manages curated **client-side** Vintage Story modpacks: a pack is a manifest + lockfile
-+ a directory of mod zips, handed to the game via `--addModPath`. It also installs the game
+Cairn manages Vintage Story modpacks: a pack is a manifest + lockfile + a directory of mod
+zips, handed to the game via `--addModPath`. Any mods — nothing filters by side; a
+server-side one is installed with a warning (`PackSyncer.cs`), not skipped. It also installs the game
 itself and private .NET runtimes for it, and publishes packs to cairns.gg.
 
 `README.md` is unusually complete — it documents the reasoning behind most decisions here

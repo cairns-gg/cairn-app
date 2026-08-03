@@ -1,12 +1,22 @@
 # Cairn
 
-A modpack manager for **client-side** Vintage Story mods.
+A modpack manager for Vintage Story.
 
-Vintage Story already handles the server half of this well: join a server that has mods
-you lack and it offers to download them from ModDB, dropping them in
-`<dataPath>/ModsByServer`. What it has no concept of is a *curated client-side set* —
-the QoL mods you personally want, versioned, reproducible, and shareable. That is what
-Cairn manages.
+Vintage Story already handles one half of this well: join a server that has mods you lack
+and it offers to download them from ModDB, dropping them in `<dataPath>/ModsByServer`.
+What it has no concept of is a *pack* — a mod set you put together deliberately, pinned to
+exact versions, reproducible on somebody else's machine and shareable as one thing. That
+is what Cairn manages.
+
+A pack is whatever you put in it. Cairn installs the mods a pack names and hands the lot to
+the game, which in singleplayer is running the server itself and loads all of them — a mod
+ModDB marks server-side is installed too, with a warning that it may do nothing on a client
+that is only joining somewhere else.
+
+The launcher launches the game, so today a pack is what a *player* runs. Nothing in the
+engine assumes that: `cairn-cli` drives the same `Cairn.Core` — resolve, verify, sync —
+with no window and no game, which is what a server-side or scripted use would be built on.
+It is not shipped in releases yet, so that is a door left open rather than a feature.
 
 Cairn does not replace the game's ModDB integration; it fills the gap next to it.
 
