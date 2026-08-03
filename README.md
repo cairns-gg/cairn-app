@@ -553,8 +553,8 @@ in `argv`. Handling either alone leaves half the platforms dead.
 | platform | how | state |
 |---|---|---|
 | macOS | `CFBundleURLTypes` in the bundle, written by `build-macos-app.sh` | **works** — verified cold and with the app already running |
-| Windows | `HKCU\Software\Classes\cairn`, written on startup | **untested on a real machine** |
-| Linux | `~/.local/share/applications/cairn-url-handler.desktop`, written on startup | **untested on a real machine** |
+| Windows | `HKCU\Software\Classes\cairn`, written on startup | **works** — verified by clicking a link |
+| Linux | `~/.local/share/applications/cairn-url-handler.desktop`, written on startup | **works** — verified by clicking a link |
 
 macOS gets this free from the bundle format: LaunchServices reads the plist the first time
 it sees the `.app`, so shipping a bundle *is* the registration. Windows and Linux have no
