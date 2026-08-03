@@ -18,7 +18,7 @@ public class UpdateCheckerTests : IDisposable
     private readonly string _dir = Path.Combine(
         Path.GetTempPath(), "cairn-update-" + Guid.NewGuid().ToString("n")[..8]);
 
-    private string StatePath => Path.Combine(_dir, "updates.json");
+    private string StatePath => Path.Combine(_dir, "last-update-check");
 
     public UpdateCheckerTests() => Directory.CreateDirectory(_dir);
 
@@ -101,7 +101,7 @@ public class UpdateCheckerTests : IDisposable
         Assert.Null(await checker.CheckAsync());
 
         // The check still happened, so tomorrow is when it happens again.
-        Assert.NotNull(UpdateState.Load(StatePath).LastChecked);
+        Assert.NotNull(UpdateChecker.LastChecked(StatePath));
     }
 
     [Fact]
@@ -113,20 +113,22 @@ public class UpdateCheckerTests : IDisposable
     }
 
     [Fact]
-    public async Task The_same_release_is_only_ever_mentioned_once()
+    public async Task A_declined_release_is_raised_again_the_next_day()
     {
         var now = DateTimeOffset.UtcNow;
         var (first, _) = Make(Manifest("0.3.0"), now: now);
         Assert.NotNull(await first.CheckAsync());
 
-        // A day later, the same release is still out and has already been declined.
-        var (second, handler) = Make(Manifest("0.3.0"), now: now.AddDays(2));
-        Assert.Null(await second.CheckAsync());
-        Assert.Equal(1, handler.Calls);
+        // Nothing records which release was mentioned, so tomorrow it is mentioned again.
+        // The trade for keeping the whole of the state to one timestamp: somebody who does
+        // not want 0.3.0 is asked daily until they take it or it is superseded.
+        var (tomorrow, _) = Make(Manifest("0.3.0"), now: now.AddDays(1).AddMinutes(1));
+        Assert.NotNull(await tomorrow.CheckAsync());
 
-        // But a newer one is news again.
-        var (third, _) = Make(Manifest("0.4.0"), now: now.AddDays(4));
-        Assert.NotNull(await third.CheckAsync());
+        // But not twice in the same day.
+        var (again, handler) = Make(Manifest("0.3.0"), now: now.AddDays(1).AddMinutes(2));
+        Assert.Null(await again.CheckAsync());
+        Assert.Equal(0, handler.Calls);
     }
 
     [Fact]
@@ -177,7 +179,7 @@ public class UpdateCheckerTests : IDisposable
     public void A_check_made_recently_is_not_repeated()
     {
         var now = DateTimeOffset.UtcNow;
-        new UpdateState { LastChecked = now.AddHours(-1) }.Save(StatePath);
+        File.WriteAllText(StatePath, now.AddHours(-1).ToUnixTimeSeconds().ToString());
 
         var (checker, _) = Make(Manifest("9.9.9"), now: now);
         Assert.False(checker.IsDue());
@@ -188,20 +190,30 @@ public class UpdateCheckerTests : IDisposable
     }
 
     [Fact]
-    public void State_survives_a_round_trip_and_an_unreadable_file()
+    public async Task The_file_is_one_epoch_timestamp_and_nothing_else()
     {
         var now = DateTimeOffset.UtcNow;
-        new UpdateState { LastChecked = now, LastNotified = "0.3.0" }.Save(StatePath);
+        var (checker, _) = Make(Manifest("0.3.0"), now: now);
+        await checker.CheckAsync();
 
-        var read = UpdateState.Load(StatePath);
-        Assert.Equal("0.3.0", read.LastNotified);
-        Assert.Equal(now.ToUnixTimeSeconds(), read.LastChecked!.Value.ToUnixTimeSeconds());
+        // Readable with cat, and by anything that can parse an integer.
+        Assert.Equal(now.ToUnixTimeSeconds().ToString(), File.ReadAllText(StatePath));
+        Assert.Equal(now.ToUnixTimeSeconds(), UpdateChecker.LastChecked(StatePath)!.Value.ToUnixTimeSeconds());
+    }
 
-        // Garbage costs one extra check, not a crash on startup.
-        File.WriteAllText(StatePath, "{ this is not json");
-        var recovered = UpdateState.Load(StatePath);
-        Assert.Null(recovered.LastChecked);
-        Assert.Null(recovered.LastNotified);
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not a number")]
+    [InlineData("{\"lastChecked\": 123}")]
+    [InlineData("99999999999999999999")]
+    public void An_unreadable_timestamp_reads_as_never_checked(string content)
+    {
+        // Including the JSON this used to be, so an older install is not read as having
+        // checked at the epoch. Every one of these costs a single extra request.
+        File.WriteAllText(StatePath, content);
+
+        Assert.Null(UpdateChecker.LastChecked(StatePath));
     }
 
     [Fact]
@@ -211,7 +223,7 @@ public class UpdateCheckerTests : IDisposable
 
         // Not a crash, and — because nothing was learned — not a check worth remembering.
         Assert.Null(await checker.CheckAsync());
-        Assert.Null(UpdateState.Load(StatePath).LastChecked);
+        Assert.Null(UpdateChecker.LastChecked(StatePath));
     }
 
     [Fact]

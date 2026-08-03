@@ -183,12 +183,13 @@ required:
   happens while it is running. An hourly tick reads the clock; the day-long interval below
   decides whether that turns into a request.
 
-  Two separate restraints, doing different jobs. It asks the server at most once a day, and
-  it names any given release only once — a popup that comes back every day for a version
-  somebody has decided to skip is one they learn to dismiss without reading. Both live in
-  `~/.cairn/updates.json`, which is its own file because `settings.json` is written whole
-  and would drop anything it did not know about. A build nobody stamped says `dev` and is
-  never told it is out of date.
+  The whole of the remembered state is one Unix timestamp in `~/.cairn/last-update-check`
+  — its own file because `settings.json` is written whole and would drop anything it did
+  not know about. Nothing records which release has already been mentioned, so an update
+  somebody declines is raised again the next day, and every day until they take it. That is
+  the trade for having nothing to keep in step: a remembered version string that goes stale
+  or unparseable is a popup that either never appears again or appears forever. A build
+  nobody stamped says `dev` and is never told it is out of date.
 
 ```bash
 dotnet run --project src/Cairn.App
@@ -427,7 +428,7 @@ clobbering a good one could hurt.
 
 ```bash
 dotnet build
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 423 tests, 427 with the game
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 428 tests, 432 with the game
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 201 UI tests
 ```
 

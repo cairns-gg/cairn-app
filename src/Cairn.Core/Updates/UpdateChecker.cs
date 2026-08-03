@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -48,8 +49,7 @@ public sealed record UpdateAvailable(string Version, ReleaseFile? File)
 }
 
 /// <summary>
-/// Asks whether there is a newer Cairn, occasionally, and never more than once per
-/// version.
+/// Asks whether there is a newer Cairn, at most once a day.
 ///
 /// Everything needed already existed and nothing read it: the release workflow publishes
 /// <c>releases/latest.json</c> and promotes it only when the macOS builds were notarised,
@@ -58,10 +58,12 @@ public sealed record UpdateAvailable(string Version, ReleaseFile? File)
 /// release, which matters more here than in most apps because the ModDB listing and any
 /// link a friend sent are equally frozen.
 ///
-/// Two separate restraints, doing different jobs. The daily interval keeps the network
-/// alone; remembering the version already mentioned keeps the *person* alone, because a
-/// popup that returns every day for a release they have decided to skip is a popup people
-/// learn to dismiss without reading.
+/// The whole of the remembered state is one Unix timestamp in one file. There is no record
+/// of which release has already been mentioned, so an update that somebody declines is
+/// raised again the next day, and every day until they take it or it is superseded. That
+/// is a deliberate trade for having nothing to keep in step: the alternative remembers a
+/// version string as well, and a version string that goes stale or unparseable is a popup
+/// that either never appears again or appears forever.
 /// </summary>
 public sealed class UpdateChecker(
     HttpClient http,
@@ -76,7 +78,7 @@ public sealed class UpdateChecker(
     public static readonly TimeSpan Interval = TimeSpan.FromDays(1);
 
     private readonly string _manifest = manifestUrl ?? DefaultManifest;
-    private readonly string _statePath = statePath ?? CairnPaths.UpdateStatePath;
+    private readonly string _statePath = statePath ?? CairnPaths.LastUpdateCheckPath;
     private readonly Func<DateTimeOffset> _now = clock ?? (() => DateTimeOffset.UtcNow);
 
     /// <summary>
@@ -106,8 +108,52 @@ public sealed class UpdateChecker(
         };
 
     /// <summary>
+    /// When the server was last asked, or null if it never has been.
+    ///
+    /// A bare Unix timestamp in seconds. Anything unreadable — a truncated write, a file
+    /// somebody edited, an empty one — reads as never, which costs one extra request and
+    /// is repaired by the next successful check.
+    /// </summary>
+    public static DateTimeOffset? LastChecked(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+
+            var text = File.ReadAllText(path).Trim();
+            return long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var epoch)
+                ? DateTimeOffset.FromUnixTimeSeconds(epoch)
+                : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                      or ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
+    private void RecordCheck(string path, DateTimeOffset when)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            // Staged and moved, as the caches and settings are. It is one number, but it is
+            // written from a background timer and a half-written one reads as garbage —
+            // which is survivable here, and still worth not doing.
+            var staging = path + "." + Path.GetRandomFileName();
+            File.WriteAllText(staging, when.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+            File.Move(staging, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Losing this costs one extra request.
+        }
+    }
+
+    /// <summary>
     /// Whether a check is due. Cheap and offline, so a caller can skip spinning anything
-    /// up at all.
+    /// up at all — which is what the hourly timer does 23 times out of 24.
     /// </summary>
     public bool IsDue()
     {
@@ -115,14 +161,13 @@ public sealed class UpdateChecker(
         // their working copy is out of date is noise. See CairnVersion.
         if (_current == "dev") return false;
 
-        var state = UpdateState.Load(_statePath);
-        return state.LastChecked is not { } last || _now() - last >= Interval;
+        return LastChecked(_statePath) is not { } last || _now() - last >= Interval;
     }
 
     /// <summary>
-    /// Returns something only when there is a newer version this machine has not already
-    /// been told about. Never throws: an update check is the least important thing the app
-    /// does, and it runs while somebody is trying to play a game.
+    /// Returns something only when there is a newer version than this build. Never throws:
+    /// an update check is the least important thing the app does, and it runs while
+    /// somebody is trying to play a game.
     /// </summary>
     public async Task<UpdateAvailable?> CheckAsync(CancellationToken ct = default)
     {
@@ -136,80 +181,23 @@ public sealed class UpdateChecker(
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException
                                       or NotSupportedException or InvalidOperationException)
         {
-            // Not reachable, or not what we expected. Try again tomorrow rather than
-            // recording a check that told us nothing.
+            // Not reachable, or not what we expected. Deliberately not recorded: a check
+            // that learned nothing should not buy the server a day of quiet, and the next
+            // tick is an hour away rather than a moment.
             return null;
         }
 
         if (latest is null || string.IsNullOrWhiteSpace(latest.Version)) return null;
 
-        var state = UpdateState.Load(_statePath);
-
-        // Recorded before the decision, not after: the point of the interval is to stop
-        // asking the server, and it did get asked.
-        state.LastChecked = _now();
-        state.Save(_statePath);
+        // Recorded whatever the answer turns out to be: the interval exists to stop asking
+        // the server, and it did get asked.
+        RecordCheck(_statePath, _now());
 
         if (!GameVersions.IsNewerVersionThan(latest.Version, _current)) return null;
-
-        // Said once. Somebody who closed this dialog has been told, and telling them again
-        // tomorrow teaches them to close it without looking.
-        if (state.LastNotified == latest.Version) return null;
-
-        state.LastNotified = latest.Version;
-        state.Save(_statePath);
 
         var file = latest.Files?.FirstOrDefault(
             f => string.Equals(f.Platform, ThisPlatform, StringComparison.OrdinalIgnoreCase));
 
         return new UpdateAvailable(latest.Version, file);
-    }
-}
-
-/// <summary>What the last check found, so the next one can stay quiet.</summary>
-public sealed class UpdateState
-{
-    [JsonPropertyName("lastChecked")] public DateTimeOffset? LastChecked { get; set; }
-
-    /// <summary>The version a popup has already named. Null until one has.</summary>
-    [JsonPropertyName("lastNotified")] public string? LastNotified { get; set; }
-
-    private static readonly JsonSerializerOptions Json = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    /// <summary>Never throws: unreadable bookkeeping costs one extra check.</summary>
-    public static UpdateState Load(string path)
-    {
-        try
-        {
-            return File.Exists(path)
-                ? JsonSerializer.Deserialize<UpdateState>(File.ReadAllText(path), Json) ?? new UpdateState()
-                : new UpdateState();
-        }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
-        {
-            return new UpdateState();
-        }
-    }
-
-    public void Save(string path)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
-            // Staged and moved, as the caches and settings are: a half-written file reads
-            // as corrupt, and this one is written from a background thread at startup.
-            var staging = path + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, JsonSerializer.Serialize(this, Json));
-            File.Move(staging, path, overwrite: true);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // Losing this costs one extra check tomorrow.
-        }
     }
 }

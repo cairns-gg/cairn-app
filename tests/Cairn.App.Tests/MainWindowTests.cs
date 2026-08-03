@@ -2872,7 +2872,7 @@ public class MainWindowTests : IDisposable
 
         await vm.CheckForUpdateAsync(new UpdateChecker(
             new HttpClient(http), "https://cairns.test/latest.json",
-            Path.Combine(_home, "updates.json"), currentVersion: "0.2.1"));
+            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1"));
 
         // The dialog names the version and the button says what pressing it fetches — the
         // whole point of reading the platform out of the manifest rather than sending
@@ -2906,13 +2906,14 @@ public class MainWindowTests : IDisposable
 
         UpdateChecker Checker() => new(
             new HttpClient(http), "https://cairns.test/latest.json",
-            Path.Combine(_home, "updates.json"), currentVersion: "0.2.1");
+            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1");
 
         await vm.CheckForUpdateAsync(Checker());
         Assert.Equal(1, prompts);
 
-        // The timer keeps firing while the app is open, and the interval has not elapsed.
-        // Once told, the same release is never raised again.
+        // The timer keeps firing while the app is open. Within the day the check is not
+        // due, so the prompt does not come back — the interval is what stops it, since
+        // nothing records which release was already named.
         await vm.CheckForUpdateAsync(Checker());
         await vm.CheckForUpdateAsync(Checker());
         Assert.Equal(1, prompts);
