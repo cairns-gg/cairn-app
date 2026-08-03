@@ -58,7 +58,11 @@ public partial class App : Application
             // After the window exists, so the dialog has an owner and something to open in
             // front of. Not awaited: on most launches it decides in microseconds that a
             // check is not due, and on the rest it must not hold up the window.
-            _ = model.CheckForUpdateAsync();
+            //
+            // And it keeps checking. A launcher is left open — it is the thing you press
+            // Play from — so a startup-only check would miss every release that happened
+            // while it was running.
+            model.StartUpdateChecks();
         }
 
         base.OnFrameworkInitializationCompleted();

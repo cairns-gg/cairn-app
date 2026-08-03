@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cairn.Core;
@@ -219,6 +220,36 @@ public partial class MainViewModel : ViewModelBase
     public UpdateAvailable? OfferedUpdate { get; private set; }
 
     /// <summary>
+    /// How often somebody looks at the clock — not how often the server is asked, which
+    /// <see cref="UpdateChecker.Interval"/> owns and is a day.
+    ///
+    /// Checking only at startup meant a launcher left open all week never heard about the
+    /// release that happened on Tuesday, and this one is left open: it is the thing you
+    /// press Play from. An hourly tick that almost always reads one small file and returns
+    /// is the cheapest way to make the daily interval mean what it says.
+    /// </summary>
+    public static readonly TimeSpan UpdatePollInterval = TimeSpan.FromHours(1);
+
+    private DispatcherTimer? _updateTimer;
+    private bool _checkingForUpdate;
+
+    /// <summary>
+    /// Checks now, and keeps checking for as long as the app is open.
+    ///
+    /// Started by the app rather than the constructor so the test suite — which builds
+    /// this view model hundreds of times — never starts a timer or touches the network.
+    /// </summary>
+    public void StartUpdateChecks()
+    {
+        _ = CheckForUpdateAsync();
+
+        _updateTimer = new DispatcherTimer(
+            UpdatePollInterval, DispatcherPriority.Background, (_, _) => _ = CheckForUpdateAsync());
+
+        _updateTimer.Start();
+    }
+
+    /// <summary>
     /// Asks whether there is a newer Cairn, and offers it once if so.
     ///
     /// Fire and forget from startup: it runs behind the window, does nothing at all on
@@ -234,6 +265,13 @@ public partial class MainViewModel : ViewModelBase
     /// </param>
     public async Task CheckForUpdateAsync(UpdateChecker? checker = null, CancellationToken ct = default)
     {
+        // The timer fires on a schedule of its own and the dialog is modal, so a tick can
+        // land while the last one is still on screen. The state file would refuse the
+        // second offer anyway — the version is recorded before the dialog opens — but a
+        // second HTTP request nobody will read is still waste.
+        if (_checkingForUpdate) return;
+        _checkingForUpdate = true;
+
         try
         {
             var update = await (checker ?? new UpdateChecker(_http)).CheckAsync(ct).ConfigureAwait(true);
@@ -262,6 +300,10 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             // Checking is the least important thing this app does.
+        }
+        finally
+        {
+            _checkingForUpdate = false;
         }
     }
 

@@ -178,6 +178,11 @@ required:
   and one that is only promoted when the macOS builds were notarised. So the app cannot
   offer a build the site would not.
 
+  It keeps checking rather than asking once at startup, because a launcher is left open —
+  it is the thing you press Play from — and a startup-only check misses every release that
+  happens while it is running. An hourly tick reads the clock; the day-long interval below
+  decides whether that turns into a request.
+
   Two separate restraints, doing different jobs. It asks the server at most once a day, and
   it names any given release only once — a popup that comes back every day for a version
   somebody has decided to skip is one they learn to dismiss without reading. Both live in
@@ -423,7 +428,7 @@ clobbering a good one could hurt.
 ```bash
 dotnet build
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 423 tests, 427 with the game
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 199 UI tests
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 201 UI tests
 ```
 
 Building to test, on whatever machine you are on:

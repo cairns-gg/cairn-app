@@ -2890,6 +2890,47 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Checking_again_while_a_check_is_running_does_nothing()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/latest.json", $$"""
+            {"version": "99.0.0", "files": [{"platform": "{{UpdateChecker.ThisPlatform}}",
+             "name": "cairn.zip", "url": "https://download.cairns.gg/c.zip",
+             "size": 1, "sha256": "aa"}]}
+            """);
+
+        var (_, vm) = Show(http);
+
+        var prompts = 0;
+        vm.Confirm = _ => { prompts++; return Task.FromResult(false); };
+
+        UpdateChecker Checker() => new(
+            new HttpClient(http), "https://cairns.test/latest.json",
+            Path.Combine(_home, "updates.json"), currentVersion: "0.2.1");
+
+        await vm.CheckForUpdateAsync(Checker());
+        Assert.Equal(1, prompts);
+
+        // The timer keeps firing while the app is open, and the interval has not elapsed.
+        // Once told, the same release is never raised again.
+        await vm.CheckForUpdateAsync(Checker());
+        await vm.CheckForUpdateAsync(Checker());
+        Assert.Equal(1, prompts);
+    }
+
+    [AvaloniaFact]
+    public void The_update_timer_looks_more_often_than_it_asks()
+    {
+        // The poll is how often the clock is read; UpdateChecker.Interval is how often the
+        // server is asked. A poll longer than the interval would silently stretch it.
+        Assert.True(MainViewModel.UpdatePollInterval < UpdateChecker.Interval,
+            "polling less often than the check interval would make the interval a lie");
+
+        Assert.True(MainViewModel.UpdatePollInterval >= TimeSpan.FromMinutes(15),
+            "polling this often is a file read nobody asked for");
+    }
+
+    [AvaloniaFact]
     public async Task An_unstamped_build_is_never_told_it_is_out_of_date()
     {
         var (_, vm) = Show();
