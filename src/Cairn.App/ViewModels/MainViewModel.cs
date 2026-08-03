@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cairn.Core;
@@ -13,6 +14,7 @@ using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
+using Cairn.Core.Updates;
 
 namespace Cairn.App.ViewModels;
 
@@ -207,6 +209,61 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void CancelDelete() => ConfirmingDelete = false;
+
+    // ---- a newer Cairn ----
+
+    /// <summary>
+    /// The update this machine has been offered but not yet answered. Held so a headless
+    /// run can inspect it, exactly as the delete prompt is.
+    /// </summary>
+    public UpdateAvailable? OfferedUpdate { get; private set; }
+
+    /// <summary>
+    /// Asks whether there is a newer Cairn, and offers it once if so.
+    ///
+    /// Fire and forget from startup: it runs behind the window, does nothing at all on
+    /// most launches — the check is due once a day — and cannot fail in a way worth
+    /// telling anybody about. The dialog is the ordinary confirmation, because "here is a
+    /// thing, do you want it" is what that window already is; a second window would exist
+    /// only to be a different shape.
+    /// </summary>
+    /// <param name="checker">
+    /// Supplied by tests. The real one reads this build's stamped version, which under a
+    /// test host is "dev" — the case that correctly suppresses everything, and so the one
+    /// case in which the dialog can never be exercised.
+    /// </param>
+    public async Task CheckForUpdateAsync(UpdateChecker? checker = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var update = await (checker ?? new UpdateChecker(_http)).CheckAsync(ct).ConfigureAwait(true);
+            if (update is null) return;
+
+            OfferedUpdate = update;
+
+            // The status bar rather than a pack's log: this is about the app, and it
+            // belongs to no pack.
+            Note($"Cairn {update.Version} is available");
+
+            if (Confirm is null) return;
+
+            var wanted = await Confirm(new ConfirmViewModel(
+                $"Cairn {update.Version} is available",
+                $"You are running {CairnVersion.Current}. "
+                + (update.File is null
+                    ? "The download page has the build for your machine."
+                    : $"The {update.File.Label} build is {update.File.SizeText}.")
+                + "\n\nNothing is installed for you — this opens the download in your browser, "
+                + "and your packs, worlds and settings are untouched by replacing the app.",
+                update.ButtonLabel));
+
+            if (wanted) Browser.Open(update.DownloadUrl);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            // Checking is the least important thing this app does.
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
     public void ConfirmDelete()

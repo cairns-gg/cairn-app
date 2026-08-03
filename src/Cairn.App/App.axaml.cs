@@ -54,6 +54,11 @@ public partial class App : Application
 
             if (PackLinks.FromArguments(desktop.Args ?? []) is { } link)
                 PackLinks.Follow(this, model, link);
+
+            // After the window exists, so the dialog has an owner and something to open in
+            // front of. Not awaited: on most launches it decides in microseconds that a
+            // check is not due, and on the rest it must not hold up the window.
+            _ = model.CheckForUpdateAsync();
         }
 
         base.OnFrameworkInitializationCompleted();

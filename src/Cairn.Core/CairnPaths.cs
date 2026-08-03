@@ -44,6 +44,17 @@ public static class CairnPaths
     public static string SettingsPath => Path.Combine(Root, "settings.json");
 
     /// <summary>
+    /// When Cairn last asked whether there was a newer version, and which one it has
+    /// already mentioned.
+    ///
+    /// Its own file rather than a corner of settings.json, because that one is written
+    /// whole: UiScale.Save serialises every key it knows about and moves the result into
+    /// place, so anything else living there would be dropped the next time somebody
+    /// changed the interface size. This is bookkeeping rather than a preference anyway.
+    /// </summary>
+    public static string UpdateStatePath => Path.Combine(Root, "updates.json");
+
+    /// <summary>
     /// The token this machine holds for cairns.gg. Kept apart from settings because it is
     /// a credential rather than a preference, and written owner-only for the same reason.
     /// </summary>

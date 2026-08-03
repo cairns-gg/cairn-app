@@ -37,11 +37,11 @@ Rosetta and feels sluggish. `dev.sh` publishes for the host RID, and on macOS pr
 The two suites run **differently**, and getting this wrong looks like success:
 
 ```bash
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~411 tests
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj           # xunit v2, ~423 tests
 dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj --filter "FullyQualifiedName~PackSync"
 
 dotnet build tests/Cairn.App.Tests/Cairn.App.Tests.csproj
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~196 tests
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # xunit v3, ~199 tests
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -method '*Version*'
 dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -class '*ShareWindowTests'
 ```

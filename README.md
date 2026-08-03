@@ -167,6 +167,23 @@ required:
   not grow a window past the display it is on.
 - **Play** syncs the mod directory and then launches. It is the only button that
   needs pressing; `cairn-cli sync` exists for reconciling without starting the game.
+- **A newer Cairn** is offered once, in a dialog, with a **Download for macOS (Apple
+  silicon)** — or whichever platform this build is — that opens the browser. Nothing is
+  installed for anybody; replacing the app leaves packs, worlds and settings alone, and the
+  dialog says so, because an unexpected update prompt makes people wonder what it is about
+  to do to their saves.
+
+  The manifest it reads is `releases/latest.json`, which the release workflow already
+  published and nothing consumed — the same file cairns.gg serves its download page from,
+  and one that is only promoted when the macOS builds were notarised. So the app cannot
+  offer a build the site would not.
+
+  Two separate restraints, doing different jobs. It asks the server at most once a day, and
+  it names any given release only once — a popup that comes back every day for a version
+  somebody has decided to skip is one they learn to dismiss without reading. Both live in
+  `~/.cairn/updates.json`, which is its own file because `settings.json` is written whole
+  and would drop anything it did not know about. A build nobody stamped says `dev` and is
+  never told it is out of date.
 
 ```bash
 dotnet run --project src/Cairn.App
@@ -405,8 +422,8 @@ clobbering a good one could hurt.
 
 ```bash
 dotnet build
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 411 tests, 415 with the game
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 196 UI tests
+dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 423 tests, 427 with the game
+dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 199 UI tests
 ```
 
 Building to test, on whatever machine you are on:

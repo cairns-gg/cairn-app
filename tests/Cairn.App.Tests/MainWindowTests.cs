@@ -10,6 +10,7 @@ using Cairn.App.Views;
 using Cairn.Core.Cairns;
 using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
+using Cairn.Core.Updates;
 using Xunit;
 
 namespace Cairn.App.Tests;
@@ -2851,6 +2852,56 @@ public class MainWindowTests : IDisposable
         Assert.True(detail.Publish!.NothingToPublish);
         Assert.False(detail.IsWithdrawn);
         Assert.NotNull(store.LoadLink("mine")!.Published);
+    }
+
+    [AvaloniaFact]
+    public async Task A_newer_version_offers_the_build_for_this_machine()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/latest.json", $$"""
+            {"version": "99.0.0", "publishedAt": "2026-08-02T21:52:09Z",
+             "files": [{"platform": "{{UpdateChecker.ThisPlatform}}", "name": "cairn.zip",
+                        "url": "https://download.cairns.gg/releases/99.0.0/cairn.zip",
+                        "size": 48795601, "sha256": "aa"}]}
+            """);
+
+        var (_, vm) = Show(http);
+
+        ConfirmViewModel? shown = null;
+        vm.Confirm = c => { shown = c; return Task.FromResult(false); };
+
+        await vm.CheckForUpdateAsync(new UpdateChecker(
+            new HttpClient(http), "https://cairns.test/latest.json",
+            Path.Combine(_home, "updates.json"), currentVersion: "0.2.1"));
+
+        // The dialog names the version and the button says what pressing it fetches — the
+        // whole point of reading the platform out of the manifest rather than sending
+        // everybody to a download page to work it out themselves.
+        Assert.NotNull(shown);
+        Assert.Contains("99.0.0", shown!.Title);
+        Assert.StartsWith("Download for ", shown.ConfirmLabel);
+
+        // And it says the app is not about to replace itself, because that is the first
+        // thing an unexpected update popup makes somebody wonder.
+        Assert.Contains("Nothing is installed for you", shown.Message);
+
+        Assert.Equal("99.0.0", vm.OfferedUpdate!.Version);
+        Assert.Contains("99.0.0", vm.Status);
+    }
+
+    [AvaloniaFact]
+    public async Task An_unstamped_build_is_never_told_it_is_out_of_date()
+    {
+        var (_, vm) = Show();
+
+        var offered = false;
+        vm.Confirm = _ => { offered = true; return Task.FromResult(false); };
+
+        // The real checker, reading this host's version — which is "dev".
+        await vm.CheckForUpdateAsync();
+
+        Assert.False(offered);
+        Assert.Null(vm.OfferedUpdate);
     }
 
     [AvaloniaFact]
