@@ -167,6 +167,53 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand]
     private void ClearLog() => Log.Clear();
 
+    /// <summary>
+    /// Puts text on the clipboard. Supplied by the window, because a view model has no
+    /// TopLevel to ask; left null in tests, which read the report instead.
+    /// </summary>
+    public Func<string, Task>? CopyToClipboard { get; set; }
+
+    /// <summary>
+    /// Assembles what a bug report needs and puts it on the clipboard, so the person can
+    /// read it before deciding to send it.
+    ///
+    /// Deliberately not an upload. Cairn holds a cairns.gg token and a Vintage Story
+    /// session on disk, and the way to be sure neither is ever transmitted is to have no
+    /// code that transmits anything — the report goes as far as the clipboard and stops.
+    /// It lives beside the log because that is where somebody already is when the thing
+    /// they want to report has just happened.
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyDiagnostics()
+    {
+        var report = Diagnostics.Report(Manifest, _store.LoadLock(Id), Log, _library);
+
+        if (CopyToClipboard is null)
+        {
+            _log("could not reach the clipboard");
+            return;
+        }
+
+        try
+        {
+            await CopyToClipboard(report);
+            _log($"diagnostics copied — paste them into an issue at {Diagnostics.IssuesUrl}");
+        }
+        catch (Exception e)
+        {
+            // A clipboard that refuses is not worth failing over, but silence would leave
+            // somebody pasting whatever was there before and wondering why it made no sense.
+            _log($"could not copy diagnostics: {e.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private void ReportIssue()
+    {
+        if (!Browser.Open(Diagnostics.IssuesUrl))
+            _log($"could not open {Diagnostics.IssuesUrl}");
+    }
+
     // ---- the game's own logs ----
 
     private GameLogs GameLogs => new(_packData.DataPathFor(Id));

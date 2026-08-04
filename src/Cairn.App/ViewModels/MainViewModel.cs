@@ -466,6 +466,11 @@ public partial class MainViewModel : ViewModelBase
         Detail.ConfirmVersionChange = ConfirmVersionChange;
         Detail.ConfirmPublish = ConfirmPublish;
 
+        // Read through rather than copied, because the window sets this once and the detail
+        // pane is rebuilt on every selection — capturing the value here would hand the
+        // first pack a null and every later one the real thing.
+        Detail.CopyToClipboard = text => CopyToClipboard?.Invoke(text) ?? Task.CompletedTask;
+
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
     }
@@ -708,6 +713,12 @@ public partial class MainViewModel : ViewModelBase
     /// The view supplies the opener, since Core knows nothing about windows.
     /// </summary>
     public Func<PreferencesViewModel, Task>? OpenPreferences { get; set; }
+
+    /// <summary>
+    /// Set by the view, which owns the only TopLevel there is to ask for a clipboard.
+    /// Forwarded to each detail pane so "Copy diagnostics" works wherever it is pressed.
+    /// </summary>
+    public Func<string, Task>? CopyToClipboard { get; set; }
 
     private Func<VersionChangeViewModel, Task<bool>>? _confirmVersionChange;
     private Func<ShareViewModel, Task<bool>>? _confirmPublish;

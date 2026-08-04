@@ -659,6 +659,19 @@
                                         Command="{Binding Detail.ShowGameLogCommand}" />
                                 <Button Content="Open logs folder"
                                         Command="{Binding Detail.OpenLogsFolderCommand}" />
+
+                                <!--
+                                    Beside the log because that is where somebody already is
+                                    when the thing they want to report has just happened.
+                                    Copy first, then the issue tracker: the report is on the
+                                    clipboard before the browser steals the window, and it
+                                    has been read by the only person entitled to send it.
+                                -->
+                                <Button Content="Copy diagnostics"
+                                        Command="{Binding Detail.CopyDiagnosticsCommand}"
+                                        ToolTip.Tip="Version, platform, game installs, this pack and the log — copied for you to paste into an issue. Nothing is sent." />
+                                <Button Content="Report an issue"
+                                        Command="{Binding Detail.ReportIssueCommand}" />
                             </StackPanel>
                             <ScrollViewer>
                                 <ItemsControl ItemsSource="{Binding Detail.Log}" Margin="4">

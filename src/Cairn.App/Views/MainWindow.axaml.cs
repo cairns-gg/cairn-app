@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
@@ -30,7 +31,16 @@ public partial class MainWindow : Window
         vm.ConfirmPublish = ConfirmPublishAsync;
         vm.ConfirmImport = ConfirmImportAsync;
         vm.Confirm = ConfirmAsync;
+        vm.CopyToClipboard = CopyToClipboardAsync;
     }
+
+    /// <summary>
+    /// The clipboard belongs to the top level, which a view model does not have. Throws
+    /// when there is none to reach — the caller logs that rather than pretending it copied.
+    /// </summary>
+    private Task CopyToClipboardAsync(string text) =>
+        Clipboard?.SetValueAsync(DataFormat.Text, text)
+        ?? throw new InvalidOperationException("no clipboard");
 
     /// <summary>
     /// True only if Publish was pressed. Dismissing the window any other way sends nothing.

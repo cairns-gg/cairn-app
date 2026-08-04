@@ -30,6 +30,7 @@ internal static class Program
             return args[0] switch
             {
                 "info" => Info(),
+                "diagnostics" => Diagnostics(store, games, args),
                 "list" => List(store),
                 "init" => Init(store, args),
                 "add" => Add(store, args),
@@ -65,6 +66,7 @@ internal static class Program
             cairn-cli - Vintage Story modpack manager
 
               cairn-cli info                          show the detected install and data path
+              cairn-cli diagnostics [<id>]            print what a bug report needs
               cairn-cli list                          list packs
               cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]
               cairn-cli add <id> <modid> [version]    add a mod to a pack
@@ -106,6 +108,31 @@ internal static class Program
         => GameInstall.TryLocate()
            ?? throw new InvalidOperationException(
                "No Vintage Story install found. Set VINTAGE_STORY to the install directory.");
+
+    /// <summary>
+    /// The same report the launcher copies to the clipboard, on stdout so it can be piped
+    /// or redirected. Printed rather than sent, for the reason Diagnostics exists: this
+    /// machine holds a cairns.gg token, and nothing here transmits anything.
+    /// </summary>
+    private static int Diagnostics(PackStore store, GameStore games, string[] args)
+    {
+        var id = args.Length > 1 ? args[1] : null;
+
+        if (id is not null && !store.Exists(id)) return Fail($"no pack '{id}'");
+
+        // The same merge the launcher reports: Cairn's own installs plus whatever was
+        // already on the machine, because "which game is this actually running" is one of
+        // the first questions a bug report has to answer.
+        var library = new GameLibrary(games, GameInstall.TryLocate());
+
+        Console.WriteLine(Cairn.Core.Diagnostics.Report(
+            pack: id is null ? null : store.Load(id),
+            locked: id is null ? null : store.LoadLock(id),
+            log: null,
+            library: library));
+
+        return 0;
+    }
 
     private static int Info()
     {

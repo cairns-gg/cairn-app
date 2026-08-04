@@ -2636,6 +2636,45 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Copy_diagnostics_puts_the_report_on_the_clipboard()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        string? copied = null;
+        vm.Detail!.CopyToClipboard = text => { copied = text; return Task.CompletedTask; };
+
+        await vm.Detail.CopyDiagnosticsCommand.ExecuteAsync(null);
+
+        Assert.NotNull(copied);
+        Assert.Contains("Cairn diagnostics", copied);
+        Assert.Contains("anego", copied);
+
+        // Says where it went, because a clipboard gives no feedback of its own and a
+        // button that appears to do nothing gets pressed until something breaks.
+        Assert.Contains(vm.Detail.Log, l => l.Contains("diagnostics copied"));
+    }
+
+    [AvaloniaFact]
+    public async Task Copy_diagnostics_says_so_when_there_is_no_clipboard()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.CopyToClipboard = _ => throw new InvalidOperationException("no clipboard");
+
+        // Not a crash, and not silence either: the report is what somebody is about to
+        // paste, so believing it copied when it did not is worse than being told.
+        await vm.Detail.CopyDiagnosticsCommand.ExecuteAsync(null);
+
+        Assert.Contains(vm.Detail.Log, l => l.Contains("could not copy diagnostics"));
+    }
+
+    [AvaloniaFact]
     public void The_log_tab_shows_the_selected_packs_lines()
     {
         var (window, vm) = Show();
