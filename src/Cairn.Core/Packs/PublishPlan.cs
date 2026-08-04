@@ -65,12 +65,19 @@ public sealed record PublishPlan(
     /// mod as resolvable, which is the honest reading of "we did not look" — the alternative
     /// is a dialog that accuses mods of being missing because the network was down.
     /// </param>
+    /// <param name="syncFailures">
+    /// Steps from the sync that was just run, when the caller ran one. A mod missing from
+    /// the lock is otherwise a puzzle — it reads identically whether nothing has tried to
+    /// install it or something tried and could not — and these are what tell the two apart
+    /// and carry the actual reason. Null means no sync was run, not that none failed.
+    /// </param>
     public static async Task<PublishPlan> PrepareAsync(
         PackManifest manifest,
         PackLock? locked,
         ModDbClient? moddb = null,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<SyncStep>? syncFailures = null)
     {
         var mods = new List<PublishMod>();
 
@@ -100,7 +107,7 @@ public sealed record PublishPlan(
                 want.ModId, installed?.Version ?? want.Version, want.Version is not null, onModDb));
         }
 
-        var (covers, problem) = CheckLock(manifest, locked);
+        var (covers, problem) = CheckLock(manifest, locked, syncFailures);
 
         return new PublishPlan(manifest.Id, mods, manifest.Connect, covers, problem);
     }
@@ -110,7 +117,8 @@ public sealed record PublishPlan(
     /// game version, or misses mods the manifest asks for, would publish a claim of
     /// reproducibility that is not true.
     /// </summary>
-    private static (bool Covers, string? Problem) CheckLock(PackManifest manifest, PackLock? locked)
+    private static (bool Covers, string? Problem) CheckLock(
+        PackManifest manifest, PackLock? locked, IReadOnlyList<SyncStep>? syncFailures)
     {
         if (manifest.Mods.Count == 0)
             return (false, "This pack has no mods.");
@@ -126,12 +134,33 @@ public sealed record PublishPlan(
         var lockedIds = locked.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = manifest.Mods.Where(m => !lockedIds.Contains(m.ModId)).ToList();
 
-        if (missing.Count > 0)
-            return (false,
-                $"{missing.Count} mod{(missing.Count == 1 ? " has" : "s have")} not been installed yet "
-                + $"({string.Join(", ", missing.Take(3).Select(m => m.ModId))}"
-                + $"{(missing.Count > 3 ? ", …" : "")}). Sync the pack first.");
+        if (missing.Count == 0) return (true, null);
 
-        return (true, null);
+        // Publishing syncs first, so by the time this is read the mods really cannot be
+        // installed rather than merely not having been. Saying "sync the pack first" here
+        // sent people to press a button that had already been pressed on their behalf; the
+        // reason the sync gave is the only thing that moves them forward.
+        var explained = missing
+            .Select(m => (m.ModId, Why: Reason(m.ModId)))
+            .Where(x => x.Why is not null)
+            .ToList();
+
+        if (explained.Count > 0)
+            return (false,
+                $"{missing.Count} mod{(missing.Count == 1 ? "" : "s")} could not be installed: "
+                + string.Join("; ", explained.Take(3).Select(x => $"{x.ModId} — {x.Why}"))
+                + (explained.Count > 3 ? "; …" : "") + ".");
+
+        // No sync was run, or one was and said nothing about these. Still not a claim about
+        // which — a mod added moments ago and a mod nothing has reached leave the same trace.
+        return (false,
+            $"{missing.Count} mod{(missing.Count == 1 ? " is" : "s are")} not installed "
+            + $"({string.Join(", ", missing.Take(3).Select(m => m.ModId))}"
+            + $"{(missing.Count > 3 ? ", …" : "")}). Sync the pack first.");
+
+        string? Reason(string modId) => syncFailures?
+            .FirstOrDefault(s => s.Action == SyncAction.Failed
+                                 && string.Equals(s.ModId, modId, StringComparison.OrdinalIgnoreCase))
+            ?.Detail;
     }
 }

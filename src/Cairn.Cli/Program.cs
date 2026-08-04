@@ -708,7 +708,24 @@ internal static class Program
 
         // The same plan the launcher's Share window shows, so both front-ends refuse the
         // same packs for the same reasons.
-        var plan = await PublishPlan.PrepareAsync(store.Load(id), store.LoadLock(id), moddb);
+        var manifest = store.Load(id);
+        var plan = await PublishPlan.PrepareAsync(manifest, store.LoadLock(id), moddb);
+
+        // Only when it would otherwise refuse, matching the launcher. Publishing a settled
+        // pack must not rewrite its lock, and an unreachable ModDB must not be able to turn
+        // sharing into a change to what is installed.
+        if (!plan.LockCovers)
+        {
+            Console.WriteLine("syncing first…");
+            var report = await new PackSyncer(moddb, http)
+                .SyncAsync(manifest, store.ModsDir(id), store.LockPath(id));
+
+            foreach (var step in report.Steps.Where(s => s.Action == SyncAction.Failed))
+                Console.WriteLine($"  ! {step.ModId}: {step.Detail}");
+
+            plan = await PublishPlan.PrepareAsync(
+                manifest, store.LoadLock(id), moddb, syncFailures: report.Steps);
+        }
 
         if (!plan.CanPublish) return Fail(plan.LockProblem ?? "this pack cannot be published");
 

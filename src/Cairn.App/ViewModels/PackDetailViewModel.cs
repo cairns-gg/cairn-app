@@ -1225,9 +1225,28 @@ public partial class PackDetailViewModel : ViewModelBase
             var session = await SignInAsync();
             if (session is null) return;
 
+            var progress = new Progress<string>(id => LaunchStage = $"Checking {id}…");
+
             var plan = await PublishPlan.PrepareAsync(
-                Manifest, _store.LoadLock(Id), _moddb,
-                new Progress<string>(id => LaunchStage = $"Checking {id}…"));
+                Manifest, _store.LoadLock(Id), _moddb, progress);
+
+            // Only when it would otherwise refuse. Publishing used to answer a lock that
+            // does not cover the manifest by saying "sync the pack first", which meant
+            // pressing Play — starting the game — in order to share. Syncing here removes
+            // that, but only in the case that was already broken: a settled pack must not
+            // have its lock rewritten by the act of sharing it, and an unreachable ModDB
+            // must not be able to turn sharing into a change to what is installed.
+            if (!plan.LockCovers)
+            {
+                LaunchStage = "Syncing…";
+                var sync = await RunSyncAsync(quiet: true);
+
+                // RunSyncAsync clears IsBusy in its own finally, and publishing continues.
+                IsBusy = true;
+
+                plan = await PublishPlan.PrepareAsync(
+                    Manifest, _store.LoadLock(Id), _moddb, progress, syncFailures: sync?.Steps);
+            }
 
             // Before the window is built, because the window is what would refuse. A
             // withdrawal made on the site never reaches this machine, so the publish

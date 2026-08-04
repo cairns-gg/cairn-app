@@ -93,9 +93,28 @@ async Task<int> FetchAsync()
     // re-reading: it is also what says which cached entries have gone stale.
     Console.WriteLine("fetching the mod index...");
     var indexJson = await GetAsync(http, "https://mods.vintagestory.at/api/mods");
-    if (indexJson is null) return Fail("could not fetch the mod index");
 
-    await File.WriteAllTextAsync(indexPath, indexJson);
+    if (indexJson is not null)
+    {
+        var tmpIndex = indexPath + ".partial";
+        await File.WriteAllTextAsync(tmpIndex, indexJson);
+        File.Move(tmpIndex, indexPath, overwrite: true);
+    }
+    else if (File.Exists(indexPath))
+    {
+        // A resumable job that cannot start is not resumable. The index is one 3.4MB
+        // request out of eight thousand, and it is the only one that is fatal — losing it
+        // to a dropped connection killed a run that already had a perfectly good copy on
+        // disk. A stale index costs at most the mods published since it was written, and
+        // the next successful run picks those up.
+        indexJson = await File.ReadAllTextAsync(indexPath);
+        Console.WriteLine($"  unreachable — using the copy cached at "
+                          + $"{File.GetLastWriteTime(indexPath):yyyy-MM-dd HH:mm}");
+    }
+    else
+    {
+        return Fail("could not fetch the mod index, and none is cached");
+    }
 
     using var index = JsonDocument.Parse(indexJson);
     var entries = index.RootElement.GetProperty("mods").EnumerateArray()

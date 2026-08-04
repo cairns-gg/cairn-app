@@ -70,6 +70,62 @@ public class PublishPlanTests
         Assert.Contains("unchisel", plan.LockProblem);
     }
 
+    /// <summary>
+    /// Publishing syncs first, so a mod still missing afterwards is one that could not be
+    /// installed rather than one nobody had got round to. The reason the sync gave is the
+    /// only thing that moves the author forward — "sync the pack first" was an instruction
+    /// to repeat something that had already happened.
+    /// </summary>
+    [Fact]
+    public async Task A_mod_the_sync_could_not_install_is_reported_with_its_reason()
+    {
+        var failures = new List<SyncStep>
+        {
+            new(SyncAction.Downloaded, "glassview", "1.3.0"),
+            new(SyncAction.Failed, "unchisel", "no release marked for game 1.22.5"),
+        };
+
+        var plan = await PublishPlan.PrepareAsync(
+            Pack(null, "glassview", "unchisel"), Lock("1.22.5", "glassview"),
+            syncFailures: failures);
+
+        Assert.False(plan.CanPublish);
+        Assert.Contains("could not be installed", plan.LockProblem);
+        Assert.Contains("unchisel — no release marked for game 1.22.5", plan.LockProblem);
+
+        // The old wording sent people to press a button that had already been pressed.
+        Assert.DoesNotContain("Sync the pack first", plan.LockProblem);
+    }
+
+    [Fact]
+    public async Task A_missing_mod_with_no_sync_to_explain_it_still_says_to_sync()
+    {
+        // Nothing ran, so there is no reason to give and the old advice is the right one.
+        var plan = await PublishPlan.PrepareAsync(
+            Pack(null, "glassview", "unchisel"), Lock("1.22.5", "glassview"),
+            syncFailures: null);
+
+        Assert.False(plan.CanPublish);
+        Assert.Contains("Sync the pack first", plan.LockProblem);
+    }
+
+    [Fact]
+    public async Task A_sync_that_failed_a_mod_the_lock_covers_does_not_block_publishing()
+    {
+        // A mod can fail one sync and still be installed from an earlier one. What decides
+        // publishing is whether the lock covers the manifest, never the step list.
+        var failures = new List<SyncStep>
+        {
+            new(SyncAction.Failed, "glassview", "ModDB timed out"),
+        };
+
+        var plan = await PublishPlan.PrepareAsync(
+            Pack(null, "glassview"), Lock("1.22.5", "glassview"), syncFailures: failures);
+
+        Assert.True(plan.CanPublish);
+        Assert.Null(plan.LockProblem);
+    }
+
     [Fact]
     public async Task A_lock_for_another_game_version_cannot_be_published()
     {

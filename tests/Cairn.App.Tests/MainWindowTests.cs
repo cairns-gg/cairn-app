@@ -2819,6 +2819,17 @@ public class MainWindowTests : IDisposable
         WritePack("mine", "Mine", "1.22.5", null, ["glassview"]);
 
         var store = new PackStore(Path.Combine(_home, "packs"));
+
+        // A published pack always has a lock covering its manifest, because publishing
+        // refuses without one. Saying so matters now that publishing syncs when the lock
+        // does not cover: without this the fixture describes a pack that cannot exist, and
+        // the withdrawal check under test would be reached through a sync instead.
+        new PackLock
+        {
+            GameVersion = "1.22.5",
+            Mods = [new LockedMod { ModId = "glassview", Version = "1.0.0" }],
+        }.Save(store.LockPath("mine"));
+
         store.SaveLink("mine", new PackLink
         {
             Role = PackRole.Author,
