@@ -371,7 +371,7 @@ sealed class Census
     private static readonly Dictionary<string, string> ReleaseFields = new()
     {
         ["releaseid"] = "int?", ["fileid"] = "int?", ["mainfile"] = "string",
-        ["filename"] = "string", ["modidstr"] = "string", ["modversion"] = "string",
+        ["filename"] = "string", ["modidstr"] = "string?", ["modversion"] = "string",
         ["tags"] = "list",
     };
 

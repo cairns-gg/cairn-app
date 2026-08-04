@@ -102,6 +102,34 @@ public class ModDbBrokenReleaseTests : IDisposable
         Assert.Contains("not marked for game", e.Message);
     }
 
+    /// <summary>
+    /// Cairn's own ModDB entry, which is a download link rather than a mod and so has no
+    /// modid to put on its release. Found by tools/moddb-audit.cs, sixteen mods into a
+    /// sample of eight thousand.
+    /// </summary>
+    private const string NoModIdStr = """
+    {"statuscode":"200","mod":{
+      "modid":10742,"assetid":62619,"name":"Cairn — Modpack Manager","urlalias":null,"side":"both",
+      "releases":[
+        {"releaseid":49999,"fileid":107999,"modidstr":null,"modversion":"1.0.0",
+         "filename":"cairn-download.zip",
+         "mainfile":"https://moddbcdn.vintagestory.at/cairn-download.zip","tags":["1.22.5"]}
+      ]}}
+    """;
+
+    [Fact]
+    public async Task A_release_with_no_modidstr_falls_back_to_the_mod_name()
+    {
+        var release = await Client(NoModIdStr).ResolveAsync("cairn", "1.22.5");
+
+        // The point of the test is the guard at the call site, not the null itself: the
+        // property is nullable, so the compiler no longer promises this cannot happen, and
+        // tightening IsNullOrEmpty to a length check would put the null straight into a
+        // ResolvedRelease and on into the lockfile.
+        Assert.NotNull(release);
+        Assert.Equal("Cairn — Modpack Manager", release.ModId);
+    }
+
     [Fact]
     public async Task A_body_that_cannot_be_parsed_is_a_ModDbException()
     {

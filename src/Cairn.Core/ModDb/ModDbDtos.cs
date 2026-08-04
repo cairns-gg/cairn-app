@@ -59,7 +59,17 @@ public sealed class ModDbRelease
     [JsonPropertyName("mainfile")] public string MainFile { get; set; } = "";
 
     [JsonPropertyName("filename")] public string FileName { get; set; } = "";
-    [JsonPropertyName("modidstr")] public string ModIdStr { get; set; } = "";
+
+    /// <summary>
+    /// The mod's own id, which a release need not carry: ModDB serves
+    /// <c>"modidstr": null</c> for a listing that has no modid to give — Cairn's own entry
+    /// is one, being a download link rather than a mod.
+    ///
+    /// Nullable because the <c>= ""</c> default only ever applied when the key was absent;
+    /// an explicit null overwrote it, so the non-nullable declaration was a promise the
+    /// deserialiser had already broken. Callers must fall back to the mod's name.
+    /// </summary>
+    [JsonPropertyName("modidstr")] public string? ModIdStr { get; set; }
     [JsonPropertyName("modversion")] public string ModVersion { get; set; } = "";
 
     /// <summary>Game versions this release is marked compatible with, e.g. ["1.22.0", "1.22.5"].</summary>
