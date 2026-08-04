@@ -21,6 +21,7 @@
 // bytes, rather than reimplementing the parse. A script with its own copy of the rules
 // would only ever prove that the copy agrees with itself.
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
@@ -39,8 +40,14 @@ var indexPath = Path.Combine(dir, "index.json");
 
 // One request per second by default. ModDB publishes no rate limit and sends no headers
 // about one, so the only safe reading is that there is a person paying for the bandwidth.
-// A full sweep is ~8000 requests: two and a bit hours, run once.
+// This is the interval between request *starts*, enforced globally across the workers, so
+// it is the rate ModDB actually sees regardless of --parallel.
 var delay = TimeSpan.FromMilliseconds(int.TryParse(Opt("--delay"), out var d) ? d : 1000);
+
+// Not a second rate dial. ModDB answers in ~0.8s, so one worker tops out near 1.2/s and a
+// --delay shorter than that quietly does nothing; a few in flight let the interval above
+// be the thing that decides, rather than the round-trip time.
+var parallel = Math.Clamp(int.TryParse(Opt("--parallel"), out var p) ? p : 3, 1, 8);
 var limit = int.TryParse(Opt("--limit"), out var l) ? l : int.MaxValue;
 var refresh = args.Contains("--refresh");
 var gameVersion = Opt("--game") ?? "1.22.5";
@@ -68,7 +75,8 @@ int Usage()
 
         options
           --dir <path>     corpus location (default ~/.cache/cairn-moddb)
-          --delay <ms>     between requests, fetch only (default 1000)
+          --delay <ms>     between request starts, globally (default 1000)
+          --parallel <n>   requests in flight (default 3, max 8) — does not change the rate
           --limit <n>      stop after n downloads, for a sample run
           --refresh        re-fetch mods that have released since they were cached
           --game <version> game version the resolve check targets (default 1.22.5)
@@ -125,71 +133,117 @@ async Task<int> FetchAsync()
 
     Console.WriteLine($"{entries.Count} mods listed");
 
-    var done = 0;
+    // Everything not already on disk, worked out before any request goes out so the
+    // progress figures below are counts rather than guesses.
+    var wanted = new ConcurrentQueue<int>(entries
+        .Where(e => !File.Exists(Path.Combine(modsDir, $"{e.Id}.json"))
+                    || (refresh && HasReleasedSince(Path.Combine(modsDir, $"{e.Id}.json"), e.Released)))
+        .Select(e => e.Id)
+        .Take(limit == int.MaxValue ? entries.Count : limit));
+
+    var skipped = entries.Count - wanted.Count;
+    var total = wanted.Count;
+
+    Console.WriteLine($"{total} to fetch, {skipped} already cached");
+    if (total == 0) { Console.WriteLine($"corpus: {modsDir}"); return 0; }
+
     var fetched = 0;
-    var skipped = 0;
-    var failed = new List<int>();
     var consecutiveFailures = 0;
+    var failed = new ConcurrentBag<int>();
     var clock = Stopwatch.StartNew();
+    using var abort = new CancellationTokenSource();
 
-    foreach (var (id, released) in entries)
+    // A global rate limit rather than a sleep between requests. Sleeping between them
+    // makes the real rate 1/(delay + latency), so it silently collapses on a slow link —
+    // measured at 0.64/s against a --delay of 500ms, when 2/s was the intent. Reserving
+    // evenly spaced slots means --delay means what it says: requests *start* this far
+    // apart, whatever each one then costs.
+    var slotLock = new SemaphoreSlim(1, 1);
+    var nextSlot = DateTimeOffset.UtcNow;
+
+    async Task PaceAsync(CancellationToken ct)
     {
-        if (fetched >= limit)
+        DateTimeOffset slot;
+
+        await slotLock.WaitAsync(ct);
+        try
         {
-            Console.WriteLine($"stopping at --limit {limit}");
-            break;
+            var now = DateTimeOffset.UtcNow;
+            slot = nextSlot > now ? nextSlot : now;
+            nextSlot = slot + delay;
+        }
+        finally
+        {
+            slotLock.Release();
         }
 
-        done++;
-        var path = Path.Combine(modsDir, $"{id}.json");
+        // Outside the lock: holding it through the wait would serialise the workers again
+        // and undo the point of having more than one.
+        var wait = slot - DateTimeOffset.UtcNow;
+        if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+    }
 
-        if (File.Exists(path) && !(refresh && HasReleasedSince(path, released)))
+    // Concurrency exists only to stop latency eating the rate budget: ModDB answers in
+    // ~0.8s, so a single worker can never reach 2/s however short the delay. The limiter
+    // above is what ModDB experiences, and it is unchanged by this number.
+    async Task WorkAsync()
+    {
+        while (!abort.IsCancellationRequested && wanted.TryDequeue(out var id))
         {
-            skipped++;
-            continue;
-        }
+            try
+            {
+                await PaceAsync(abort.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
 
-        // Paced before the request rather than after, so a resumed run that skips a
-        // thousand cached files does not then burst a thousand requests.
-        if (fetched > 0) await Task.Delay(delay);
+            var body = await GetAsync(http, $"https://mods.vintagestory.at/api/mod/{id}");
 
-        var body = await GetAsync(http, $"https://mods.vintagestory.at/api/mod/{id}");
-        if (body is null)
-        {
-            failed.Add(id);
+            if (body is null)
+            {
+                failed.Add(id);
 
-            // A server that has stopped answering is a server to stop asking. Continuing
-            // to hammer it for another six thousand mods is exactly the behaviour that
-            // earns a block, and the corpus would be junk anyway.
-            if (++consecutiveFailures >= 10)
-                return Fail($"10 requests failed in a row at modid {id} — stopping");
+                // A server that has stopped answering is a server to stop asking.
+                // Continuing for another six thousand mods is what earns a block, and the
+                // corpus would be junk anyway.
+                if (Interlocked.Increment(ref consecutiveFailures) >= 10)
+                {
+                    Console.WriteLine($"  ! 10 requests failed in a row at modid {id} — stopping");
+                    await abort.CancelAsync();
+                }
 
-            continue;
-        }
+                continue;
+            }
 
-        consecutiveFailures = 0;
+            Interlocked.Exchange(ref consecutiveFailures, 0);
 
-        // Written via a temp file: a Ctrl-C midway through a write would otherwise leave
-        // truncated JSON that the check phase reports as ModDB's fault.
-        var tmp = path + ".partial";
-        await File.WriteAllTextAsync(tmp, body);
-        File.Move(tmp, path, overwrite: true);
-        fetched++;
+            // Written via a temp file: a Ctrl-C midway through a write would otherwise
+            // leave truncated JSON that the check phase reports as ModDB's fault. The id
+            // is unique per worker, so two of them never race for the same name.
+            var path = Path.Combine(modsDir, $"{id}.json");
+            var tmp = path + ".partial";
+            await File.WriteAllTextAsync(tmp, body);
+            File.Move(tmp, path, overwrite: true);
 
-        if (fetched % 100 == 0)
-        {
-            var rate = fetched / clock.Elapsed.TotalSeconds;
-            var left = TimeSpan.FromSeconds((entries.Count - done) / Math.Max(rate, 0.01));
-            Console.WriteLine(
-                $"  {done}/{entries.Count}  fetched {fetched}  skipped {skipped}  ~{left:hh\\:mm} left");
+            var n = Interlocked.Increment(ref fetched);
+            if (n % 100 != 0) continue;
+
+            var rate = n / clock.Elapsed.TotalSeconds;
+            var left = TimeSpan.FromSeconds((total - n) / Math.Max(rate, 0.01));
+            Console.WriteLine($"  {n}/{total}  {rate:0.0}/s  ~{left:hh\\:mm} left");
         }
     }
 
+    await Task.WhenAll(Enumerable.Range(0, parallel).Select(_ => WorkAsync()));
+
     Console.WriteLine($"\nfetched {fetched}, already had {skipped}, failed {failed.Count}");
-    if (failed.Count > 0)
+    if (!failed.IsEmpty)
         Console.WriteLine($"  failed ids: {string.Join(", ", failed.Take(20))}"
                           + (failed.Count > 20 ? $" (+{failed.Count - 20} more)" : ""));
     Console.WriteLine($"corpus: {modsDir}");
+    if (abort.IsCancellationRequested) return 1;
     return 0;
 }
 

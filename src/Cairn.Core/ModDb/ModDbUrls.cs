@@ -9,8 +9,14 @@ public static class ModDbUrls
     /// The mod's page, or null if the entry identifies no page at all.
     ///
     /// Keyed on the asset id rather than the url alias: every mod has an asset id, but
-    /// roughly a quarter have no alias, so an alias-only link would silently 404 for
-    /// them. The alias is used when present purely because it reads better.
+    /// two in five have no alias, so an alias-only link would silently 404 for them. The
+    /// alias is used when present purely because it reads better.
+    ///
+    /// That figure was "roughly a quarter" until tools/moddb-audit.cs read all 7,904 mods
+    /// and found 3,175 without one. The decision is unchanged and the code was always
+    /// right; the number mattered because it is the stated reason, and at a quarter this
+    /// looks like a wrinkle worth optimising away rather than the majority-adjacent case
+    /// it is.
     /// </summary>
     public static string? Page(int assetId, string? urlAlias = null)
     {

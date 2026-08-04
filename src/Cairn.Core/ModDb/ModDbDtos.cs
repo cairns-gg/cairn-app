@@ -110,7 +110,7 @@ public sealed class ModDbSearchEntry
     /// <summary>Identifies the mod's page on the site; present on every search result.</summary>
     [JsonPropertyName("assetid")] public int AssetId { get; set; }
 
-    /// <summary>A prettier page slug, absent for roughly a quarter of mods.</summary>
+    /// <summary>A prettier page slug, absent for two mods in five — measured, see ModDbUrls.Page.</summary>
     [JsonPropertyName("urlalias")] public string? UrlAlias { get; set; }
 
     /// <summary>Icon URL on the ModDB CDN. Roughly one mod in ten has none.</summary>
