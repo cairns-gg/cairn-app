@@ -65,6 +65,25 @@ The `Cairn.Core.Tests` conformance suite compiles only when `VINTAGE_STORY` poin
 install (`HAS_GAME`); it runs Cairn's version comparator against the real
 `Vintagestory.API.Config.GameVersion` over a corpus. A clean checkout skips it.
 
+### Auditing what ModDB actually serves
+
+```bash
+dotnet run tools/moddb-audit.cs -- fetch     # ~8000 mods, 1 req/s, resumable
+dotnet run tools/moddb-audit.cs -- check     # Cairn's own parser over the corpus
+```
+
+A file-based app (`#:project`), so it compiles against the real DTOs without being a fourth
+project. `check` drives `ModDbClient` through a handler serving the cached bytes rather than
+restating the parse — a script with its own copy of the rules only proves the copy agrees
+with itself. It reports entries that fail outright, releases that parse but cannot be
+installed, and a census of which JSON kinds each field was actually seen holding, which is
+what catches the next `"fileid": null` before a user does.
+
+`fetch` is deliberately serial at one request per second and stops after ten consecutive
+failures: ModDB publishes no rate limit and sends no headers about one, so the only safe
+reading is that someone is paying for the bandwidth. Re-running costs nothing for what is
+already cached.
+
 ## Architecture
 
 Three projects, one engine:
