@@ -221,12 +221,17 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>
     /// How often somebody looks at the clock — not how often the server is asked, which
-    /// <see cref="UpdateChecker.Interval"/> owns and is a day.
+    /// <see cref="UpdateChecker.CheckInterval"/> owns, nor how often one release is raised,
+    /// which <see cref="UpdateChecker.NotifyInterval"/> owns.
     ///
     /// Checking only at startup meant a launcher left open all week never heard about the
     /// release that happened on Tuesday, and this one is left open: it is the thing you
-    /// press Play from. An hourly tick that almost always reads one small file and returns
-    /// is the cheapest way to make the daily interval mean what it says.
+    /// press Play from. A tick that almost always reads one small file and returns is the
+    /// cheapest way to make those intervals mean what they say.
+    ///
+    /// Half the check interval, so a check lands within about an hour of falling due
+    /// rather than up to a whole one late. Anything shorter buys nothing: the checker
+    /// itself is what decides whether the tick becomes a request.
     /// </summary>
     public static readonly TimeSpan UpdatePollInterval = TimeSpan.FromHours(1);
 

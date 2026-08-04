@@ -2933,13 +2933,18 @@ public class MainWindowTests : IDisposable
     [AvaloniaFact]
     public void The_update_timer_looks_more_often_than_it_asks()
     {
-        // The poll is how often the clock is read; UpdateChecker.Interval is how often the
-        // server is asked. A poll longer than the interval would silently stretch it.
-        Assert.True(MainViewModel.UpdatePollInterval < UpdateChecker.Interval,
+        // The poll is how often the clock is read; CheckInterval is how often the server is
+        // asked. A poll longer than the interval would silently stretch it.
+        Assert.True(MainViewModel.UpdatePollInterval < UpdateChecker.CheckInterval,
             "polling less often than the check interval would make the interval a lie");
 
         Assert.True(MainViewModel.UpdatePollInterval >= TimeSpan.FromMinutes(15),
             "polling this often is a file read nobody asked for");
+
+        // Raising the same release is rationed far more slowly than asking the server, so
+        // a check that finds nothing new is cheap and one that does is still not a nag.
+        Assert.True(UpdateChecker.NotifyInterval > UpdateChecker.CheckInterval,
+            "notifying more often than checking would offer the same release every check");
     }
 
     [AvaloniaFact]

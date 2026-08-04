@@ -113,21 +113,65 @@ public class UpdateCheckerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_declined_release_is_raised_again_the_next_day()
+    public async Task A_declined_release_is_not_raised_again_for_eight_hours()
     {
         var now = DateTimeOffset.UtcNow;
         var (first, _) = Make(Manifest("0.3.0"), now: now);
         Assert.NotNull(await first.CheckAsync());
 
-        // Nothing records which release was mentioned, so tomorrow it is mentioned again.
-        // The trade for keeping the whole of the state to one timestamp: somebody who does
-        // not want 0.3.0 is asked daily until they take it or it is superseded.
-        var (tomorrow, _) = Make(Manifest("0.3.0"), now: now.AddDays(1).AddMinutes(1));
-        Assert.NotNull(await tomorrow.CheckAsync());
+        // Walked two hours at a time, because that is how it actually runs: each check
+        // moves LastChecked, so the next one is due two hours after the last, not two
+        // hours after the offer. Asserting at 7h59m instead would have been asserting
+        // about a check that could not have happened.
+        for (var t = UpdateChecker.CheckInterval;
+             t < UpdateChecker.NotifyInterval;
+             t += UpdateChecker.CheckInterval)
+        {
+            var (soon, handler) = Make(Manifest("0.3.0"), now: now.Add(t));
 
-        // But not twice in the same day.
-        var (again, handler) = Make(Manifest("0.3.0"), now: now.AddDays(1).AddMinutes(2));
+            // The server is asked — that interval is up — and 0.3.0 is still not repeated.
+            Assert.Null(await soon.CheckAsync());
+            Assert.Equal(1, handler.Calls);
+        }
+
+        // And raised again once eight hours are up: an update somebody meant to take later
+        // should not be forgotten about entirely.
+        var (later, _) = Make(Manifest("0.3.0"), now: now.Add(UpdateChecker.NotifyInterval));
+        Assert.NotNull(await later.CheckAsync());
+    }
+
+    [Fact]
+    public async Task A_release_newer_than_the_declined_one_is_raised_at_the_very_next_check()
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var (first, _) = Make(Manifest("0.3.1"), now: now);
+        Assert.Equal("0.3.1", (await first.CheckAsync())!.Version);
+
+        // 0.3.2 ships half an hour later. The eight hours of quiet were bought for 0.3.1,
+        // not for silence in general — rationing by version rather than by check is the
+        // whole point, and holding this back would be sitting on the release that fixes
+        // whatever made them decline the last one.
+        var (next, _) = Make(Manifest("0.3.2"), now: now.Add(UpdateChecker.CheckInterval));
+        Assert.Equal("0.3.2", (await next.CheckAsync())!.Version);
+
+        // And 0.3.2 now gets the same eight hours of its own.
+        var (again, _) = Make(Manifest("0.3.2"),
+            now: now.Add(UpdateChecker.CheckInterval).Add(UpdateChecker.CheckInterval));
         Assert.Null(await again.CheckAsync());
+    }
+
+    [Fact]
+    public async Task The_server_is_not_asked_more_than_once_every_two_hours()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var (first, _) = Make(Manifest("0.3.0"), now: now);
+        Assert.NotNull(await first.CheckAsync());
+
+        // A tick an hour later reads the file and stops there — no request at all.
+        var (soon, handler) = Make(Manifest("0.3.0"), now: now.AddHours(1));
+        Assert.False(soon.IsDue());
+        Assert.Null(await soon.CheckAsync());
         Assert.Equal(0, handler.Calls);
     }
 
@@ -184,36 +228,72 @@ public class UpdateCheckerTests : IDisposable
         var (checker, _) = Make(Manifest("9.9.9"), now: now);
         Assert.False(checker.IsDue());
 
-        // And a day later it is.
-        var (tomorrow, _) = Make(Manifest("9.9.9"), now: now.AddDays(1).AddMinutes(1));
-        Assert.True(tomorrow.IsDue());
+        // And two hours on it is.
+        var (later, _) = Make(Manifest("9.9.9"),
+            now: now.Add(UpdateChecker.CheckInterval).AddMinutes(1));
+        Assert.True(later.IsDue());
     }
 
     [Fact]
-    public async Task The_file_is_one_epoch_timestamp_and_nothing_else()
+    public async Task The_file_records_the_check_and_what_was_offered()
     {
         var now = DateTimeOffset.UtcNow;
         var (checker, _) = Make(Manifest("0.3.0"), now: now);
         await checker.CheckAsync();
 
-        // Readable with cat, and by anything that can parse an integer.
-        Assert.Equal(now.ToUnixTimeSeconds().ToString(), File.ReadAllText(StatePath));
-        Assert.Equal(now.ToUnixTimeSeconds(), UpdateChecker.LastChecked(StatePath)!.Value.ToUnixTimeSeconds());
+        var state = UpdateChecker.Load(StatePath);
+
+        Assert.Equal(now.ToUnixTimeSeconds(), state.LastChecked!.Value.ToUnixTimeSeconds());
+        Assert.Equal("0.3.0", state.NotifiedVersion);
+        Assert.Equal(now.ToUnixTimeSeconds(), state.NotifiedAt!.Value.ToUnixTimeSeconds());
+    }
+
+    [Fact]
+    public async Task A_check_that_found_nothing_new_records_no_notification()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var (checker, _) = Make(Manifest("0.2.1"), now: now);
+        Assert.Null(await checker.CheckAsync());
+
+        // The check happened and is remembered; nothing was said, so nothing is rationed.
+        var state = UpdateChecker.Load(StatePath);
+        Assert.NotNull(state.LastChecked);
+        Assert.Null(state.NotifiedVersion);
+    }
+
+    [Fact]
+    public void The_bare_timestamp_this_file_used_to_be_is_still_read()
+    {
+        // An install upgrading from the one-number format should not spend a request
+        // re-learning what it already knew — and it has genuinely notified nothing.
+        var when = DateTimeOffset.UtcNow.AddMinutes(-5);
+        File.WriteAllText(StatePath, when.ToUnixTimeSeconds().ToString());
+
+        var state = UpdateChecker.Load(StatePath);
+
+        Assert.Equal(when.ToUnixTimeSeconds(), state.LastChecked!.Value.ToUnixTimeSeconds());
+        Assert.Null(state.NotifiedVersion);
+        Assert.Null(state.NotifiedAt);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("not a number")]
-    [InlineData("{\"lastChecked\": 123}")]
+    [InlineData("{\"lastChecked\": ")]
     [InlineData("99999999999999999999")]
-    public void An_unreadable_timestamp_reads_as_never_checked(string content)
+    public void An_unreadable_file_reads_as_never_checked_and_nothing_notified(string content)
     {
-        // Including the JSON this used to be, so an older install is not read as having
-        // checked at the epoch. Every one of these costs a single extra request.
+        // Both directions matter. Reading as never checked costs one extra request;
+        // reading as nothing notified shows an offer that might be a repeat. The opposite
+        // defaults would silently swallow the offer instead, which is the failure nobody
+        // would ever report.
         File.WriteAllText(StatePath, content);
 
-        Assert.Null(UpdateChecker.LastChecked(StatePath));
+        var state = UpdateChecker.Load(StatePath);
+
+        Assert.Null(state.LastChecked);
+        Assert.Null(state.NotifiedVersion);
     }
 
     [Fact]

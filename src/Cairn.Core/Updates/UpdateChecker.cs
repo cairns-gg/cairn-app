@@ -49,7 +49,21 @@ public sealed record UpdateAvailable(string Version, ReleaseFile? File)
 }
 
 /// <summary>
-/// Asks whether there is a newer Cairn, at most once a day.
+/// The state behind the update check: when the server was last asked, and which release
+/// this machine was last told about.
+/// </summary>
+/// <param name="NotifiedVersion">
+/// Null when nothing has been offered yet, or when the file could not be read — both of
+/// which mean the next newer release is worth mentioning.
+/// </param>
+public sealed record UpdateState(
+    DateTimeOffset? LastChecked,
+    string? NotifiedVersion,
+    DateTimeOffset? NotifiedAt);
+
+/// <summary>
+/// Asks whether there is a newer Cairn, at most every two hours, and mentions any one
+/// release at most every eight.
 ///
 /// Everything needed already existed and nothing read it: the release workflow publishes
 /// <c>releases/latest.json</c> and promotes it only when the macOS builds were notarised,
@@ -58,12 +72,20 @@ public sealed record UpdateAvailable(string Version, ReleaseFile? File)
 /// release, which matters more here than in most apps because the ModDB listing and any
 /// link a friend sent are equally frozen.
 ///
-/// The whole of the remembered state is one Unix timestamp in one file. There is no record
-/// of which release has already been mentioned, so an update that somebody declines is
-/// raised again the next day, and every day until they take it or it is superseded. That
-/// is a deliberate trade for having nothing to keep in step: the alternative remembers a
-/// version string as well, and a version string that goes stale or unparseable is a popup
-/// that either never appears again or appears forever.
+/// The state was one timestamp and is now three fields, which is worth explaining because
+/// reducing it to the one was itself deliberate: a remembered version string was rejected
+/// on the grounds that one going stale or unparseable is a popup that either never appears
+/// again or appears forever. What makes it safe now is that it is never read alone. The
+/// version only ever suppresses in company with <see cref="NotifyInterval"/>, so the worst
+/// a wrong or stale version can do is delay one dialog by eight hours — and an unreadable
+/// file reads as nothing notified, which shows the offer rather than swallowing it. Both
+/// failure directions are bounded, which is what the single timestamp was protecting.
+///
+/// The two intervals answer different questions. <see cref="CheckInterval"/> is how often
+/// the server is asked, and exists for the server's sake. <see cref="NotifyInterval"/> is
+/// how often a person is interrupted about the same release, and exists for theirs — so
+/// declining 0.3.1 buys eight hours of quiet about 0.3.1 specifically, while 0.3.2
+/// appearing half an hour later is still raised at the very next check.
 /// </summary>
 public sealed class UpdateChecker(
     HttpClient http,
@@ -74,8 +96,21 @@ public sealed class UpdateChecker(
 {
     public const string DefaultManifest = "https://download.cairns.gg/releases/latest.json";
 
-    /// <summary>Long enough that it is not a background task anyone would notice.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromDays(1);
+    /// <summary>
+    /// How often the server is asked. Short enough that a release is noticed the same
+    /// afternoon, and still twelve requests a day from a launcher left open all week.
+    /// </summary>
+    public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// How often the same release is raised with the same person. Long enough that
+    /// declining one is respected for the rest of a sitting, short enough that an update
+    /// somebody meant to take later is not forgotten about entirely.
+    ///
+    /// Per version, not per check: a release nobody has been shown is never held back by
+    /// this, however recently they were told about a different one.
+    /// </summary>
+    public static readonly TimeSpan NotifyInterval = TimeSpan.FromHours(8);
 
     private readonly string _manifest = manifestUrl ?? DefaultManifest;
     private readonly string _statePath = statePath ?? CairnPaths.LastUpdateCheckPath;
@@ -107,47 +142,90 @@ public sealed class UpdateChecker(
             _ => "linux-x64",
         };
 
+    /// <summary>The on-disk shape. Epoch seconds, so the file stays readable by eye.</summary>
+    private sealed record StoredState(
+        [property: JsonPropertyName("lastChecked")] long LastChecked,
+        [property: JsonPropertyName("notifiedVersion")] string? NotifiedVersion,
+        [property: JsonPropertyName("notifiedAt")] long NotifiedAt);
+
     /// <summary>
-    /// When the server was last asked, or null if it never has been.
+    /// What this machine remembers, or an empty state if it remembers nothing.
     ///
-    /// A bare Unix timestamp in seconds. Anything unreadable — a truncated write, a file
-    /// somebody edited, an empty one — reads as never, which costs one extra request and
-    /// is repaired by the next successful check.
+    /// Anything unreadable — a truncated write, a file somebody edited, an empty one —
+    /// reads as never checked and nothing notified. That direction is chosen deliberately:
+    /// it costs one extra request and at most one extra dialog, where the other direction
+    /// silently swallows the offer.
     /// </summary>
-    public static DateTimeOffset? LastChecked(string path)
+    public static UpdateState Load(string path)
     {
         try
         {
-            if (!File.Exists(path)) return null;
+            if (!File.Exists(path)) return Empty;
 
             var text = File.ReadAllText(path).Trim();
-            return long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var epoch)
-                ? DateTimeOffset.FromUnixTimeSeconds(epoch)
-                : null;
+            if (text.Length == 0) return Empty;
+
+            // The bare Unix timestamp this file used to be. Read rather than discarded so
+            // upgrading does not spend a request re-learning what it already knew — and
+            // an old file legitimately says nothing has been notified.
+            if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var bare))
+                return new UpdateState(FromEpoch(bare), null, null);
+
+            var stored = JsonSerializer.Deserialize<StoredState>(text);
+            if (stored is null) return Empty;
+
+            return new UpdateState(
+                FromEpoch(stored.LastChecked),
+                string.IsNullOrWhiteSpace(stored.NotifiedVersion) ? null : stored.NotifiedVersion,
+                FromEpoch(stored.NotifiedAt));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
-                                      or ArgumentOutOfRangeException)
+                                      or JsonException or ArgumentOutOfRangeException)
         {
-            return null;
+            return Empty;
+        }
+
+        static DateTimeOffset? FromEpoch(long epoch)
+        {
+            if (epoch <= 0) return null;
+
+            try
+            {
+                return DateTimeOffset.FromUnixTimeSeconds(epoch);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return null;    // a number too large to be a date is not a date
+            }
         }
     }
 
-    private void RecordCheck(string path, DateTimeOffset when)
+    private static UpdateState Empty => new(null, null, null);
+
+    /// <summary>When the server was last asked, or null if it never has been.</summary>
+    public static DateTimeOffset? LastChecked(string path) => Load(path).LastChecked;
+
+    private static void Save(string path, UpdateState state)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            // Staged and moved, as the caches and settings are. It is one number, but it is
-            // written from a background timer and a half-written one reads as garbage —
-            // which is survivable here, and still worth not doing.
+            var stored = new StoredState(
+                state.LastChecked?.ToUnixTimeSeconds() ?? 0,
+                state.NotifiedVersion,
+                state.NotifiedAt?.ToUnixTimeSeconds() ?? 0);
+
+            // Staged and moved, as the caches and settings are: this is written from a
+            // background timer, and a half-written file reads as garbage — which is
+            // survivable here, and still worth not doing.
             var staging = path + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, when.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+            File.WriteAllText(staging, JsonSerializer.Serialize(stored));
             File.Move(staging, path, overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // Losing this costs one extra request.
+            // Losing this costs one extra request, and one extra offer of the same release.
         }
     }
 
@@ -161,7 +239,22 @@ public sealed class UpdateChecker(
         // their working copy is out of date is noise. See CairnVersion.
         if (_current == "dev") return false;
 
-        return LastChecked(_statePath) is not { } last || _now() - last >= Interval;
+        return LastChecked(_statePath) is not { } last || _now() - last >= CheckInterval;
+    }
+
+    /// <summary>
+    /// Whether this release is worth putting in front of somebody now.
+    ///
+    /// A version they have not been shown always is, however recently they were told about
+    /// a different one — which is the whole point: declining 0.3.1 must not hide 0.3.2
+    /// released half an hour later. Only being told the same thing again is rationed.
+    /// </summary>
+    private static bool ShouldNotify(UpdateState state, string version, DateTimeOffset now)
+    {
+        if (!string.Equals(state.NotifiedVersion, version, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return state.NotifiedAt is not { } last || now - last >= NotifyInterval;
     }
 
     /// <summary>
@@ -189,11 +282,22 @@ public sealed class UpdateChecker(
 
         if (latest is null || string.IsNullOrWhiteSpace(latest.Version)) return null;
 
-        // Recorded whatever the answer turns out to be: the interval exists to stop asking
-        // the server, and it did get asked.
-        RecordCheck(_statePath, _now());
+        var now = _now();
+        var state = Load(_statePath);
 
-        if (!GameVersions.IsNewerVersionThan(latest.Version, _current)) return null;
+        var notify = GameVersions.IsNewerVersionThan(latest.Version, _current)
+                     && ShouldNotify(state, latest.Version, now);
+
+        // One write, whatever was decided. The check is recorded either way — the interval
+        // exists to stop asking the server, and it did get asked — and the notification is
+        // recorded here rather than after the dialog closes, so a timer firing on top of an
+        // open prompt finds nothing left to say.
+        Save(_statePath, new UpdateState(
+            LastChecked: now,
+            NotifiedVersion: notify ? latest.Version : state.NotifiedVersion,
+            NotifiedAt: notify ? now : state.NotifiedAt));
+
+        if (!notify) return null;
 
         var file = latest.Files?.FirstOrDefault(
             f => string.Equals(f.Platform, ThisPlatform, StringComparison.OrdinalIgnoreCase));
