@@ -88,7 +88,16 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
             var carriesUpdates = movable.Contains(pending.ModId);
 
-            foreach (var dep in ModDependencies.Read(installed))
+            var declared = ModDependencies.Read(installed);
+
+            // Warned, not Failed: the mod itself installed and the pack is usable. What is
+            // not usable is the silence — without this, a dependency Cairn could not see is
+            // indistinguishable from a mod that has none, right up until the game disables
+            // it on startup for something the user was never told about.
+            if (declared.Problem is not null)
+                Record(new SyncStep(SyncAction.Warned, pending.ModId, declared.Problem));
+
+            foreach (var dep in declared.Dependencies)
             {
                 if (!requiredBy.TryGetValue(dep, out var wanters))
                     requiredBy[dep] = wanters = [];

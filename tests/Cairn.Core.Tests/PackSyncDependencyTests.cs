@@ -34,7 +34,14 @@ public class PackSyncDependencyTests : IDisposable
     /// Serves a small world of mods. Each download is a real zip carrying a real
     /// modinfo.json, because reading that file is the thing under test.
     /// </summary>
-    private sealed class Stub(Dictionary<string, string[]> world, string newest = "1.0.0")
+    /// <param name="unreadable">
+    /// Mods served as a real zip carrying a modinfo.json that will not parse — the case
+    /// that matters, because the game's own parser is more forgiving than ours and such a
+    /// mod loads in-game while its dependencies are invisible here.
+    /// </param>
+    /// <param name="notZip">Mods served as bytes that are not an archive at all.</param>
+    private sealed class Stub(Dictionary<string, string[]> world, string newest = "1.0.0",
+        HashSet<string>? unreadable = null, HashSet<string>? notZip = null)
         : HttpMessageHandler
     {
         public List<string> Looked { get; } = [];
@@ -77,15 +84,24 @@ public class PackSyncDependencyTests : IDisposable
             var modId = file[..file.IndexOf('_')];
             var version = file[(file.IndexOf('_') + 1)..^".zip".Length];
 
+            byte[] bytes;
+
+            if (notZip?.Contains(modId) == true)
+                bytes = Encoding.UTF8.GetBytes("<html>not an archive</html>");
+            else if (unreadable?.Contains(modId) == true)
+                bytes = Zip(modId, version, [], modInfo: "{ 'modid': not json at all, }");
+            else
+                bytes = Zip(modId, version, world.GetValueOrDefault(modId, []));
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new ByteArrayContent(
-                    Zip(modId, version, world.GetValueOrDefault(modId, []))),
+                Content = new ByteArrayContent(bytes),
             });
         }
 
         /// <summary>A mod zip: nothing but the modinfo.json the game reads.</summary>
-        private static byte[] Zip(string modId, string version, string[] dependencies)
+        private static byte[] Zip(string modId, string version, string[] dependencies,
+            string? modInfo = null)
         {
             var deps = string.Join(", ", dependencies.Select(d => $"\"{d}\": \"1.0.0\""));
 
@@ -94,7 +110,7 @@ public class PackSyncDependencyTests : IDisposable
             {
                 var entry = zip.CreateEntry("modinfo.json");
                 using var writer = new StreamWriter(entry.Open());
-                writer.Write($$"""
+                writer.Write(modInfo ?? $$"""
                 {"type":"content","modid":"{{modId}}","name":"{{modId}}","version":"{{version}}",
                  "dependencies":{ {{deps}} } }
                 """);
@@ -105,9 +121,10 @@ public class PackSyncDependencyTests : IDisposable
     }
 
     private (PackSyncer Syncer, Stub Handler) Make(
-        Dictionary<string, string[]> world, string newest = "1.0.0")
+        Dictionary<string, string[]> world, string newest = "1.0.0",
+        HashSet<string>? unreadable = null, HashSet<string>? notZip = null)
     {
-        var handler = new Stub(world, newest);
+        var handler = new Stub(world, newest, unreadable, notZip);
         var http = new HttpClient(handler);
         return (new PackSyncer(new ModDbClient(http), http), handler);
     }
@@ -286,6 +303,56 @@ public class PackSyncDependencyTests : IDisposable
             allowUpdates: new HashSet<string> { "expandedfoods" });
 
         Assert.All(report.Lock.Mods, m => Assert.Equal("1.1.0", m.Version));
+    }
+
+    /// <summary>
+    /// The silence that used to be here was the bug. Reading modinfo.json exists to stop
+    /// the game disabling a mod for a dependency nobody was told about — so a modinfo.json
+    /// this cannot read has to say so, or it reproduces exactly that failure while looking
+    /// like a clean sync.
+    /// </summary>
+    [Fact]
+    public async Task A_modinfo_that_will_not_parse_is_warned_about_rather_than_swallowed()
+    {
+        var (syncer, _) = Make(
+            new() { ["carryon"] = ["carryonlib"], ["carryonlib"] = [] },
+            unreadable: ["carryon"]);
+
+        var report = await syncer.SyncAsync(Pack("carryon"), ModsDir, LockPath);
+
+        var warning = report.Warnings.Single();
+        Assert.Equal("carryon", warning.ModId);
+        Assert.Contains("modinfo.json could not be read", warning.Detail);
+
+        // Isolation is the other half. The mod installed, the lock is written, and the run
+        // did not fail — one mod with an odd file must not cost the user their pack.
+        Assert.False(report.Failed);
+        Assert.Equal(["carryon"], report.Lock.Mods.Select(m => m.ModId).ToArray());
+    }
+
+    [Fact]
+    public async Task A_download_that_is_not_an_archive_is_warned_about_too()
+    {
+        var (syncer, _) = Make(new() { ["carryon"] = [] }, notZip: ["carryon"]);
+
+        var report = await syncer.SyncAsync(Pack("carryon"), ModsDir, LockPath);
+
+        Assert.Contains("zip could not be opened", report.Warnings.Single().Detail);
+        Assert.False(report.Failed);
+    }
+
+    [Fact]
+    public async Task A_mod_that_declares_no_dependencies_is_not_warned_about()
+    {
+        // The whole point of separating "read nothing" from "there is nothing": a warning
+        // on every ordinary mod would be noise nobody reads, which is how a real one gets
+        // missed.
+        var (syncer, _) = Make(new() { ["betterruins"] = [] });
+
+        var report = await syncer.SyncAsync(Pack("betterruins"), ModsDir, LockPath);
+
+        Assert.Empty(report.Warnings);
+        Assert.False(report.Failed);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using Cairn.Core.ModDb;
@@ -69,11 +70,29 @@ public class PackSyncPinningTests : IDisposable
             }
 
             Downloads++;
+
+            // A real archive, because sync reads modinfo.json out of every mod it installs
+            // and now says so when it cannot. Placeholder bytes made every download warn
+            // that its zip would not open — true, and nothing to do with pinning.
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 // Content differs per version, so the recorded checksums differ too.
-                Content = new ByteArrayContent(Encoding.UTF8.GetBytes($"zip for {url}")),
+                Content = new ByteArrayContent(Zip($"zip for {url}")),
             });
+        }
+
+        /// <summary>A minimal but genuine mod zip, its comment carrying the unique bytes.</summary>
+        private static byte[] Zip(string marker)
+        {
+            using var buffer = new MemoryStream();
+            using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry = zip.CreateEntry("modinfo.json");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write($$"""{"type":"content","modid":"olla","name":"{{marker}}"}""");
+            }
+
+            return buffer.ToArray();
         }
     }
 
