@@ -773,6 +773,10 @@ public class MainWindowTests : IDisposable
                      // Pane-level actions, plus the per-row ones the Mods list realises.
                      "Play", "New pack", "Search", "Save", "Delete pack", "Clear",
                      "View", "✕",
+
+                     // Reached only when something has already gone wrong, which is when
+                     // nobody is in a position to discover the button is missing.
+                     "Copy diagnostics", "Report an issue",
                  })
         {
             Assert.True(found.ContainsKey(label), $"no '{label}' button in the window");
