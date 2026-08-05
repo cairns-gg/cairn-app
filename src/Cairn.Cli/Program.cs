@@ -41,6 +41,7 @@ internal static class Program
                 "import" => await Import(store, http, args),
                 "games" => await Games(games, http, args),
                 "runtimes" => await Runtimes(runtimes, http, args),
+                "pull" => await Pull(store, http, args),
                 "sync" => await Sync(store, moddb, http, args),
                 "update" => await Update(store, moddb, http, args),
                 "launch" => await LaunchPack(store, games, runtimes, moddb, http, args),
@@ -81,6 +82,7 @@ internal static class Program
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
               cairn-cli search <text> [--game <version>]  search ModDB
+              cairn-cli pull <id> [--check] [--theirs] take an author's newer revision
               cairn-cli sync <id>                     install what the lockfile says
               cairn-cli update <id> [modid...]     move followed mods to their newest
               cairn-cli update <id> --check        report updates without installing
@@ -540,6 +542,72 @@ internal static class Program
 
         File.WriteAllText(output, json);
         Console.WriteLine($"wrote {output}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Takes an author's newer revision of a followed pack.
+    ///
+    /// Distinct from <c>update</c>, which moves mods to their newest ModDB release. This
+    /// moves the pack to what its author published, and the two pull in different
+    /// directions: one diverges from the author, the other converges on them.
+    /// </summary>
+    private static async Task<int> Pull(PackStore store, HttpClient http, string[] args)
+    {
+        if (args.Length < 2) return Fail("usage: cairn-cli pull <id> [--check] [--theirs]");
+
+        var id = args[1];
+        if (!store.Exists(id)) return Fail($"no pack '{id}'");
+
+        var link = store.LoadLink(id);
+
+        if (!PackUpdateCheck.CanCheck(link))
+            return Fail($"'{id}' does not follow anybody — nothing to pull");
+
+        var available = await PackUpdateCheck.CheckAsync(link, http);
+
+        if (available is null)
+        {
+            Console.WriteLine($"'{id}' is at revision {link!.Revision}; nothing newer");
+            return 0;
+        }
+
+        var mine = store.Load(id);
+        var plan = PackUpdatePlan.Between(
+            mine, available.Bundle.Pack!, store.LoadUpstream(id),
+            available.From, available.To);
+
+        Console.WriteLine(plan.Summary());
+
+        if (!plan.HasBase)
+            Console.WriteLine("  ! no record of the revision you started from, so a mod you "
+                              + "removed reads as one the author added");
+
+        if (plan.GameVersionChanges)
+            Console.WriteLine($"  game {plan.PreviousGameVersion} -> {plan.GameVersion}");
+
+        foreach (var change in plan.TheirChanges)
+            Console.WriteLine($"  {change.ModId,-24} {change.Describe()}");
+
+        // The launcher asks; a CLI cannot, so it says what it is about to decide and
+        // offers the one flag that changes it. Defaults keep what is yours.
+        foreach (var choice in plan.Choices)
+        {
+            if (args.Contains("--theirs")) choice.Take = true;
+
+            Console.WriteLine($"  ? {choice.ModId,-22} {choice.Describe()}"
+                              + $" — keeping {(choice.Take ? "theirs" : "yours")}");
+        }
+
+        if (plan.Choices.Any() && !args.Contains("--theirs"))
+            Console.WriteLine("  (--theirs takes the author's side for all of these)");
+
+        if (args.Contains("--check")) return 0;
+
+        var merged = store.ApplyUpdate(id, plan, available.Bundle);
+
+        Console.WriteLine($"pulled revision {available.To} into '{id}' "
+                          + $"({merged.Mods.Count} mods) — run sync to install");
         return 0;
     }
 

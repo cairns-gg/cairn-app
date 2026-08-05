@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Cairn.Core.Packs;
 
 /// <summary>
@@ -22,6 +24,115 @@ public sealed class PackStore
     public PackLink? LoadLink(string id) => PackLink.Load(LinkPath(id));
 
     public void SaveLink(string id, PackLink link) => link.Save(LinkPath(id));
+
+    /// <summary>
+    /// The author's manifest as it stood at the revision this copy follows — the base an
+    /// update is merged against, and never edited by the person holding it.
+    ///
+    /// Without it a follower's changes cannot be told from the author's. A mod present
+    /// upstream and absent locally means either "they just added it" or "I took it out",
+    /// and those want opposite outcomes: one is the whole point of updating, the other
+    /// would silently undo a deliberate removal every time an update landed.
+    ///
+    /// Its own file rather than a corner of cairns.json, which is small, hand-readable and
+    /// rewritten whole on every publish; a manifest living inside it would be noise there
+    /// and would be lost by anything that wrote the link without knowing to preserve it.
+    /// </summary>
+    public string UpstreamPath(string id) => Path.Combine(PackDir(id), "upstream.json");
+
+    /// <summary>
+    /// The merge base, or null when there is none — a pack imported before this was
+    /// recorded, or one that was never anybody else's.
+    /// </summary>
+    public PackManifest? LoadUpstream(string id)
+    {
+        try
+        {
+            return File.Exists(UpstreamPath(id)) ? PackManifest.Load(UpstreamPath(id)) : null;
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidDataException)
+        {
+            // An unreadable base is no base. The plan says so rather than guessing at
+            // which of the two meanings a difference has.
+            return null;
+        }
+    }
+
+    public void SaveUpstream(string id, PackManifest manifest) =>
+        manifest.Save(UpstreamPath(id));
+
+    /// <summary>
+    /// Takes the author's newer revision, with the plan's answers applied.
+    ///
+    /// Writes four things and they have to agree: the merged manifest, the author's
+    /// manifest as the base for next time, a lock that reproduces what it can, and the
+    /// revision now being followed. Getting the base wrong is the one that compounds —
+    /// every future merge is measured from it, so it must be the author's list and not
+    /// the merged one, or a mod you removed reads as yours to remove again next time.
+    /// </summary>
+    /// <param name="bundle">The revision being taken, as served at the pack's URL.</param>
+    public PackManifest ApplyUpdate(string id, PackUpdatePlan plan, PackBundle bundle)
+    {
+        var theirs = bundle.Pack
+                     ?? throw new InvalidDataException("The update has no pack.");
+
+        var merged = plan.Merge();
+        merged.Id = id;
+
+        Save(merged);
+        SaveUpstream(id, theirs);
+        MergeLock(id, merged, bundle.Lock);
+
+        if (LoadLink(id) is { } link)
+        {
+            link.Revision = bundle.Revision ?? link.Revision;
+            SaveLink(id, link);
+        }
+
+        return merged;
+    }
+
+    /// <summary>
+    /// The author's lock for their mods, and this copy's for the rest.
+    ///
+    /// Their lock is what makes the update reproduce their set rather than merely resemble
+    /// it. Anything it does not cover — a mod only this copy has — keeps whatever was
+    /// already recorded, so taking an update does not re-download the rest of the pack.
+    ///
+    /// Except across a game version change, where the old entries describe files chosen for
+    /// a version nobody is targeting any more. Those are dropped rather than carried, and
+    /// the next sync resolves them properly; keeping them would let a lock that matches on
+    /// game version install a mod built for the previous one.
+    /// </summary>
+    private void MergeLock(string id, PackManifest merged, PackLock? theirs)
+    {
+        var mine = LoadLock(id);
+
+        // Nothing to reproduce and nothing worth keeping: let sync build it from scratch.
+        if (theirs is null && mine is null) return;
+
+        var retargeted = mine is not null && !string.Equals(
+            mine.GameVersion, merged.GameVersion, StringComparison.OrdinalIgnoreCase);
+
+        var next = new PackLock { GameVersion = merged.GameVersion };
+
+        var wanted = merged.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in theirs?.Mods ?? [])
+            if (wanted.Contains(entry.ModId))
+                next.Mods.Add(entry);
+
+        if (!retargeted)
+        {
+            var covered = next.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in mine?.Mods ?? [])
+                if (wanted.Contains(entry.ModId) && !covered.Contains(entry.ModId))
+                    next.Mods.Add(entry);
+        }
+
+        next.Save(LockPath(id));
+    }
 
     /// <summary>
     /// Records that the site no longer serves this pack: the address stays, the publish
@@ -217,6 +328,11 @@ public sealed class PackStore
         // A bundle from a file gets no link: nobody's URL is behind it, so there is
         // nothing to follow and nothing to take over.
         if (bundle.IsPublished)
+        {
+            // The base for every future merge, recorded at the one moment it is certainly
+            // the author's own: right now, before anybody has edited a line of it.
+            SaveUpstream(manifest.Id, manifest);
+
             SaveLink(manifest.Id, new PackLink
             {
                 Role = PackRole.Follower,
@@ -224,6 +340,7 @@ public sealed class PackStore
                 Revision = bundle.Revision ?? 0,
                 Following = true,
             });
+        }
 
         return manifest;
     }
