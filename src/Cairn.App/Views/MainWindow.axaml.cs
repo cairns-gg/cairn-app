@@ -29,6 +29,7 @@ public partial class MainWindow : Window
         vm.OpenPreferences = ShowPreferencesAsync;
         vm.ConfirmVersionChange = ConfirmVersionChangeAsync;
         vm.ConfirmPublish = ConfirmPublishAsync;
+        vm.ConfirmPackUpdate = ConfirmPackUpdateAsync;
         vm.ConfirmImport = ConfirmImportAsync;
         vm.Confirm = ConfirmAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
@@ -47,6 +48,10 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmPublishAsync(ShareViewModel share) =>
         new ShareWindow { DataContext = share }.ShowDialog<bool>(this);
+
+    /// <summary>True only if the update was applied. Any other dismissal takes nothing.</summary>
+    private Task<bool> ConfirmPackUpdateAsync(PackUpdateViewModel update) =>
+        new PackUpdateWindow { DataContext = update }.ShowDialog<bool>(this);
 
     /// <summary>
     /// True only if Add was pressed. Dismissing the window any other way adds nothing.

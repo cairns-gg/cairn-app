@@ -232,6 +232,21 @@
 
                     <TextBlock Text="{Binding Detail.FollowingLine}" Opacity="0.7" FontSize="12"
                                IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}" />
+
+                    <!--
+                        With the pack's own heading rather than in the Settings tab: an
+                        author publishing again is news about this pack, and news nobody
+                        opens a tab to look for. The button says what it does and stops
+                        there — nothing is merged until the dialog has been read.
+                    -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0"
+                                IsVisible="{Binding Detail.HasPackUpdate, FallbackValue=False}">
+                        <TextBlock Text="{Binding Detail.PackUpdateLine}" FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource VsAccentBrush}" />
+                        <Button Content="Review update" Padding="12,3" FontSize="12"
+                                Command="{Binding Detail.ApplyPackUpdateCommand}" />
+                    </StackPanel>
                 </StackPanel>
 
                 <Border DockPanel.Dock="Top" Margin="0,12,0,0" Padding="10,8" CornerRadius="1"

@@ -500,6 +500,116 @@ public partial class PackDetailViewModel : ViewModelBase
     public string FollowingLine =>
         IsFollowing ? $"imported from {ShareUrlLine} — it stays theirs to publish" : "";
 
+    // ---- a newer revision from the author ----
+
+    /// <summary>
+    /// The author's newer revision, once a check has found one. Held rather than acted on:
+    /// an update to somebody else's pack lands on top of whatever this person has done to
+    /// their copy, so it waits until they ask for it.
+    /// </summary>
+    [ObservableProperty] public partial PackUpdateAvailable? PackUpdate { get; set; }
+
+    public bool HasPackUpdate => PackUpdate is not null;
+
+    public string PackUpdateLine => PackUpdate is null
+        ? ""
+        : $"Revision {PackUpdate.To} is available — you have {PackUpdate.From}.";
+
+    partial void OnPackUpdateChanged(PackUpdateAvailable? value)
+    {
+        OnPropertyChanged(nameof(HasPackUpdate));
+        OnPropertyChanged(nameof(PackUpdateLine));
+    }
+
+    /// <summary>Set by the view; see <see cref="ConfirmVersionChange"/>.</summary>
+    public Func<PackUpdateViewModel, Task<bool>>? ConfirmPackUpdate { get; set; }
+
+    /// <summary>
+    /// Asks the author's URL whether they have published since, without saying anything if
+    /// they have not.
+    ///
+    /// Quiet by design: this runs when a pack is opened, against a server that may be down,
+    /// for a pack the person may not have opened in order to update. A failure here is not
+    /// news, and the check costs one request against an address the pack already carries.
+    /// </summary>
+    public async Task CheckForPackUpdateAsync(CancellationToken ct = default)
+    {
+        if (!PackUpdateCheck.CanCheck(_store.LoadLink(Id))) return;
+
+        var found = await PackUpdateCheck
+            .CheckAsync(_store.LoadLink(Id), _http, ct).ConfigureAwait(true);
+
+        if (found is not null) PackUpdate = found;
+    }
+
+    /// <summary>
+    /// Shows what the author's revision would do, and applies it if that is wanted.
+    ///
+    /// The plan is rebuilt from a fresh fetch rather than the one the check happened to
+    /// find: a pack open on screen for an hour may be two revisions behind by now, and
+    /// merging against a stale document would apply changes nobody was shown.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotBusy))]
+    private async Task ApplyPackUpdate()
+    {
+        IsBusy = true;
+        Error = null;
+
+        try
+        {
+            var available = await PackUpdateCheck.CheckAsync(_store.LoadLink(Id), _http);
+
+            if (available is null)
+            {
+                PackUpdate = null;
+                _log("nothing newer from the author");
+                return;
+            }
+
+            var plan = PackUpdatePlan.Between(
+                Manifest, available.Bundle.Pack!, _store.LoadUpstream(Id),
+                available.From, available.To);
+
+            if (ConfirmPackUpdate is null) return;
+            if (!await ConfirmPackUpdate(new PackUpdateViewModel(plan, Title))) return;
+
+            var merged = _store.ApplyUpdate(Id, plan, available.Bundle);
+
+            // Copied into the instance the pane is bound to rather than swapped for the
+            // new one: every row, header and command already points at this object.
+            Manifest.Name = merged.Name;
+            Manifest.Description = merged.Description;
+            Manifest.GameVersion = merged.GameVersion;
+            Manifest.Connect = merged.Connect;
+            Manifest.Mods.Clear();
+            Manifest.Mods.AddRange(merged.Mods);
+
+            PackUpdate = null;
+            _releaseCache.Clear();      // the game version may have moved under every mod
+
+            _log($"updated to revision {available.To}");
+
+            ReloadMods();
+            ReloadShare();
+            RefreshGameState();
+            OnPropertyChanged(nameof(Title));
+            _onChanged();
+
+            // The manifest changed, so what is installed no longer matches it. Quiet,
+            // because taking the update worked and Play will report properly if this
+            // cannot.
+            await RunSyncAsync(quiet: true);
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     public bool IsWithdrawn => Share.Status == ShareStatus.Withdrawn;
 
     /// <summary>

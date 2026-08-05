@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.PackUpdateWindow"
+        x:DataType="vm:PackUpdateViewModel"
+        Title="Update this pack"
+        Width="640" Height="540"
+        MinWidth="460" MinHeight="340"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <!--
+        The same shape as the game-version dialog, because it is the same kind of decision:
+        a list too long for a tab, and two buttons that must stay in view under it. The
+        difference is that some rows here are questions, so they carry their own control
+        rather than only a verdict.
+    -->
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
+            <TextBlock Text="{Binding Summary}" FontSize="14" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="Nothing has changed yet." FontSize="11" Opacity="0.6" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
+            <!--
+                The blind case first: it changes how every other line should be read, so it
+                is worth nothing if somebody has already scrolled past it.
+            -->
+            <TextBlock Text="{Binding BlindNote}" IsVisible="{Binding IsBlind}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsErrorBrush}" />
+
+            <TextBlock Text="{Binding GameVersionNote}" IsVisible="{Binding GameVersionChanges}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsWarningBrush}" />
+
+            <TextBlock Text="{Binding ChoiceNote}" IsVisible="{Binding HasChoices}"
+                       FontSize="11" TextWrapping="Wrap" Opacity="0.75" />
+
+            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       Text="Mods you added yourself are left alone. Applying updates the pack; the next Play installs it." />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Name="ApplyButton" Content="{Binding ApplyLabel}"
+                        Classes="accent" Padding="16,5" Click="OnApply" />
+                <Button Name="CancelButton" Content="Cancel" Padding="16,5" Click="OnCancel" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border BorderBrush="{DynamicResource VsBorderBrush}" BorderThickness="1"
+                CornerRadius="1" Padding="2">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Changes}" Margin="8,6">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModChangeViewModel">
+                            <Grid ColumnDefinitions="86,150,*" Margin="0,3">
+                                <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                           FontSize="11" FontFamily="monospace"
+                                           Foreground="{DynamicResource VsWarningBrush}"
+                                           IsVisible="{Binding Warns}" />
+                                <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                           FontSize="11" FontFamily="monospace" Opacity="0.75"
+                                           IsVisible="{Binding !Warns}" />
+
+                                <TextBlock Grid.Column="1" Text="{Binding ModId}"
+                                           FontSize="12" Margin="0,0,10,0"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <StackPanel Grid.Column="2" Spacing="2">
+                                    <TextBlock Text="{Binding Note}" FontSize="11"
+                                               Opacity="0.65" TextWrapping="Wrap" />
+
+                                    <!--
+                                        Only on the rows that are questions. The label says
+                                        what ticking it does in that row's own terms, because
+                                        "take theirs" means nothing against a mod you removed.
+                                    -->
+                                    <CheckBox IsVisible="{Binding IsChoice}"
+                                              IsChecked="{Binding Take, Mode=TwoWay}"
+                                              Content="{Binding ChoiceLabel}"
+                                              FontSize="11" MinHeight="0" Padding="6,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </DockPanel>
+</Window>

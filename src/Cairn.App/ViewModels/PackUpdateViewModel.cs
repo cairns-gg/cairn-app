@@ -1,0 +1,124 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Cairn.Core.Packs;
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace Cairn.App.ViewModels;
+
+/// <summary>
+/// One mod's fate in an update, as a row.
+///
+/// Observable because two of the kinds are questions: the checkbox writes straight through
+/// to the plan, so what is on screen and what Apply would do cannot drift apart.
+/// </summary>
+public sealed partial class ModChangeViewModel(ModChange change) : ObservableObject
+{
+    public ModChange Change { get; } = change;
+
+    public string ModId => Change.ModId;
+    public string Note => Change.Describe();
+    public bool IsChoice => Change.IsChoice;
+
+    /// <summary>
+    /// A word for the outcome, so the list reads down its left edge rather than by parsing
+    /// every note — the same habit as the version-change dialog.
+    /// </summary>
+    public string Label => Change.Kind switch
+    {
+        ModChangeKind.Added => "adds",
+        ModChangeKind.Removed => "removes",
+        ModChangeKind.Repinned => "moves",
+        ModChangeKind.DroppedByYou => "you removed",
+        ModChangeKind.PinConflict => "you pinned",
+        ModChangeKind.Yours => "yours",
+        _ => "",
+    };
+
+    /// <summary>Only the questions are coloured; the rest is just what an update does.</summary>
+    public bool Warns => Change.Kind == ModChangeKind.DroppedByYou;
+
+    public bool Take
+    {
+        get => Change.Take;
+        set
+        {
+            if (Change.Take == value) return;
+
+            Change.Take = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ChoiceLabel));
+        }
+    }
+
+    /// <summary>
+    /// Says what the checkbox means in this row's own terms. "Take theirs" is meaningless
+    /// against a mod you removed, where the question is whether to put it back.
+    /// </summary>
+    public string ChoiceLabel => Change.Kind switch
+    {
+        ModChangeKind.DroppedByYou => Take ? "put it back" : "leave it out",
+        ModChangeKind.PinConflict => Take
+            ? $"use theirs ({Change.Theirs ?? "newest"})"
+            : $"keep yours ({Change.Mine ?? "newest"})",
+        _ => "",
+    };
+}
+
+/// <summary>
+/// A checked, uncommitted pack update.
+///
+/// Its existence is the confirmation state, exactly as VersionChangeViewModel's is: built
+/// by the check, thrown away by Apply or Cancel, so nothing lands that was not looked at.
+/// </summary>
+public sealed class PackUpdateViewModel(PackUpdatePlan plan, string packName)
+{
+    public PackUpdatePlan Plan { get; } = plan;
+
+    public string PackName { get; } = packName;
+
+    public IReadOnlyList<ModChangeViewModel> Changes { get; } =
+        // Questions first: the thing needing an answer should not need scrolling to. Then
+        // the author's changes, then what is merely yours.
+        [.. plan.Changes
+            .OrderBy(c => c.Kind switch
+            {
+                ModChangeKind.DroppedByYou => 0,
+                ModChangeKind.PinConflict => 1,
+                ModChangeKind.Added => 2,
+                ModChangeKind.Removed => 3,
+                ModChangeKind.Repinned => 4,
+                _ => 5,
+            })
+            .ThenBy(c => c.ModId, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new ModChangeViewModel(c))];
+
+    public string Summary => Plan.Summary();
+
+    public string ApplyLabel => $"Update to revision {Plan.ToRevision}";
+
+    public bool HasChanges => Changes.Count > 0;
+
+    public bool HasChoices => Plan.Choices.Any();
+
+    public string ChoiceNote =>
+        $"{Plan.Choices.Count()} thing{(Plan.Choices.Count() == 1 ? "" : "s")} you changed "
+        + "differ from the author's. Yours are kept unless you say otherwise.";
+
+    public bool GameVersionChanges => Plan.GameVersionChanges;
+
+    public string GameVersionNote =>
+        $"The author moved this pack from Vintage Story {Plan.PreviousGameVersion} to "
+        + $"{Plan.GameVersion}. Every mod in it is resolved again for the new version.";
+
+    /// <summary>
+    /// Said plainly, because the alternative reading — "it worked out what you changed" —
+    /// is the one somebody would act on.
+    /// </summary>
+    public bool IsBlind => !Plan.HasBase;
+
+    public string BlindNote =>
+        "This pack was imported before Cairn recorded what its author's copy looked like, "
+        + "so a mod you removed cannot be told from one the author has just added. Anything "
+        + "listed as added may be a mod you took out.";
+}

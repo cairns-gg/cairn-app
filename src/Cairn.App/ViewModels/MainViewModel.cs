@@ -470,9 +470,15 @@ public partial class MainViewModel : ViewModelBase
         // pane is rebuilt on every selection — capturing the value here would hand the
         // first pack a null and every later one the real thing.
         Detail.CopyToClipboard = text => CopyToClipboard?.Invoke(text) ?? Task.CompletedTask;
+        Detail.ConfirmPackUpdate = ConfirmPackUpdate;
 
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
+
+        // Asks the author whether they have published since, for a pack that follows one.
+        // Fire and forget behind the pane: it says nothing unless there is something, and
+        // an author's server being down is not news to anybody.
+        _ = Detail.CheckForPackUpdateAsync();
     }
 
     /// <summary>
@@ -738,6 +744,19 @@ public partial class MainViewModel : ViewModelBase
         {
             _confirmVersionChange = value;
             if (Detail is not null) Detail.ConfirmVersionChange = value;
+        }
+    }
+
+    private Func<PackUpdateViewModel, Task<bool>>? _confirmPackUpdate;
+
+    /// <summary>Set by the view; reaches the current pack too, for the reason above.</summary>
+    public Func<PackUpdateViewModel, Task<bool>>? ConfirmPackUpdate
+    {
+        get => _confirmPackUpdate;
+        set
+        {
+            _confirmPackUpdate = value;
+            if (Detail is not null) Detail.ConfirmPackUpdate = value;
         }
     }
 
