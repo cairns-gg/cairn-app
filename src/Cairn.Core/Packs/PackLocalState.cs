@@ -39,6 +39,21 @@ public sealed class PackLocalState
     /// </summary>
     [JsonPropertyName("lastUpdateCheck")] public long LastUpdateCheck { get; set; }
 
+    /// <summary>
+    /// Whether this copy of somebody else's pack may be edited here.
+    ///
+    /// A followed pack is somebody's curation, and adding to it, dropping from it or moving
+    /// its versions is a decision to stop running what they run. That is allowed and always
+    /// was — it is not a rule, and nothing in Core or the CLI consults this. It is a
+    /// statement of intent, so that diverging is something a person chose rather than
+    /// something they did by reaching for the nearest button.
+    ///
+    /// Sticky, because unlocking to add one mod and being re-locked on the next launch
+    /// would be a nuisance rather than a safeguard. The way back is a reset, which relocks
+    /// as a consequence of there being nothing left to guard.
+    /// </summary>
+    [JsonPropertyName("unlocked")] public bool Unlocked { get; set; }
+
     public DateTimeOffset? LastChecked => LastUpdateCheck > 0
         ? DateTimeOffset.FromUnixTimeSeconds(LastUpdateCheck)
         : null;

@@ -34,8 +34,10 @@ public partial class ModRowViewModel : ViewModelBase
         Action<ModRowViewModel>? remove = null,
         Action<ModRowViewModel>? openPage = null,
         Action<ModRowViewModel>? armed = null,
-        Action<ModRowViewModel>? update = null)
+        Action<ModRowViewModel>? update = null,
+        bool editable = true)
     {
+        Editable = editable;
         Mod = mod;
         Locked = locked;
         _loadReleases = loadReleases;
@@ -73,8 +75,33 @@ public partial class ModRowViewModel : ViewModelBase
     public string RequiredByNote =>
         IsDependency ? $"required by {string.Join(", ", Locked!.RequiredBy!)}" : "";
 
-    /// <summary>Rows the pack asked for, which are the only ones with actions.</summary>
+    /// <summary>
+    /// Whether this row's controls are offered at all.
+    ///
+    /// False on a locked copy of somebody else's pack: the pin, the remove and the update
+    /// are the three ways a row stops matching the author's. Pushed in rather than fixed at
+    /// construction, because rows are built before the pack's share state is known and a
+    /// value read once left every row of a followed pack believing it was editable.
+    /// </summary>
+    public bool Editable
+    {
+        get => _editable;
+        set
+        {
+            if (_editable == value) return;
+
+            _editable = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanChange));
+        }
+    }
+
+    private bool _editable = true;
+
     public bool IsDirect => !IsDependency;
+
+    /// <summary>The controls that alter the pack, as opposed to the ones that only look.</summary>
+    public bool CanChange => IsDirect && Editable;
 
     /// <summary>
     /// Set the moment a mod is added, cleared when sync reports on it. A pack edit is

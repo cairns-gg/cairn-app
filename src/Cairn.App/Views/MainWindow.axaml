@@ -239,23 +239,10 @@
                         opens a tab to look for. The button says what it does and stops
                         there — nothing is merged until the dialog has been read.
                     -->
-                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0"
-                                IsVisible="{Binding Detail.CanReviewUpstream, FallbackValue=False}">
-                        <TextBlock Text="{Binding Detail.PackUpdateLine}" FontSize="12"
-                                   VerticalAlignment="Center"
-                                   IsVisible="{Binding Detail.HasPackUpdate, FallbackValue=False}"
-                                   Foreground="{DynamicResource VsAccentBrush}" />
-
-                        <!--
-                            Always here for a followed pack, not only when a revision is
-                            waiting. Being on the author's latest is not the same as
-                            matching it, and gating this on an update left somebody who had
-                            edited their copy with no way back to it.
-                        -->
-                        <Button Content="{Binding Detail.ReviewUpstreamLabel}"
-                                Padding="12,3" FontSize="12"
-                                Command="{Binding Detail.ApplyPackUpdateCommand}" />
-                    </StackPanel>
+                    <!-- The button lives beside Play; this is only the news. -->
+                    <TextBlock Text="{Binding Detail.PackUpdateLine}" FontSize="12"
+                               IsVisible="{Binding Detail.HasPackUpdate, FallbackValue=False}"
+                               Foreground="{DynamicResource VsAccentBrush}" />
                 </StackPanel>
 
                 <Border DockPanel.Dock="Top" Margin="0,12,0,0" Padding="10,8" CornerRadius="1"
@@ -282,6 +269,19 @@
                                 Command="{Binding Detail.PublishPackCommand}"
                                 IsVisible="{Binding Detail.ShareOffered, FallbackValue=False}"
                                 Classes.accent="{Binding Detail.ShareIsUrgent, FallbackValue=False}" />
+
+                        <!--
+                            The same slot for a pack that is somebody else's. Share pushes
+                            your pack out; this pulls their pack in — one relationship with
+                            cairns.gg, read from whichever end you are standing at. It is
+                            also the only "check for updates" a follower sees, because the
+                            mod-version controls are the author's until they are unlocked.
+                        -->
+                        <Button Grid.Column="2" Padding="16,6" MinWidth="96"
+                                Content="{Binding Detail.ReviewUpstreamLabel}"
+                                Command="{Binding Detail.ApplyPackUpdateCommand}"
+                                IsVisible="{Binding Detail.CanReviewUpstream, FallbackValue=False}"
+                                Classes.accent="{Binding Detail.HasPackUpdate, FallbackValue=False}" />
                     </Grid>
 
                     <!-- Syncing and process start take seconds; say what is happening. -->
@@ -315,7 +315,47 @@
                                 search box above it and the list below by the width of the
                                 gaps reserved for buttons that were not there.
                             -->
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+                            <!--
+                                A locked copy of somebody else's pack shows the mods and
+                                nothing that changes them. Not a rule — Core allows the edit
+                                and the CLI still does it — only a statement about which of
+                                two things is the default when the pack is a curation.
+                            -->
+                            <Border DockPanel.Dock="Top" Classes="sunken" Padding="10,7"
+                                    Margin="0,0,0,8"
+                                    IsVisible="{Binding Detail.IsLocked, FallbackValue=False}">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0" Text="{Binding Detail.LockedNote}"
+                                               FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="Unlock" Padding="12,3"
+                                            FontSize="11"
+                                            Command="{Binding Detail.UnlockModsCommand}" />
+                                </Grid>
+                            </Border>
+
+                            <!--
+                                Once unlocked, the way back depends on whether there is
+                                anything to undo. Lock again is honest only while the copy
+                                still matches the author's; after that the way back is a
+                                reset, which says what it removes and what it costs a world.
+                            -->
+                            <Border DockPanel.Dock="Top" Classes="sunken" Padding="10,7"
+                                    Margin="0,0,0,8"
+                                    IsVisible="{Binding Detail.ShowUnlockedNote, FallbackValue=False}">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0" Text="{Binding Detail.UnlockedNote}"
+                                               FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="Lock again" Padding="12,3"
+                                            FontSize="11"
+                                            IsVisible="{Binding Detail.CanRelock}"
+                                            Command="{Binding Detail.LockModsCommand}" />
+                                </Grid>
+                            </Border>
+
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto"
+                                  IsVisible="{Binding Detail.CanEditMods}">
                                 <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
                                          PlaceholderText="Search ModDB to add a mod…"
                                          Margin="0,0,6,0" />
@@ -341,12 +381,15 @@
                                            Foreground="{DynamicResource VsParchmentBrush}" />
 
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                                    <!-- Nothing moves on its own, so checking is a thing you do. -->
-                                    <Button Content="Check for updates"
-                                            IsVisible="{Binding !Detail.ShowingSearch}"
+                                    <!-- Nothing moves on its own, so checking is a thing you do.
+                                         "mod" is in the label because a followed pack also has a
+                                         Check for updates beside Play, and that one is the whole
+                                         pack from its author — the two pull opposite ways. -->
+                                    <Button Content="Check for mod updates"
+                                            IsVisible="{Binding Detail.ShowModUpdateCheck}"
                                             Command="{Binding Detail.CheckUpdatesCommand}"
                                             Padding="10,3" FontSize="11" />
-                                    <Button Content="Update all" Classes="accent"
+                                    <Button Content="Update all mods" Classes="accent"
                                             IsVisible="{Binding Detail.AnyUpdates}"
                                             Command="{Binding Detail.UpdateAllCommand}"
                                             Padding="10,3" FontSize="11" />
@@ -428,7 +471,7 @@
                                                      no pin of its own: it is whatever the mod
                                                      that requires it needs. -->
                                                 <ComboBox Grid.Column="3" MinWidth="120"
-                                                          IsVisible="{Binding IsDirect}"
+                                                          IsVisible="{Binding CanChange}"
                                                           ItemsSource="{Binding ReleaseChoices}"
                                                           SelectedItem="{Binding SelectedRelease}"
                                                           DropDownOpened="OnVersionDropDownOpened"
@@ -441,7 +484,7 @@
                                                      needs it is still here would only be undone
                                                      by the next sync. -->
                                                 <Button Grid.Column="5" Content="✕" Padding="10,4"
-                                                        IsVisible="{Binding IsDirect}"
+                                                        IsVisible="{Binding CanChange}"
                                                         Command="{Binding RequestRemoveCommand}"
                                                         VerticalAlignment="Center" />
                                             </Grid>

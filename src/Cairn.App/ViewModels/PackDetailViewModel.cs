@@ -335,7 +335,11 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty] public partial bool ShowingSearch { get; set; }
 
-    partial void OnShowingSearchChanged(bool value) => OnPropertyChanged(nameof(ListHeading));
+    partial void OnShowingSearchChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ListHeading));
+        OnPropertyChanged(nameof(ShowModUpdateCheck));
+    }
 
     /// <summary>Says which of the two lists is on screen, and how big it is.</summary>
     public string ListHeading => ShowingSearch
@@ -524,13 +528,103 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public bool CanReviewUpstream => IsFollowing;
 
-    public string ReviewUpstreamLabel => HasPackUpdate ? "Review update" : "Compare with author";
+    /// <summary>
+    /// One label, always. It sits where Share sits for a pack you own — same slot, same
+    /// relationship with cairns.gg, opposite direction — and on a followed pack it is the
+    /// only "check for updates" on screen, because the mod-version controls are the
+    /// author's until somebody unlocks them. Two buttons a player had to tell apart was
+    /// the problem; naming them more carefully would only have made it survivable.
+    /// </summary>
+    public string ReviewUpstreamLabel => "Check for updates";
+
+    // ---- editing somebody else's pack ----
+
+    /// <summary>
+    /// Whether the mod list is somebody else's to change.
+    ///
+    /// A followed pack is a curation, and the controls that alter it — search, remove, the
+    /// version dropdown, mod updates — are hidden until asked for. Not a rule: Core does not
+    /// consult this and neither does the CLI, because editing your own copy has always been
+    /// allowed and still is. It is only about which of two things is the default.
+    /// </summary>
+    public bool IsLocked => IsFollowing && !_store.LoadLocalState(Id).Unlocked;
+
+    /// <summary>True when the mod list may be changed here — the inverse, for binding.</summary>
+    public bool CanEditMods => !IsLocked;
+
+    /// <summary>
+    /// Whether this copy still matches the author's, and so whether there is anything a
+    /// reset would take away.
+    ///
+    /// Read from the recorded base, so it costs nothing and stays true as the pack is
+    /// edited under it.
+    /// </summary>
+    public bool MatchesUpstream => _store.MatchesUpstream(Id);
+
+    /// <summary>
+    /// Offered only while there is provably nothing to undo. Once this copy has diverged,
+    /// the way back is a reset — which says what it removes and what that costs a world.
+    /// A relock that quietly left the changes in place would be a safeguard in name only.
+    /// </summary>
+    public bool CanRelock => IsFollowing && !IsLocked && MatchesUpstream;
+
+    /// <summary>
+    /// Shown only for a followed pack that has been unlocked. A pack of your own is not
+    /// unlocked, it is simply yours, and telling somebody their own changes are kept would
+    /// be noise on every pack they made.
+    /// </summary>
+    public bool ShowUnlockedNote => IsFollowing && !IsLocked;
+
+    /// <summary>Hidden while search results are showing, as it always was.</summary>
+    public bool ShowModUpdateCheck => CanEditMods && !ShowingSearch;
+
+    public string LockedNote =>
+        "These mods are the author's. Unlock to add, remove or change versions in your copy.";
+
+    public string UnlockedNote =>
+        "Your changes are kept when you take the author's updates, and you will be asked "
+        + "about them each time. Reset to their pack to undo them.";
+
+    [RelayCommand]
+    private void UnlockMods()
+    {
+        var state = _store.LoadLocalState(Id);
+        state.Unlocked = true;
+        _store.SaveLocalState(Id, state);
+
+        ReloadMods();
+        _log("mods unlocked — this copy can now differ from the author's");
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRelock))]
+    private void LockMods()
+    {
+        var state = _store.LoadLocalState(Id);
+        state.Unlocked = false;
+        _store.SaveLocalState(Id, state);
+
+        ReloadMods();
+    }
+
+    public void RefreshLock()
+    {
+        OnPropertyChanged(nameof(IsLocked));
+        OnPropertyChanged(nameof(CanEditMods));
+        OnPropertyChanged(nameof(ShowUnlockedNote));
+        OnPropertyChanged(nameof(ShowModUpdateCheck));
+
+        // Pushed rather than read, so a row built before the share state was known does
+        // not keep believing it is editable.
+        foreach (var row in Mods) row.Editable = CanEditMods;
+        OnPropertyChanged(nameof(MatchesUpstream));
+        OnPropertyChanged(nameof(CanRelock));
+        LockModsCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnPackUpdateChanged(PackUpdateAvailable? value)
     {
         OnPropertyChanged(nameof(HasPackUpdate));
         OnPropertyChanged(nameof(PackUpdateLine));
-        OnPropertyChanged(nameof(ReviewUpstreamLabel));
     }
 
     /// <summary>Set by the view; see <see cref="ConfirmVersionChange"/>.</summary>
@@ -629,6 +723,15 @@ public partial class PackDetailViewModel : ViewModelBase
             PackUpdate = null;
             _releaseCache.Clear();      // the game version may have moved under every mod
 
+            // A reset leaves this copy matching the author's, so the guard goes back up on
+            // its own: the thing it exists to protect is no longer at stake.
+            if (plan.Reset)
+            {
+                var state = _store.LoadLocalState(Id);
+                state.Unlocked = false;
+                _store.SaveLocalState(Id, state);
+            }
+
             _log(plan.Reset
                 ? $"reset to the author's revision {bundle.Revision ?? 0}"
                 : $"updated to revision {bundle.Revision ?? 0}");
@@ -636,6 +739,7 @@ public partial class PackDetailViewModel : ViewModelBase
             ReloadMods();
             ReloadShare();
             RefreshGameState();
+            RefreshLock();
             OnPropertyChanged(nameof(Title));
             _onChanged();
 
@@ -667,7 +771,15 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Whether the export controls are offered at all. See <see cref="Export"/>.</summary>
     public bool CanShareFile => !IsFollowing;
 
-    private void ReloadShare() => Share = _store.ShareStateFor(Id);
+    private void ReloadShare()
+    {
+        Share = _store.ShareStateFor(Id);
+
+        // Whether this pack is somebody else's is what decides the lock, and it is only
+        // known once the share state is. The rows are built before that, so refreshing
+        // here is what stops every row of a followed pack believing it is editable.
+        RefreshLock();
+    }
 
     public string ModsDirectory => _store.ModsDir(Id);
 
@@ -740,7 +852,10 @@ public partial class PackDetailViewModel : ViewModelBase
             remove: RemoveRow,
             openPage: OpenModPage,
             armed: DisarmOtherRows,
-            update: UpdateOne);
+            update: UpdateOne,
+            editable: CanEditMods);
+
+        RefreshLock();
 
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(ListHeading));

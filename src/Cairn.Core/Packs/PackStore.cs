@@ -72,6 +72,40 @@ public sealed class PackStore
         state.Save(LocalStatePath(id));
 
     /// <summary>
+    /// Whether this copy still names exactly what its author's did at the revision it
+    /// follows — same mods, same pins, same game version.
+    ///
+    /// Answered from the recorded base rather than by asking the server, so it costs
+    /// nothing and can be read on every render. It says whether there is anything of yours
+    /// to undo, which is a different question from whether the author has published since.
+    ///
+    /// A pack with no base cannot answer, and says no: claiming a match on no evidence
+    /// would offer to relock a copy that has quietly diverged.
+    /// </summary>
+    public bool MatchesUpstream(string id)
+    {
+        var upstream = LoadUpstream(id);
+        if (upstream is null) return false;
+
+        PackManifest mine;
+        try
+        {
+            mine = Load(id);
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidDataException)
+        {
+            return false;
+        }
+
+        if (!string.Equals(mine.GameVersion, upstream.GameVersion, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        static string Key(PackMod m) => $"{m.ModId.ToLowerInvariant()}={m.Version ?? ""}";
+
+        return mine.Mods.Select(Key).Order().SequenceEqual(upstream.Mods.Select(Key).Order());
+    }
+
+    /// <summary>
     /// Takes the author's newer revision, with the plan's answers applied.
     ///
     /// Writes four things and they have to agree: the merged manifest, the author's

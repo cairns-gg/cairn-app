@@ -1300,7 +1300,7 @@ public class MainWindowTests : IDisposable
     [AvaloniaFact]
     public void The_two_rows_of_the_mods_toolbar_share_a_right_edge()
     {
-        // A collapsed grid column still costs its ColumnSpacing, so "Check for updates"
+        // A collapsed grid column still costs its ColumnSpacing, so the mod-update button
         // sat inset from the Search button above it by the width of the gaps reserved for
         // two buttons that were not there.
         var (window, vm) = Show();
@@ -1315,7 +1315,7 @@ public class MainWindowTests : IDisposable
         var edge = RightEdge(list, window);
 
         Assert.Equal(edge, RightEdge(buttons["Search"], window), precision: 0);
-        Assert.Equal(edge, RightEdge(buttons["Check for updates"], window), precision: 0);
+        Assert.Equal(edge, RightEdge(buttons["Check for mod updates"], window), precision: 0);
     }
 
     [AvaloniaFact]
@@ -2666,17 +2666,16 @@ public class MainWindowTests : IDisposable
         // or not the author published, and gating this on an update left no route back.
         Assert.False(vm.Detail!.HasPackUpdate);
         Assert.True(vm.Detail.CanReviewUpstream);
-        Assert.True(Buttons(window)["Compare with author"].IsEffectivelyVisible);
+        Assert.True(Buttons(window)["Check for updates"].IsEffectivelyVisible);
 
         vm.Detail.PackUpdate = new PackUpdateAvailable(1, 4, new PackBundle());
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        // The button was always there; what arrives with a revision is the line and the
-        // stronger label.
+        // The button was always there and reads the same either way; what arrives with a
+        // revision is the line above it, and the accent.
         Assert.True(vm.Detail.HasPackUpdate);
-        Assert.Equal("Review update", vm.Detail.ReviewUpstreamLabel);
-        Assert.True(Buttons(window)["Review update"].IsEffectivelyVisible);
-        Assert.NotNull(Buttons(window)["Review update"].Command);
+        Assert.True(Buttons(window)["Check for updates"].IsEffectivelyVisible);
+        Assert.NotNull(Buttons(window)["Check for updates"].Command);
 
         // Says both numbers: "an update is available" is not worth reading twice, and
         // which revision you are on is what tells you whether you have missed several.
@@ -2698,15 +2697,17 @@ public class MainWindowTests : IDisposable
     {
         WritePack("mine", "Mine", "1.22.5", null, ["carryon"]);
 
-        var (_, vm) = Show();
+        var (window, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.False(vm.Detail!.IsFollowing);
         Assert.False(vm.Detail.CanReviewUpstream);
 
-        // And the label still reads sensibly rather than throwing or going blank, because
-        // the binding is evaluated whether or not the row is drawn.
-        Assert.Equal("Compare with author", vm.Detail.ReviewUpstreamLabel);
+        // The pack's own "check for updates" is the author's pack, and a pack you made has
+        // no author — so the button is not drawn, and the mods list keeps its own.
+        Assert.False(Buttons(window)["Check for updates"].IsEffectivelyVisible);
+        Assert.True(Buttons(window)["Check for mod updates"].IsEffectivelyVisible);
 
     }
 
