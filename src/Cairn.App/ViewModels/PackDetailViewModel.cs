@@ -536,6 +536,16 @@ public partial class PackDetailViewModel : ViewModelBase
     {
         if (!PackUpdateCheck.CanCheck(_store.LoadLink(Id))) return;
 
+        var state = _store.LoadLocalState(Id);
+        if (!PackUpdateCheck.IsDue(state)) return;
+
+        // Recorded before the answer arrives, not after: a server that is slow or down
+        // would otherwise leave the interval unstarted, and every reselect would try it
+        // again. Being asked once every two hours is the promise; being answered is not
+        // something this end controls.
+        state.RecordCheck(DateTimeOffset.UtcNow);
+        _store.SaveLocalState(Id, state);
+
         var found = await PackUpdateCheck
             .CheckAsync(_store.LoadLink(Id), _http, ct).ConfigureAwait(true);
 

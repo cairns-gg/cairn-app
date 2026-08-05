@@ -26,6 +26,22 @@ public static class PackUpdateCheck
     /// followed, with an address to ask. Cheap and offline, so a caller can skip the
     /// request entirely.
     /// </summary>
+    /// <summary>
+    /// How often one pack's author is asked. A published revision is not urgent — an
+    /// author ships one a week at most — and the cost of having no interval was paid by
+    /// somebody else's server: selecting a pack asked, so clicking between two followed
+    /// packs asked on every click, for ever.
+    /// </summary>
+    public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Whether this pack is worth asking about now. Cheap and offline, so the caller skips
+    /// the request rather than making one and discarding it.
+    /// </summary>
+    public static bool IsDue(PackLocalState? state, DateTimeOffset? now = null) =>
+        state?.LastChecked is not { } last
+        || (now ?? DateTimeOffset.UtcNow) - last >= CheckInterval;
+
     public static bool CanCheck(PackLink? link) =>
         link is { Role: PackRole.Follower, Following: true }
         && !string.IsNullOrWhiteSpace(link.Url)

@@ -3047,6 +3047,15 @@ public class MainWindowTests : IDisposable
         // a check that finds nothing new is cheap and one that does is still not a nag.
         Assert.True(UpdateChecker.NotifyInterval > UpdateChecker.CheckInterval,
             "notifying more often than checking would offer the same release every check");
+
+        // The pack check is the same arrangement against somebody else's server, where
+        // getting it wrong costs them rather than us: a tick no more frequent than the
+        // interval turns "every two hours" into "every two to four".
+        Assert.True(MainViewModel.PackUpdatePollInterval < PackUpdateCheck.CheckInterval,
+            "polling less often than the pack check interval would make the interval a lie");
+
+        Assert.True(MainViewModel.PackUpdatePollInterval >= TimeSpan.FromMinutes(15),
+            "polling this often is a file read nobody asked for");
     }
 
     [AvaloniaFact]

@@ -252,7 +252,30 @@ public partial class MainViewModel : ViewModelBase
             UpdatePollInterval, DispatcherPriority.Background, (_, _) => _ = CheckForUpdateAsync());
 
         _updateTimer.Start();
+
+        // The same shape for the pack an author may have republished. Selecting a pack is
+        // the natural trigger and covers most of it, but a launcher left open on one pack
+        // all afternoon would never look again — and that is exactly the launcher somebody
+        // is about to press Play on.
+        _packUpdateTimer = new DispatcherTimer(
+            PackUpdatePollInterval, DispatcherPriority.Background,
+            (_, _) => _ = Detail?.CheckForPackUpdateAsync() ?? Task.CompletedTask);
+
+        _packUpdateTimer.Start();
     }
+
+    private DispatcherTimer? _packUpdateTimer;
+
+    /// <summary>
+    /// How often the open pack is looked at — not how often its author is asked, which
+    /// <see cref="PackUpdateCheck.CheckInterval"/> owns and is two hours.
+    ///
+    /// Shorter than that interval on purpose, for the reason the app's own poll is: a tick
+    /// no more frequent than the interval turns "every two hours" into "every two to four",
+    /// because the two drift against each other. An hourly tick that almost always reads
+    /// one small file and returns is what makes the interval mean what it says.
+    /// </summary>
+    public static readonly TimeSpan PackUpdatePollInterval = TimeSpan.FromHours(1);
 
     /// <summary>
     /// Asks whether there is a newer Cairn, and offers it once if so.

@@ -29,6 +29,22 @@ public sealed class PackLocalState
     /// </summary>
     [JsonPropertyName("declinedMods")] public List<string> DeclinedMods { get; set; } = [];
 
+    /// <summary>
+    /// When this pack's author was last asked whether they had published. Unix seconds, so
+    /// the file stays readable by eye; 0 for never.
+    ///
+    /// Here rather than in memory because the thing worth preventing survives a restart:
+    /// clicking between two followed packs asked their servers again on every click, and a
+    /// launcher reopened five times in an afternoon asked five more times.
+    /// </summary>
+    [JsonPropertyName("lastUpdateCheck")] public long LastUpdateCheck { get; set; }
+
+    public DateTimeOffset? LastChecked => LastUpdateCheck > 0
+        ? DateTimeOffset.FromUnixTimeSeconds(LastUpdateCheck)
+        : null;
+
+    public void RecordCheck(DateTimeOffset when) => LastUpdateCheck = when.ToUnixTimeSeconds();
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
