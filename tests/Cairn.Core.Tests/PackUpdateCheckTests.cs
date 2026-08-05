@@ -49,6 +49,26 @@ public class PackUpdateCheckTests
         Assert.True(PackUpdateCheck.CanCheck(Following("http://127.0.0.1:8811/pack.json")));
     }
 
+    /// <summary>
+    /// A pack's canonical URL is where a person reads about it, and that address serves
+    /// HTML. Fetching it directly got a web page every time, failed to parse, and was
+    /// reported as the author being unreachable — for every pack, however healthy the
+    /// server. The bundle is the same address with .json on the end.
+    /// </summary>
+    [Theory]
+    [InlineData("https://cairns.gg/dizzyd/anego", "https://cairns.gg/dizzyd/anego.json")]
+    [InlineData("https://cairns.gg/dizzyd/anego/", "https://cairns.gg/dizzyd/anego.json")]
+    public void The_document_is_the_page_address_with_json_on_it(string url, string expected) =>
+        Assert.Equal(expected, PackUpdateCheck.DocumentUrl(url));
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8811/pack.json")]
+    [InlineData("https://example.com/packs/anego.JSON")]
+    public void A_url_that_is_already_a_document_is_left_alone(string url) =>
+        // A file on a static host or a dev server on loopback serves the document itself,
+        // and appending again would ask for pack.json.json.
+        Assert.Equal(url.TrimEnd('/'), PackUpdateCheck.DocumentUrl(url));
+
     [Fact]
     public void A_pack_never_asked_about_is_due_immediately()
     {

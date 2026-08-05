@@ -75,6 +75,27 @@ public static class PackUpdateCheck
     /// they are already on the latest revision, so a check would say no and leave them with
     /// no way to reconcile a pack that has visibly diverged.
     /// </summary>
+    /// <summary>
+    /// The document behind a pack's page.
+    ///
+    /// A pack's canonical URL is where a person reads about it, and that address serves
+    /// HTML. The bundle is the same address with <c>.json</c> on the end. Fetching the
+    /// canonical URL directly got a web page, failed to parse, and reported it as the
+    /// author being unreachable — which is what "could not reach the author's pack" meant
+    /// every single time, for every pack, including ones whose server was perfectly well.
+    ///
+    /// A URL that already ends in <c>.json</c> is left alone, so a document served
+    /// directly — a file on a static host, a dev server on loopback — still works.
+    /// </summary>
+    public static string DocumentUrl(string url)
+    {
+        var trimmed = url.TrimEnd('/');
+
+        return trimmed.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : trimmed + ".json";
+    }
+
     public static async Task<PackBundle?> FetchAsync(
         PackLink? link, HttpClient http, CancellationToken ct = default)
     {
@@ -83,7 +104,7 @@ public static class PackUpdateCheck
         PackBundle bundle;
         try
         {
-            var json = await http.GetStringAsync(link!.Url, ct).ConfigureAwait(false);
+            var json = await http.GetStringAsync(DocumentUrl(link!.Url), ct).ConfigureAwait(false);
             bundle = PackBundle.Parse(json);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException

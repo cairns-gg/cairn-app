@@ -565,18 +565,24 @@ internal static class Program
         if (!PackUpdateCheck.CanCheck(link))
             return Fail($"'{id}' does not follow anybody — nothing to pull");
 
-        var available = await PackUpdateCheck.CheckAsync(link, http);
+        // Fetched rather than checked, for the same reason the launcher does it: being on
+        // the author's latest revision is not the same as matching it, and --reset has to
+        // work for somebody who has edited a copy that is otherwise up to date.
+        var bundle = await PackUpdateCheck.FetchAsync(link, http);
 
-        if (available is null)
+        if (bundle is null)
         {
-            Console.WriteLine($"'{id}' is at revision {link!.Revision}; nothing newer");
-            return 0;
+            Console.WriteLine($"'{id}' could not be compared — {link!.Url} did not answer "
+                              + "with a pack");
+            return 1;
         }
 
+        var latest = bundle.Revision ?? 0;
         var mine = store.Load(id);
+
         var plan = PackUpdatePlan.Between(
-            mine, available.Bundle.Pack!, store.LoadUpstream(id),
-            available.From, available.To, store.LoadLocalState(id));
+            mine, bundle.Pack!, store.LoadUpstream(id),
+            link!.Revision, latest, store.LoadLocalState(id));
 
         // Reset discards this copy's changes rather than reconciling them, so it is set
         // before anything is printed: the list below has to describe what would happen.
@@ -619,12 +625,19 @@ internal static class Program
         if (plan.Choices.Any() && !args.Contains("--theirs"))
             Console.WriteLine("  (--theirs takes the author's side for all of these)");
 
+        // Nothing of theirs to take and nothing of yours that differs.
+        if (!plan.AnyChange && !plan.Changes.Any() && !plan.Reset)
+        {
+            Console.WriteLine($"'{id}' matches the author's revision {latest}");
+            return 0;
+        }
+
         if (args.Contains("--check")) return 0;
 
-        var merged = store.ApplyUpdate(id, plan, available.Bundle);
+        var merged = store.ApplyUpdate(id, plan, bundle);
 
-        Console.WriteLine($"pulled revision {available.To} into '{id}' "
-                          + $"({merged.Mods.Count} mods) — run sync to install");
+        Console.WriteLine($"{(plan.Reset ? "reset to" : "pulled")} revision {latest} "
+                          + $"into '{id}' ({merged.Mods.Count} mods) — run sync to install");
         return 0;
     }
 
