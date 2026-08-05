@@ -554,7 +554,8 @@ internal static class Program
     /// </summary>
     private static async Task<int> Pull(PackStore store, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli pull <id> [--check] [--theirs]");
+        if (args.Length < 2)
+            return Fail("usage: cairn-cli pull <id> [--check] [--theirs] [--reset]");
 
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
@@ -577,7 +578,22 @@ internal static class Program
             mine, available.Bundle.Pack!, store.LoadUpstream(id),
             available.From, available.To, store.LoadLocalState(id));
 
+        // Reset discards this copy's changes rather than reconciling them, so it is set
+        // before anything is printed: the list below has to describe what would happen.
+        plan.Reset = args.Contains("--reset");
+
         Console.WriteLine(plan.Summary());
+
+        if (plan.ResetRemovesAnything)
+        {
+            Console.WriteLine($"  ! reset removes {string.Join(", ", plan.RemovedByReset)} "
+                              + "from this pack");
+
+            // A world holds the blocks and items of the mods that built it, so this is a
+            // change to the save and not only to a list.
+            Console.WriteLine("  ! anything those mods placed in a world of this pack will "
+                              + "be gone from it — back it up first");
+        }
 
         if (!plan.HasBase)
             Console.WriteLine("  ! no record of the revision you started from, so a mod you "
@@ -593,6 +609,7 @@ internal static class Program
         // offers the one flag that changes it. Defaults keep what is yours.
         foreach (var choice in plan.Choices)
         {
+            if (plan.Reset) break;      // a reset does not consult them
             if (args.Contains("--theirs")) choice.Take = true;
 
             Console.WriteLine($"  ? {choice.ModId,-22} {choice.Describe()}"

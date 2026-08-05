@@ -30,9 +30,10 @@ public class PackUpdateWindowTests
 
     private static (string, string?) Mod(string id, string? pin = null) => (id, pin);
 
-    private static (PackUpdateWindow Window, PackUpdateViewModel Vm) Show(PackUpdatePlan plan)
+    private static (PackUpdateWindow Window, PackUpdateViewModel Vm) Show(
+        PackUpdatePlan plan, IReadOnlyList<string>? worlds = null)
     {
-        var vm = new PackUpdateViewModel(plan, "Anego Server");
+        var vm = new PackUpdateViewModel(plan, "Anego Server", worlds);
         var window = new PackUpdateWindow { DataContext = vm };
         window.Show();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -43,8 +44,14 @@ public class PackUpdateWindowTests
     private static Button Find(Visual root, string name) =>
         root.GetVisualDescendants().OfType<Button>().Single(b => b.Name == name);
 
+    /// <summary>
+    /// The controls on the mod rows, and only those. Scoped to the list because the window
+    /// also carries the reset checkbox, which is deliberately not a row — counting it as
+    /// one would make every assertion about "what this row offers" quietly wrong.
+    /// </summary>
     private static List<CheckBox> Boxes(Visual root) =>
-        [.. root.GetVisualDescendants().OfType<CheckBox>().Where(c => c.IsVisible)];
+        [.. root.GetVisualDescendants().OfType<ItemsControl>().Single()
+            .GetVisualDescendants().OfType<CheckBox>().Where(c => c.IsVisible)];
 
     private static List<string> Texts(Visual root) =>
         [.. root.GetVisualDescendants().OfType<TextBlock>()
@@ -181,6 +188,99 @@ public class PackUpdateWindowTests
 
         Assert.True(vm.Changes[0].IsChoice, "the question was not first");
         Assert.Equal("zzz-new", vm.Changes[1].ModId);
+    }
+
+    /// <summary>
+    /// A pack with a mod of your own in it, so a reset has something to take away.
+    /// </summary>
+    private static PackUpdatePlan WithMineToLose() => PackUpdatePlan.Between(
+        Pack("1.22.5", Mod("carryon"), Mod("myfavourite")),
+        Pack("1.22.5", Mod("carryon"), Mod("betterruins")),
+        Pack("1.22.5", Mod("carryon")),
+        toRevision: 2);
+
+    [AvaloniaFact]
+    public void Reset_is_off_until_it_is_asked_for_and_says_what_it_would_cost()
+    {
+        var (window, vm) = Show(WithMineToLose(), worlds: ["Anego", "Testing"]);
+
+        // Off, and silent: it is the one control here that removes mods nobody said to
+        // remove, so it must never be the thing somebody drifts into.
+        Assert.False(vm.Reset);
+        Assert.False(vm.ResetRemovesAnything);
+        Assert.DoesNotContain(Texts(window), t => t.Contains("removes"));
+
+        vm.Reset = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var warning = Texts(window).Single(t => t.StartsWith("This removes"));
+
+        // Names the mod, because "your changes" is not something anybody can weigh.
+        Assert.Contains("myfavourite", warning);
+
+        // And names the worlds, because a save holds the blocks and items of the mods that
+        // built it — this is the half nobody expects.
+        Assert.Contains("Anego", warning);
+        Assert.Contains("world", warning);
+        Assert.Contains("Back them up", warning);
+    }
+
+    [AvaloniaFact]
+    public void Resetting_a_pack_you_never_edited_warns_about_nothing()
+    {
+        // The reassuring case. Crying wolf here is how the real warning stops being read.
+        var plan = PackUpdatePlan.Between(
+            Pack("1.22.5", Mod("carryon")),
+            Pack("1.22.5", Mod("carryon"), Mod("betterruins")),
+            Pack("1.22.5", Mod("carryon")),
+            toRevision: 2);
+
+        var (window, vm) = Show(plan, worlds: ["Anego"]);
+        vm.Reset = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.ResetRemovesAnything);
+        Assert.DoesNotContain(Texts(window), t => t.StartsWith("This removes"));
+    }
+
+    [AvaloniaFact]
+    public void Resetting_withdraws_the_questions_it_will_not_consult()
+    {
+        var plan = PackUpdatePlan.Between(
+            Pack("1.22.5", Mod("carryon", "1.1.0")),
+            Pack("1.22.5", Mod("carryon", "2.0.0")),
+            Pack("1.22.5", Mod("carryon", "1.0.0")),
+            toRevision: 2);
+
+        var (window, vm) = Show(plan);
+
+        Assert.Single(Boxes(window), b => (b.Content as string)!.StartsWith("keep yours"));
+
+        vm.Reset = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // A reset does not answer the questions their way, it declines to ask them — so
+        // leaving the controls up would invite an answer that is about to be ignored.
+        Assert.DoesNotContain(Boxes(window), b => (b.Content as string)!.StartsWith("keep yours"));
+        Assert.False(vm.Changes.Single().ShowChoice);
+
+        // The row stays: it is still a difference, and the reset is about to resolve it.
+        Assert.Contains(Texts(window), t => t.Contains("carryon"));
+    }
+
+    [AvaloniaFact]
+    public void The_button_says_reset_rather_than_update_once_it_is_one()
+    {
+        var (window, vm) = Show(WithMineToLose());
+
+        Assert.Contains(Texts(window), t => t.Contains("Update to revision 2"));
+
+        vm.Reset = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Pressing a button labelled Update and losing your mods would be the surprise.
+        Assert.Contains(Texts(window), t => t.Contains("Reset to revision 2"));
+        Assert.DoesNotContain(Texts(window), t => t.Contains("Update to revision 2"));
     }
 
     [AvaloniaFact]

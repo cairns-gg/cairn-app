@@ -132,6 +132,43 @@ public sealed class PackUpdatePlan
 
     public IEnumerable<ModChange> Choices => Changes.Where(c => c.IsChoice);
 
+    /// <summary>
+    /// Take the author's pack exactly, discarding everything this copy did to it.
+    ///
+    /// Not a shortcut for answering every question their way: that keeps the mods you
+    /// added, because the author has no opinion about those. This drops them too, which is
+    /// the only way to get back to a copy that matches the one everyone else on the server
+    /// is running — the usual reason to want it, and the reason it cannot simply be the
+    /// default for anything.
+    ///
+    /// Deliberately a property on the plan rather than a separate action. What it would
+    /// remove is knowable only by working out the merge, and it must be shown before it is
+    /// agreed to, exactly like every other answer here.
+    /// </summary>
+    public bool Reset { get; set; }
+
+    /// <summary>
+    /// Mods a reset would take out of the pack: yours, and any the author has dropped.
+    ///
+    /// Worth its own list because it is the destructive half. Vintage Story worlds hold
+    /// blocks and items from the mods that made them, so removing one from a pack a world
+    /// was built in is not a change to a mod list — it is a change to the save.
+    /// </summary>
+    public IEnumerable<string> RemovedByReset
+    {
+        get
+        {
+            if (!Reset) return [];
+
+            var theirs = _theirs.Mods.Select(m => m.ModId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return _mine.Mods.Select(m => m.ModId).Where(id => !theirs.Contains(id));
+        }
+    }
+
+    public bool ResetRemovesAnything => RemovedByReset.Any();
+
     public IEnumerable<ModChange> TheirChanges =>
         Changes.Where(c => c.Kind is ModChangeKind.Added or ModChangeKind.Removed
                                or ModChangeKind.Repinned);
@@ -273,6 +310,17 @@ public sealed class PackUpdatePlan
             Connect = _theirs.Connect,
             Mods = [],
         };
+
+        // Their list, whole. Every answer on this plan is about reconciling two sets of
+        // changes, and a reset is the statement that there is only one set worth keeping —
+        // so the questions are not consulted rather than being answered their way.
+        if (Reset)
+        {
+            foreach (var mod in _theirs.Mods)
+                merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });
+
+            return merged;
+        }
 
         var decided = Changes.ToDictionary(c => c.ModId, StringComparer.OrdinalIgnoreCase);
 

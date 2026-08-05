@@ -21,6 +21,30 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
     public bool IsChoice => Change.IsChoice;
 
     /// <summary>
+    /// Set while the whole plan is being reset, which does not consult the answers. Leaving
+    /// the controls on screen would invite somebody to answer a question about to be
+    /// ignored — and the row itself still belongs in the list, because it is still a
+    /// difference the reset is about to resolve.
+    /// </summary>
+    public bool Suppressed
+    {
+        get => _suppressed;
+        set
+        {
+            if (_suppressed == value) return;
+
+            _suppressed = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowChoice));
+            OnPropertyChanged(nameof(CanSilence));
+        }
+    }
+
+    private bool _suppressed;
+
+    public bool ShowChoice => IsChoice && !Suppressed;
+
+    /// <summary>
     /// A word for the outcome, so the list reads down its left edge rather than by parsing
     /// every note — the same habit as the version-change dialog.
     /// </summary>
@@ -72,7 +96,7 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
     ///
     /// Hidden once "put it back" is ticked, because there is then nothing left to ask.
     /// </summary>
-    public bool CanSilence => Change.CanSilence && !Take;
+    public bool CanSilence => Change.CanSilence && !Take && !Suppressed;
 
     public bool Silence
     {
@@ -93,11 +117,87 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
 /// Its existence is the confirmation state, exactly as VersionChangeViewModel's is: built
 /// by the check, thrown away by Apply or Cancel, so nothing lands that was not looked at.
 /// </summary>
-public sealed class PackUpdateViewModel(PackUpdatePlan plan, string packName)
+public sealed partial class PackUpdateViewModel(
+    PackUpdatePlan plan, string packName, IReadOnlyList<string>? worlds = null)
+    : ObservableObject
 {
     public PackUpdatePlan Plan { get; } = plan;
 
     public string PackName { get; } = packName;
+
+    /// <summary>
+    /// Worlds under this pack's data path. Only read to say what a reset would be doing to
+    /// them — see <see cref="ResetWarning"/>.
+    /// </summary>
+    private readonly IReadOnlyList<string> _worlds = worlds ?? [];
+
+    /// <summary>
+    /// Take the author's pack exactly, discarding this copy's changes.
+    ///
+    /// Off, and deliberately not a shortcut anybody falls into: it is the one answer here
+    /// that removes mods nobody said to remove.
+    /// </summary>
+    public bool Reset
+    {
+        get => Plan.Reset;
+        set
+        {
+            if (Plan.Reset == value) return;
+
+            Plan.Reset = value;
+
+            // The rows carry the combined condition, because a control shows only when the
+            // row is a question and the plan is still asking.
+            foreach (var row in Changes) row.Suppressed = value;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowChoices));
+            OnPropertyChanged(nameof(ResetRemovesAnything));
+            OnPropertyChanged(nameof(ResetWarning));
+            OnPropertyChanged(nameof(ApplyLabel));
+        }
+    }
+
+    /// <summary>
+    /// The questions are not asked while resetting, because a reset does not consult them.
+    /// Leaving them on screen would invite somebody to answer a question that is about to
+    /// be ignored.
+    /// </summary>
+    public bool ShowChoices => !Reset;
+
+    public bool ResetRemovesAnything => Plan.ResetRemovesAnything;
+
+    /// <summary>
+    /// What a reset would take out, and what that costs.
+    ///
+    /// The mods are named because "your changes" is not something anybody can weigh. The
+    /// worlds are named because a Vintage Story save holds blocks and items from the mods
+    /// that built it — removing one from a pack a world was made in is a change to the
+    /// save, not to a list, and it is the half of this nobody expects.
+    /// </summary>
+    public string ResetWarning
+    {
+        get
+        {
+            var going = Plan.RemovedByReset.ToList();
+            if (going.Count == 0) return "";
+
+            var text = $"This removes {going.Count} mod{(going.Count == 1 ? "" : "s")} from the "
+                       + $"pack: {string.Join(", ", going.Take(6))}"
+                       + (going.Count > 6 ? ", …" : "") + ".";
+
+            if (_worlds.Count > 0)
+                text += $" This pack has {_worlds.Count} world"
+                        + $"{(_worlds.Count == 1 ? "" : "s")} "
+                        + $"({string.Join(", ", _worlds.Take(3))}"
+                        + (_worlds.Count > 3 ? ", …" : "")
+                        + "). A world keeps the blocks and items of the mods it was built "
+                        + "with, so anything placed by a mod being removed will be gone "
+                        + "from it. Back them up first.";
+
+            return text;
+        }
+    }
 
     public IReadOnlyList<ModChangeViewModel> Changes { get; } =
         // Questions first: the thing needing an answer should not need scrolling to. Then
@@ -117,7 +217,9 @@ public sealed class PackUpdateViewModel(PackUpdatePlan plan, string packName)
 
     public string Summary => Plan.Summary();
 
-    public string ApplyLabel => $"Update to revision {Plan.ToRevision}";
+    public string ApplyLabel => Reset
+        ? $"Reset to revision {Plan.ToRevision}"
+        : $"Update to revision {Plan.ToRevision}";
 
     public bool HasChanges => Changes.Count > 0;
 

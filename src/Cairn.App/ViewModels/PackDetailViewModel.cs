@@ -581,7 +581,8 @@ public partial class PackDetailViewModel : ViewModelBase
                 available.From, available.To, _store.LoadLocalState(Id));
 
             if (ConfirmPackUpdate is null) return;
-            if (!await ConfirmPackUpdate(new PackUpdateViewModel(plan, Title))) return;
+            if (!await ConfirmPackUpdate(
+                    new PackUpdateViewModel(plan, Title, _packData.Worlds(Id)))) return;
 
             var merged = _store.ApplyUpdate(Id, plan, available.Bundle);
 

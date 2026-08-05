@@ -219,6 +219,87 @@ public class PackUpdateTests
         Assert.Equal("2.0.0", plan.Merge().Mods.First().Version);
     }
 
+    /// <summary>
+    /// Reset is the one answer here that removes mods nobody asked to remove, which is why
+    /// it is a separate statement rather than a shortcut for answering everything their way.
+    /// </summary>
+    [Fact]
+    public void A_reset_takes_the_authors_pack_exactly()
+    {
+        var @base = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"));
+        var mine = Pack("1.22.5", Mod("carryon", "1.1.0"), Mod("myfavourite"));
+        var theirs = Pack("1.22.6", Mod("carryon", "2.0.0"), Mod("heavyweight"), Mod("newthing"));
+
+        var plan = PackUpdatePlan.Between(mine, theirs, @base);
+        plan.Reset = true;
+        var merged = plan.Merge();
+
+        // Their list, their pins, their game version, whole.
+        Assert.Equal(["carryon", "heavyweight", "newthing"],
+            merged.Mods.Select(m => m.ModId).Order().ToArray());
+        Assert.Equal("2.0.0", merged.Mods.Single(m => m.ModId == "carryon").Version);
+        Assert.Equal("1.22.6", merged.GameVersion);
+
+        // Yours is gone, which is the whole point and the whole danger.
+        Assert.DoesNotContain("myfavourite", merged.Mods.Select(m => m.ModId));
+    }
+
+    [Fact]
+    public void A_reset_names_what_it_would_remove()
+    {
+        var @base = Pack("1.22.5", Mod("carryon"));
+        var mine = Pack("1.22.5", Mod("carryon"), Mod("myfavourite"), Mod("another"));
+        var theirs = Pack("1.22.5", Mod("carryon"));
+
+        var plan = PackUpdatePlan.Between(mine, theirs, @base);
+
+        // Nothing to warn about until it is asked for.
+        Assert.False(plan.ResetRemovesAnything);
+        Assert.Empty(plan.RemovedByReset);
+
+        plan.Reset = true;
+
+        // Named, because "your changes" is not something anybody can weigh against a world.
+        Assert.Equal(["another", "myfavourite"], plan.RemovedByReset.Order().ToArray());
+        Assert.True(plan.ResetRemovesAnything);
+    }
+
+    [Fact]
+    public void A_reset_ignores_the_answers_rather_than_taking_them()
+    {
+        var @base = Pack("1.22.5", Mod("carryon", "1.0.0"), Mod("heavyweight"));
+        var mine = Pack("1.22.5", Mod("carryon", "1.1.0"));      // pinned, and removed one
+        var theirs = Pack("1.22.5", Mod("carryon", "2.0.0"), Mod("heavyweight"));
+
+        var plan = PackUpdatePlan.Between(mine, theirs, @base);
+
+        // Answers left at their defaults — keep my pin, leave the mod out — and then reset.
+        Assert.All(plan.Choices, c => Assert.False(c.Take));
+        plan.Reset = true;
+
+        var merged = plan.Merge();
+
+        // Reset is not "answer everything their way": it does not consult the answers at
+        // all, which is what makes it predictable when a dozen of them are outstanding.
+        Assert.Equal("2.0.0", merged.Mods.Single(m => m.ModId == "carryon").Version);
+        Assert.Contains("heavyweight", merged.Mods.Select(m => m.ModId));
+    }
+
+    [Fact]
+    public void A_reset_of_an_unedited_copy_removes_nothing()
+    {
+        // The reassuring case: somebody who changed nothing loses nothing by resetting, so
+        // the warning stays quiet rather than crying wolf.
+        var @base = Pack("1.22.5", Mod("carryon"));
+        var theirs = Pack("1.22.5", Mod("carryon"), Mod("newthing"));
+
+        var plan = PackUpdatePlan.Between(@base, theirs, @base);
+        plan.Reset = true;
+
+        Assert.False(plan.ResetRemovesAnything);
+        Assert.Equal(["carryon", "newthing"], plan.Merge().Mods.Select(m => m.ModId).Order().ToArray());
+    }
+
     [Fact]
     public void An_update_that_changes_nothing_says_nothing()
     {

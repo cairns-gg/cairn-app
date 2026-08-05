@@ -40,7 +40,20 @@
                        FontSize="11" TextWrapping="Wrap" Opacity="0.75" />
 
             <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       IsVisible="{Binding ShowChoices}"
                        Text="Mods you added yourself are left alone. Applying updates the pack; the next Play installs it." />
+
+            <!--
+                Last, and off by default. Everything above reconciles two sets of changes;
+                this is the one control that throws one of them away, so it sits apart from
+                the answers rather than among them.
+            -->
+            <CheckBox IsChecked="{Binding Reset, Mode=TwoWay}" FontSize="11" MinHeight="0"
+                      Content="Reset to the author's pack exactly, discarding my changes" />
+
+            <TextBlock Text="{Binding ResetWarning}" IsVisible="{Binding ResetRemovesAnything}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsErrorBrush}" />
 
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="ApplyButton" Content="{Binding ApplyLabel}"
@@ -78,7 +91,7 @@
                                         what ticking it does in that row's own terms, because
                                         "take theirs" means nothing against a mod you removed.
                                     -->
-                                    <CheckBox IsVisible="{Binding IsChoice}"
+                                    <CheckBox IsVisible="{Binding ShowChoice}"
                                               IsChecked="{Binding Take, Mode=TwoWay}"
                                               Content="{Binding ChoiceLabel}"
                                               FontSize="11" MinHeight="0" Padding="6,0,0,0" />

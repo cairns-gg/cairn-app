@@ -263,6 +263,53 @@ public class PackUpdateFuzzTests
     }
 
     [Fact]
+    public void A_reset_always_gives_exactly_the_authors_pack()
+    {
+        // The one operation with a simple, total definition, which makes it the one worth
+        // checking exhaustively: whatever the two sides did, resetting lands on theirs.
+        for (var seed = 0; seed < Runs; seed++)
+        {
+            var s = Generate(seed);
+            var plan = PackUpdatePlan.Between(s.Mine, s.Theirs, s.Base);
+            plan.Reset = true;
+            var merged = plan.Merge();
+
+            Assert.Equal(
+                s.Theirs.Mods.Select(m => $"{m.ModId}={m.Version}").Order().ToArray(),
+                merged.Mods.Select(m => $"{m.ModId}={m.Version}").Order().ToArray());
+
+            // And it says exactly which of yours went, since that is what the warning
+            // weighs against a world.
+            var expected = s.Mine.Mods.Select(m => m.ModId)
+                .Where(id => !Has(s.Theirs, id)).Order().ToArray();
+
+            Assert.Equal(expected, plan.RemovedByReset.Order().ToArray());
+        }
+    }
+
+    [Fact]
+    public void A_reset_never_depends_on_the_answers()
+    {
+        // Predictability under a dozen outstanding questions: the result must be the same
+        // whether they were all left alone or all flipped.
+        for (var seed = 0; seed < Runs; seed++)
+        {
+            var s = Generate(seed);
+
+            var untouched = PackUpdatePlan.Between(s.Mine, s.Theirs, s.Base);
+            untouched.Reset = true;
+
+            var flipped = PackUpdatePlan.Between(s.Mine, s.Theirs, s.Base);
+            flipped.Reset = true;
+            foreach (var choice in flipped.Choices) choice.Take = true;
+
+            Assert.Equal(
+                untouched.Merge().Mods.Select(m => $"{m.ModId}={m.Version}").Order().ToArray(),
+                flipped.Merge().Mods.Select(m => $"{m.ModId}={m.Version}").Order().ToArray());
+        }
+    }
+
+    [Fact]
     public void The_game_version_always_becomes_the_authors()
     {
         // It is their pack and their revision of it; a merge that kept yours would leave
