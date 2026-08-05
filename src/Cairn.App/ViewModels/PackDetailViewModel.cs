@@ -1309,6 +1309,16 @@ public partial class PackDetailViewModel : ViewModelBase
 
     private void AddHit(SearchHitViewModel hit)
     {
+        // A ModDB page that publishes no mod id is not something a pack can name. Optimum
+        // is one — a modified client rather than a mod — and adding it wrote an empty
+        // modid into the manifest, which used to stop the whole pack syncing.
+        if (string.IsNullOrWhiteSpace(hit.ModId))
+        {
+            _log($"'{hit.Name}' publishes no mod id, so it cannot be added to a pack — "
+                 + "it is a download listing or a modified client rather than a mod");
+            return;
+        }
+
         if (Manifest.Mods.Any(m => string.Equals(m.ModId, hit.ModId, StringComparison.OrdinalIgnoreCase)))
         {
             hit.AlreadyInPack = true;

@@ -45,7 +45,21 @@ public sealed class PackManifest
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public IEnumerable<string> Validate()
+    /// <summary>
+    /// Everything wrong with this manifest, pack and mods alike.
+    /// </summary>
+    public IEnumerable<string> Validate() => ValidatePack().Concat(ValidateMods());
+
+    /// <summary>
+    /// Problems with the pack itself, as opposed to any one mod in it.
+    ///
+    /// Split out because they are not the same kind of trouble. A missing id or an
+    /// unusable game version means nothing can be installed at all; one bad mod entry
+    /// means one mod cannot be. Treating the second as the first is how a single
+    /// un-addable search result — a ModDB page with no modid — stopped a whole pack
+    /// syncing, recoverable only by hand-editing pack.json.
+    /// </summary>
+    public IEnumerable<string> ValidatePack()
     {
         if (string.IsNullOrWhiteSpace(Id))
             yield return "Pack 'id' is required.";
@@ -61,23 +75,48 @@ public sealed class PackManifest
         // long would be a bad trade for a field that is decoration; strict about what is
         // sent, tolerant about what arrives.
 
+    }
+
+    /// <summary>Problems with individual mod entries, each naming the entry it is about.</summary>
+    public IEnumerable<string> ValidateMods()
+    {
+        foreach (var (mod, problem) in ModProblems()) yield return Describe(mod, problem);
+    }
+
+    /// <summary>
+    /// Each unusable mod entry and why, so a caller can drop that one and carry on rather
+    /// than refusing the pack.
+    /// </summary>
+    public IEnumerable<(PackMod Mod, string Problem)> ModProblems()
+    {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var m in Mods)
         {
             if (string.IsNullOrWhiteSpace(m.ModId))
             {
-                yield return "A mod entry has an empty 'modid'.";
+                yield return (m, "it has no modid — ModDB pages that publish no mod id, "
+                                 + "such as a download listing or a modified client, cannot "
+                                 + "be installed into a pack");
                 continue;
             }
 
             if (!seen.Add(m.ModId))
-                yield return $"'{m.ModId}' is listed more than once.";
+            {
+                yield return (m, "it is listed more than once");
+                continue;
+            }
 
             if (m.Version is not null && !GameVersions.IsPlausibleVersion(m.Version))
-                yield return $"'{m.ModId}' has an unusable version pin '{m.Version}'. "
-                             + "Pins must be bare versions like \"1.3.0\".";
+                yield return (m, $"its version pin '{m.Version}' is not a bare version "
+                                 + "like \"1.3.0\"");
         }
     }
+
+    private static string Describe(PackMod mod, string problem) =>
+        string.IsNullOrWhiteSpace(mod.ModId)
+            ? $"A mod entry cannot be used: {problem}."
+            : $"'{mod.ModId}' cannot be used: {problem}.";
 
     /// <summary>
     /// Synchronous by design. Manifests are small local files, and callers include UI

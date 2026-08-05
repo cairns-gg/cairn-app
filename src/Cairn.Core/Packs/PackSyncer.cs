@@ -42,7 +42,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         CancellationToken ct = default,
         IReadOnlySet<string>? allowUpdates = null)
     {
-        var problems = manifest.Validate().ToList();
+        // Only the pack-level problems stop everything. A missing id or an unusable game
+        // version means nothing can be installed at all; one bad mod entry means one mod
+        // cannot be, and throwing for that took a whole pack down over a single row —
+        // recoverable only by hand-editing pack.json, which is not a thing to ask of
+        // somebody who clicked Add on a search result.
+        var problems = manifest.ValidatePack().ToList();
         if (problems.Count > 0)
             throw new InvalidDataException("Pack manifest is invalid:\n  " + string.Join("\n  ", problems));
 
@@ -58,14 +63,20 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             progress?.Report(step);
         }
 
+        // Reported and skipped rather than installed or thrown over.
+        var unusable = manifest.ModProblems().ToList();
+        var skip = unusable.Select(p => p.Mod).ToHashSet();
+
+        var usable = manifest.Mods.Where(m => !skip.Contains(m)).ToList();
+
         // Dependencies live inside the zip, so the full set is not known until things have
         // been downloaded. The queue is seeded from the manifest and grows as each mod's
         // modinfo.json is read; `seen` both dedupes and terminates it, including for two
         // libraries that declare each other.
         var queue = new Queue<PendingMod>(
-            manifest.Mods.Select(m => new PendingMod(m.ModId, m.Version)));
+            usable.Select(m => new PendingMod(m.ModId, m.Version)));
         var seen = new HashSet<string>(
-            manifest.Mods.Select(m => m.ModId), StringComparer.OrdinalIgnoreCase);
+            usable.Select(m => m.ModId), StringComparer.OrdinalIgnoreCase);
 
         // Accumulated rather than written straight onto the lock entry, because a library
         // can be pulled in by several mods and is only discovered as each is processed.
@@ -78,6 +89,10 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // library is still queued can still free it to move.
         var movable = new HashSet<string>(
             allowUpdates ?? (IEnumerable<string>)[], StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (mod, problem) in unusable)
+            Record(new SyncStep(SyncAction.Failed,
+                string.IsNullOrWhiteSpace(mod.ModId) ? "(no modid)" : mod.ModId, problem));
 
         while (queue.Count > 0)
         {
@@ -112,7 +127,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
         // A mod the manifest names is not "required by" anything, however many other mods
         // also happen to want it — it is there because the pack asked for it.
-        var direct = manifest.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var direct = usable.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var locked in newLock.Mods)
         {
             if (direct.Contains(locked.ModId)) continue;

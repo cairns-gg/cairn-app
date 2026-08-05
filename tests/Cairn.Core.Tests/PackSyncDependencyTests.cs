@@ -355,6 +355,63 @@ public class PackSyncDependencyTests : IDisposable
         Assert.False(report.Failed);
     }
 
+    /// <summary>
+    /// A mod entry that cannot be used fails on its own, and leaves the rest of the pack
+    /// alone.
+    ///
+    /// It used to throw. A ModDB page with no mod id — a download listing, or Optimum,
+    /// which is a modified client rather than a mod — could be added from the launcher's
+    /// search, wrote an empty modid into the manifest, and from then on every sync of that
+    /// pack died on "Pack manifest is invalid". One click, and the only way out was editing
+    /// pack.json by hand.
+    /// </summary>
+    [Fact]
+    public async Task An_entry_with_no_modid_fails_by_itself_and_the_pack_still_syncs()
+    {
+        var (syncer, _) = Make(new() { ["carryon"] = [] });
+
+        var manifest = Pack("carryon");
+        manifest.Mods.Add(new PackMod { ModId = "" });
+
+        var report = await syncer.SyncAsync(manifest, ModsDir, LockPath);
+
+        var failure = report.Steps.Single(s => s.Action == SyncAction.Failed);
+        Assert.Equal("(no modid)", failure.ModId);
+        Assert.Contains("no modid", failure.Detail);
+
+        // The rest of the pack installed, and the lock was written.
+        Assert.Equal(["carryon"], report.Lock.Mods.Select(m => m.ModId).ToArray());
+        Assert.True(File.Exists(LockPath));
+    }
+
+    [Fact]
+    public async Task A_pack_level_problem_still_stops_everything()
+    {
+        // The distinction being drawn: an unusable game version means nothing can be
+        // installed at all, so it is not something to report per mod and carry on from.
+        var (syncer, _) = Make(new() { ["carryon"] = [] });
+
+        var manifest = Pack("carryon");
+        manifest.GameVersion = ">=1.22.5";
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => syncer.SyncAsync(manifest, ModsDir, LockPath));
+    }
+
+    [Fact]
+    public async Task A_mod_listed_twice_fails_once_rather_than_taking_the_pack_with_it()
+    {
+        var (syncer, _) = Make(new() { ["carryon"] = [] });
+
+        var manifest = Pack("carryon");
+        manifest.Mods.Add(new PackMod { ModId = "carryon" });
+
+        var report = await syncer.SyncAsync(manifest, ModsDir, LockPath);
+
+        Assert.Contains("more than once", report.Steps.Single(s => s.Action == SyncAction.Failed).Detail);
+        Assert.Equal(["carryon"], report.Lock.Mods.Select(m => m.ModId).ToArray());
+    }
+
     [Fact]
     public async Task A_dependency_ModDB_does_not_have_says_who_wanted_it()
     {
