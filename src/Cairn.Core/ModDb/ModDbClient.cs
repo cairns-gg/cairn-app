@@ -17,6 +17,17 @@ public enum MatchQuality
     SameMinor,
 }
 
+/// <param name="ModId">
+/// The id this was asked for by, which is the id the pack names it by and the one the lock
+/// must record. Deliberately not the release's own <c>modidstr</c>: ModDB answers to more
+/// than one id per mod, and "hpspinningwheel" returns releases declaring "spinningwheel".
+/// Locking the declared id meant the manifest and the lock could never be compared — every
+/// sync re-downloaded the mod, and sharing refused a pack that had just synced.
+/// </param>
+/// <param name="DeclaredModId">
+/// What the release calls itself, when that differs. Only used to recognise the same mod
+/// arriving again as somebody else's dependency; nothing is keyed on it.
+/// </param>
 public sealed record ResolvedRelease(
     string ModId,
     string ModVersion,
@@ -25,7 +36,8 @@ public sealed record ResolvedRelease(
     int ReleaseId,
     int FileId,
     MatchQuality Quality,
-    string? Side);
+    string? Side,
+    string? DeclaredModId = null);
 
 public sealed class ModDbException(string message) : Exception(message);
 
@@ -279,7 +291,7 @@ public sealed class ModDbClient(HttpClient http)
         var mod = await GetModAsync(modId, ct).ConfigureAwait(false);
 
         return Rank(Candidates(mod, gameVersion))
-            .Select(x => ToResolved(mod, x.Release, x.Quality!.Value))
+            .Select(x => ToResolved(mod, x.Release, x.Quality!.Value, modId))
             .ToList();
     }
 
@@ -308,12 +320,12 @@ public sealed class ModDbClient(HttpClient http)
                     : $"{modId} has no release {pinnedVersion}.");
             }
 
-            return ToResolved(mod, pinned.Release, pinned.Quality!.Value);
+            return ToResolved(mod, pinned.Release, pinned.Quality!.Value, modId);
         }
 
         var best = Rank(candidates).FirstOrDefault();
 
-        return best.Release is null ? null : ToResolved(mod, best.Release, best.Quality!.Value);
+        return best.Release is null ? null : ToResolved(mod, best.Release, best.Quality!.Value, modId);
     }
 
     private static List<(ModDbRelease Release, MatchQuality? Quality)> Candidates(
@@ -334,9 +346,11 @@ public sealed class ModDbClient(HttpClient http)
             .OrderBy(x => x.Quality == MatchQuality.Exact ? 0 : 1)
             .ThenByDescending(x => x.Release.ModVersion, GameVersionComparer.Ascending);
 
-    private static ResolvedRelease ToResolved(ModDbMod mod, ModDbRelease r, MatchQuality q) =>
-        new(string.IsNullOrEmpty(r.ModIdStr) ? mod.Name : r.ModIdStr,
-            r.ModVersion, r.FileName, r.MainFile, r.ReleaseId ?? 0, r.FileId ?? 0, q, mod.Side);
+    private static ResolvedRelease ToResolved(
+        ModDbMod mod, ModDbRelease r, MatchQuality q, string requestedId) =>
+        new(string.IsNullOrWhiteSpace(requestedId) ? mod.Name : requestedId,
+            r.ModVersion, r.FileName, r.MainFile, r.ReleaseId ?? 0, r.FileId ?? 0, q, mod.Side,
+            DeclaredModId: string.IsNullOrWhiteSpace(r.ModIdStr) ? null : r.ModIdStr);
 
     private static MatchQuality? Classify(ModDbRelease r, string gameVersion)
     {

@@ -118,16 +118,19 @@ public class ModDbBrokenReleaseTests : IDisposable
     """;
 
     [Fact]
-    public async Task A_release_with_no_modidstr_falls_back_to_the_mod_name()
+    public async Task A_release_with_no_modidstr_is_still_known_by_the_id_it_was_asked_for()
     {
         var release = await Client(NoModIdStr).ResolveAsync("cairn", "1.22.5");
 
-        // The point of the test is the guard at the call site, not the null itself: the
-        // property is nullable, so the compiler no longer promises this cannot happen, and
-        // tightening IsNullOrEmpty to a length check would put the null straight into a
-        // ResolvedRelease and on into the lockfile.
         Assert.NotNull(release);
-        Assert.Equal("Cairn — Modpack Manager", release.ModId);
+
+        // This used to fall back to the mod's display name, which put "Cairn — Modpack
+        // Manager" into a lockfile as though it were an id. The requested id is both
+        // always present and the only thing the manifest can be compared against, so the
+        // null needs no fallback at all now — see ModAliasTests for why the declared id
+        // stopped being used even when it is there.
+        Assert.Equal("cairn", release.ModId);
+        Assert.Null(release.DeclaredModId);
     }
 
     [Fact]

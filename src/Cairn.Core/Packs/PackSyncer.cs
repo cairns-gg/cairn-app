@@ -194,6 +194,13 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 }
             }
 
+            // ModDB answers to more than one id per mod, so a pack naming an alias and a
+            // dependency naming the declared id are the same mod. Registering both stops
+            // the second one being installed again over the top of the first, under a
+            // different name, in the same file.
+            if (!string.IsNullOrWhiteSpace(release.DeclaredModId))
+                seen.Add(release.DeclaredModId);
+
             if (!lockApplies && release.Quality == MatchQuality.SameMinor)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
                     $"{release.ModVersion} is not marked for {manifest.GameVersion} exactly, "
