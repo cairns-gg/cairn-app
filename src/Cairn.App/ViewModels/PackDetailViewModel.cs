@@ -515,10 +515,22 @@ public partial class PackDetailViewModel : ViewModelBase
         ? ""
         : $"Revision {PackUpdate.To} is available — you have {PackUpdate.From}.";
 
+    /// <summary>
+    /// Offered for any followed pack, not only one with a revision waiting.
+    ///
+    /// Being on the author's latest is not the same as matching it: somebody who has edited
+    /// their copy and wants it back needs a way in, and gating this on an update meant the
+    /// only route to a reset was an author happening to publish.
+    /// </summary>
+    public bool CanReviewUpstream => IsFollowing;
+
+    public string ReviewUpstreamLabel => HasPackUpdate ? "Review update" : "Compare with author";
+
     partial void OnPackUpdateChanged(PackUpdateAvailable? value)
     {
         OnPropertyChanged(nameof(HasPackUpdate));
         OnPropertyChanged(nameof(PackUpdateLine));
+        OnPropertyChanged(nameof(ReviewUpstreamLabel));
     }
 
     /// <summary>Set by the view; see <see cref="ConfirmVersionChange"/>.</summary>
@@ -567,24 +579,43 @@ public partial class PackDetailViewModel : ViewModelBase
 
         try
         {
-            var available = await PackUpdateCheck.CheckAsync(_store.LoadLink(Id), _http);
+            // Fetched rather than checked. Being on the author's latest revision is not the
+            // same as matching it — somebody who has edited their copy and wants it back is
+            // asking about their own divergence, and a check would answer "nothing newer"
+            // and leave them with no way in.
+            var bundle = await PackUpdateCheck.FetchAsync(_store.LoadLink(Id), _http);
 
-            if (available is null)
+            if (bundle is null)
             {
                 PackUpdate = null;
-                _log("nothing newer from the author");
+                _log("could not reach the author's pack");
                 return;
             }
 
+            var link = _store.LoadLink(Id);
+            var available = (bundle.Revision ?? 0) > (link?.Revision ?? 0);
+
+            PackUpdate = available
+                ? new PackUpdateAvailable(link!.Revision, bundle.Revision ?? 0, bundle)
+                : null;
+
             var plan = PackUpdatePlan.Between(
-                Manifest, available.Bundle.Pack!, _store.LoadUpstream(Id),
-                available.From, available.To, _store.LoadLocalState(Id));
+                Manifest, bundle.Pack!, _store.LoadUpstream(Id),
+                link?.Revision ?? 0, bundle.Revision ?? 0, _store.LoadLocalState(Id));
+
+            // Nothing of theirs to take and nothing of yours that differs. Opening an empty
+            // dialog to say so would be worse than saying so.
+            if (!plan.AnyChange && !plan.Changes.Any())
+            {
+                _log($"this pack matches the author's revision {bundle.Revision ?? 0}");
+                return;
+            }
 
             if (ConfirmPackUpdate is null) return;
             if (!await ConfirmPackUpdate(
                     new PackUpdateViewModel(plan, Title, _packData.Worlds(Id)))) return;
 
-            var merged = _store.ApplyUpdate(Id, plan, available.Bundle);
+            var merged = _store.ApplyUpdate(Id, plan, bundle);
 
             // Copied into the instance the pane is bound to rather than swapped for the
             // new one: every row, header and command already points at this object.
@@ -598,7 +629,9 @@ public partial class PackDetailViewModel : ViewModelBase
             PackUpdate = null;
             _releaseCache.Clear();      // the game version may have moved under every mod
 
-            _log($"updated to revision {available.To}");
+            _log(plan.Reset
+                ? $"reset to the author's revision {bundle.Revision ?? 0}"
+                : $"updated to revision {bundle.Revision ?? 0}");
 
             ReloadMods();
             ReloadShare();

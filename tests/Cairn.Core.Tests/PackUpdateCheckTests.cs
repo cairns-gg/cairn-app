@@ -97,6 +97,53 @@ public class PackUpdateCheckTests
         }
     }
 
+    /// <summary>
+    /// Being on the author's latest revision is not the same as matching it.
+    ///
+    /// A copy that has been edited has diverged whether or not anybody published since, and
+    /// the way back to it must not depend on an author happening to release — which is what
+    /// gating the whole reconcile behind "is there an update" quietly did.
+    /// </summary>
+    [Fact]
+    public async Task The_authors_pack_can_be_fetched_when_there_is_no_update()
+    {
+        var bundle = new PackBundle
+        {
+            Pack = new PackManifest { Id = "anego", GameVersion = "1.22.5" },
+            CanonicalUrl = "https://cairns.gg/dizzyd/anego",
+            Revision = 3,
+        };
+
+        var http = new HttpClient(new Serves(bundle));
+        var link = Following();
+        link.Revision = 3;      // already on the latest
+
+        // The check says no, correctly: nothing newer has been published.
+        Assert.Null(await PackUpdateCheck.CheckAsync(link, http));
+
+        // The fetch says yes, also correctly: their pack is right there, and comparing a
+        // diverged copy against it is a different question from "is there an update".
+        var fetched = await PackUpdateCheck.FetchAsync(link, http);
+        Assert.NotNull(fetched);
+        Assert.Equal(3, fetched.Revision);
+    }
+
+    /// <summary>Serves one bundle, whatever is asked for.</summary>
+    private sealed class Serves(PackBundle bundle) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage r, CancellationToken ct)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(bundle);
+
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(
+                System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
     [Fact]
     public void Recording_a_check_leaves_the_declines_alone()
     {

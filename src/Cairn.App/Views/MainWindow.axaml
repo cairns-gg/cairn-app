@@ -240,11 +240,20 @@
                         there — nothing is merged until the dialog has been read.
                     -->
                     <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0"
-                                IsVisible="{Binding Detail.HasPackUpdate, FallbackValue=False}">
+                                IsVisible="{Binding Detail.CanReviewUpstream, FallbackValue=False}">
                         <TextBlock Text="{Binding Detail.PackUpdateLine}" FontSize="12"
                                    VerticalAlignment="Center"
+                                   IsVisible="{Binding Detail.HasPackUpdate, FallbackValue=False}"
                                    Foreground="{DynamicResource VsAccentBrush}" />
-                        <Button Content="Review update" Padding="12,3" FontSize="12"
+
+                        <!--
+                            Always here for a followed pack, not only when a revision is
+                            waiting. Being on the author's latest is not the same as
+                            matching it, and gating this on an update left somebody who had
+                            edited their copy with no way back to it.
+                        -->
+                        <Button Content="{Binding Detail.ReviewUpstreamLabel}"
+                                Padding="12,3" FontSize="12"
                                 Command="{Binding Detail.ApplyPackUpdateCommand}" />
                     </StackPanel>
                 </StackPanel>

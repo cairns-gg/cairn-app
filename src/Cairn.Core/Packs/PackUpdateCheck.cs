@@ -55,6 +55,29 @@ public static class PackUpdateCheck
     public static async Task<PackUpdateAvailable?> CheckAsync(
         PackLink? link, HttpClient http, CancellationToken ct = default)
     {
+        var bundle = await FetchAsync(link, http, ct).ConfigureAwait(false);
+        if (bundle is null) return null;
+
+        var latest = bundle.Revision ?? 0;
+
+        // A revision that went backwards is a cache or a rollback rather than news.
+        return latest > link!.Revision
+            ? new PackUpdateAvailable(link.Revision, latest, bundle)
+            : null;
+    }
+
+    /// <summary>
+    /// The author's pack as it stands, whether or not it is newer than this copy.
+    ///
+    /// Split from <see cref="CheckAsync"/> because "is there an update" and "what does
+    /// their pack look like" are different questions, and only the first one cares about
+    /// the revision. Somebody who has edited a copy and wants it back is asking the second:
+    /// they are already on the latest revision, so a check would say no and leave them with
+    /// no way to reconcile a pack that has visibly diverged.
+    /// </summary>
+    public static async Task<PackBundle?> FetchAsync(
+        PackLink? link, HttpClient http, CancellationToken ct = default)
+    {
         if (!CanCheck(link)) return null;
 
         PackBundle bundle;
@@ -66,19 +89,12 @@ public static class PackUpdateCheck
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException
                                       or InvalidDataException or IOException)
         {
-            // Withdrawn packs answer 410 here and land in the same place: an author who
-            // took their pack down has not published a newer one.
+            // Withdrawn packs answer 410 here and land in the same place: there is nothing
+            // at that address to reconcile against.
             return null;
         }
 
-        // A document that lost its canonical URL is not this pack any more, and a revision
-        // that went backwards is a cache or a rollback rather than news.
-        if (!bundle.IsPublished || bundle.Pack is null) return null;
-
-        var latest = bundle.Revision ?? 0;
-
-        return latest > link!.Revision
-            ? new PackUpdateAvailable(link.Revision, latest, bundle)
-            : null;
+        // A document that lost its canonical URL is not this pack any more.
+        return bundle.IsPublished && bundle.Pack is not null ? bundle : null;
     }
 }

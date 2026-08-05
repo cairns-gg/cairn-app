@@ -2651,19 +2651,30 @@ public class MainWindowTests : IDisposable
     {
         WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
 
+        new PackStore(Path.Combine(_home, "packs")).SaveLink("anego", new PackLink
+        {
+            Role = PackRole.Follower,
+            Following = true,
+            Url = "https://cairns.gg/dizzyd/anego",
+            Revision = 1,
+        });
+
         var (window, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
 
-        // Nothing waiting: nothing on screen. The button is in the tree either way — the
-        // panel around it is what collapses — so this has to ask whether it is actually
-        // being drawn, not merely whether it exists.
+        // Nothing waiting, but still a way in: a copy you have edited has diverged whether
+        // or not the author published, and gating this on an update left no route back.
         Assert.False(vm.Detail!.HasPackUpdate);
-        Assert.False(Buttons(window)["Review update"].IsEffectivelyVisible);
+        Assert.True(vm.Detail.CanReviewUpstream);
+        Assert.True(Buttons(window)["Compare with author"].IsEffectivelyVisible);
 
         vm.Detail.PackUpdate = new PackUpdateAvailable(1, 4, new PackBundle());
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
+        // The button was always there; what arrives with a revision is the line and the
+        // stronger label.
         Assert.True(vm.Detail.HasPackUpdate);
+        Assert.Equal("Review update", vm.Detail.ReviewUpstreamLabel);
         Assert.True(Buttons(window)["Review update"].IsEffectivelyVisible);
         Assert.NotNull(Buttons(window)["Review update"].Command);
 
@@ -2675,6 +2686,28 @@ public class MainWindowTests : IDisposable
 
         Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>()
             .Where(t => t.IsVisible).Select(t => t.Text), t => t == line);
+    }
+
+    /// <summary>
+    /// A pack of your own has no author to compare with, so the row stays away entirely.
+    /// The interesting half — a followed pack with nothing waiting still offering a way in
+    /// — needs a link on disk and is covered where the plan is, in PackUpdateCheckTests.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_of_your_own_offers_no_comparison_with_an_author()
+    {
+        WritePack("mine", "Mine", "1.22.5", null, ["carryon"]);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+
+        Assert.False(vm.Detail!.IsFollowing);
+        Assert.False(vm.Detail.CanReviewUpstream);
+
+        // And the label still reads sensibly rather than throwing or going blank, because
+        // the binding is evaluated whether or not the row is drawn.
+        Assert.Equal("Compare with author", vm.Detail.ReviewUpstreamLabel);
+
     }
 
     [AvaloniaFact]
