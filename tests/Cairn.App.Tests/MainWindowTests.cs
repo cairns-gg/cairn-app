@@ -776,7 +776,7 @@ public class MainWindowTests : IDisposable
 
                      // Reached only when something has already gone wrong, which is when
                      // nobody is in a position to discover the button is missing.
-                     "Copy diagnostics", "Report an issue",
+                     "Copy diagnostics",
                  })
         {
             Assert.True(found.ContainsKey(label), $"no '{label}' button in the window");

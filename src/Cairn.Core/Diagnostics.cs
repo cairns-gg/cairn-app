@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using Cairn.Core.Games;
 using Cairn.Core.Packs;
@@ -28,9 +29,6 @@ namespace Cairn.Core;
 /// </summary>
 public static class Diagnostics
 {
-    /// <summary>Where reports go. Named here so both front-ends offer the same place.</summary>
-    public const string IssuesUrl = "https://github.com/dizzyd/cairn-app/issues/new";
-
     /// <summary>
     /// How much of the log to carry. Enough to hold a failed sync and the launch before it;
     /// short enough that somebody will actually read what they are about to paste.
@@ -47,11 +45,17 @@ public static class Diagnostics
     /// Injected so this can be tested without a game on the machine; the caller normally
     /// has one already built.
     /// </param>
+    /// <param name="modsDir">
+    /// The pack's Mods directory. Given, every mod is described from its own zip as well
+    /// as from the lock, which is the only way to see a file that has gone missing, been
+    /// replaced, or disagrees with the version the lock claims for it.
+    /// </param>
     public static string Report(
         PackManifest? pack = null,
         PackLock? locked = null,
         IEnumerable<string>? log = null,
-        GameLibrary? library = null)
+        GameLibrary? library = null,
+        string? modsDir = null)
     {
         var text = new StringBuilder();
 
@@ -67,7 +71,7 @@ public static class Diagnostics
 
         AppendGames(text, library);
 
-        if (pack is not null) AppendPack(text, pack, locked);
+        if (pack is not null) AppendPack(text, pack, locked, modsDir);
 
         AppendLog(text, log);
 
@@ -110,7 +114,8 @@ public static class Diagnostics
         text.AppendLine();
     }
 
-    private static void AppendPack(StringBuilder text, PackManifest pack, PackLock? locked)
+    private static void AppendPack(
+        StringBuilder text, PackManifest pack, PackLock? locked, string? modsDir)
     {
         text.AppendLine($"Pack '{pack.Id}'{(pack.Name is null ? "" : $" — {pack.Name}")}");
         text.AppendLine($"  game       {pack.GameVersion}");
@@ -129,6 +134,7 @@ public static class Diagnostics
 
         text.AppendLine($"  lock       game {locked.GameVersion}, {locked.Mods.Count} installed");
         text.AppendLine($"  mods       {pack.Mods.Count} declared");
+        if (modsDir is not null) text.AppendLine($"  mods dir   {Redact(modsDir)}");
         text.AppendLine();
 
         var declared = pack.Mods.ToDictionary(
@@ -139,10 +145,11 @@ public static class Diagnostics
             var why = mod.RequiredBy is { Count: > 0 } wanters
                 ? $"required by {string.Join(", ", wanters)}"
                 : declared.TryGetValue(mod.ModId, out var pin) && pin is not null
-                    ? "pinned"
-                    : "";
+                    ? $"pinned to {pin}"
+                    : "asked for by this pack";
 
-            text.AppendLine($"    {mod.ModId,-24} {mod.Version,-14} {why}");
+            text.AppendLine($"    {mod.ModId} {mod.Version} — {why}");
+            AppendMod(text, mod, modsDir);
         }
 
         // A mod the manifest asks for and the lock does not have is the single most useful
@@ -159,6 +166,76 @@ public static class Diagnostics
         }
 
         text.AppendLine();
+    }
+
+    /// <summary>
+    /// Everything knowable about one installed mod: what the lock claims, what is on disk,
+    /// and what the zip says about itself.
+    ///
+    /// The three disagreeing is the interesting case and the one nobody thinks to check.
+    /// A file that is absent, a checksum that has moved, or a modinfo declaring a different
+    /// version from the lock all produce a mod that behaves like a different mod than the
+    /// pack thinks it installed — which is exactly the report that otherwise reads "it just
+    /// stopped working" and takes three exchanges to get anywhere.
+    /// </summary>
+    private static void AppendMod(StringBuilder text, LockedMod mod, string? modsDir)
+    {
+        if (!string.IsNullOrWhiteSpace(mod.Side) &&
+            !string.Equals(mod.Side, "both", StringComparison.OrdinalIgnoreCase))
+            text.AppendLine($"      side       {mod.Side}");
+
+        // Host only. The full URL adds nothing a reader can act on, and the point of
+        // recording it is whether the mod came from somewhere ModDB actually serves.
+        var host = Uri.TryCreate(mod.Url, UriKind.Absolute, out var uri) ? uri.Host : mod.Url;
+
+        if (!string.IsNullOrWhiteSpace(host))
+            text.AppendLine($"      source     {host}"
+                            + (mod.ReleaseId > 0 ? $"  release {mod.ReleaseId}" : "")
+                            + (mod.FileId > 0 ? $", file {mod.FileId}" : ""));
+
+        if (modsDir is null)
+        {
+            text.AppendLine($"      file       {mod.FileName} (not inspected)");
+            return;
+        }
+
+        var path = Path.Combine(modsDir, mod.FileName);
+
+        if (!Safely(() => File.Exists(path), false))
+        {
+            // The lock says this is installed and it is not there. Nothing else in the
+            // report matters as much for this mod.
+            text.AppendLine($"      file       {mod.FileName} — MISSING FROM DISK");
+            return;
+        }
+
+        var size = Safely(() => new FileInfo(path).Length, -1);
+        var actual = Safely(() => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))), null);
+
+        var checksum = mod.Sha256.Length == 0
+            ? "none recorded"
+            : actual is null
+                ? "unreadable"
+                : string.Equals(actual, mod.Sha256, StringComparison.OrdinalIgnoreCase)
+                    ? "matches the lock"
+                    : $"DIFFERS from the lock (disk {actual[..12]}…, lock {mod.Sha256[..12]}…)";
+
+        text.AppendLine($"      file       {mod.FileName}"
+                        + (size >= 0 ? $", {size:n0} bytes" : "")
+                        + $", sha256 {checksum}");
+
+        var info = ModDependencies.Describe(path);
+
+        text.AppendLine($"      modinfo    {Redact(info.Describe())}");
+
+        // A zip whose declared version is not the one the lock recorded is a mod that was
+        // repackaged under the same release, or a file swapped by hand.
+        if (info.Problem is null && !string.IsNullOrWhiteSpace(info.Version)
+            && !string.Equals(info.Version, mod.Version, StringComparison.OrdinalIgnoreCase))
+            text.AppendLine($"                 version disagrees with the lock ({mod.Version})");
+
+        if (info.Problem is null && info.Requires.Count > 0)
+            text.AppendLine($"      requires   {info.DescribeRequires()}");
     }
 
     private static void AppendLog(StringBuilder text, IEnumerable<string>? log)

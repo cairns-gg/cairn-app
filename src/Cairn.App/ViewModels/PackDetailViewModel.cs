@@ -186,18 +186,21 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand]
     private async Task CopyDiagnostics()
     {
-        var report = Diagnostics.Report(Manifest, _store.LoadLock(Id), Log, _library);
-
         if (CopyToClipboard is null)
         {
             _log("could not reach the clipboard");
             return;
         }
 
+        // Off the UI thread: this hashes every mod zip in the pack, which for a large one
+        // is tens of megabytes and would otherwise freeze the window mid-click.
+        var report = await Task.Run(() => Diagnostics.Report(
+            Manifest, _store.LoadLock(Id), Log.ToList(), _library, _store.ModsDir(Id)));
+
         try
         {
             await CopyToClipboard(report);
-            _log($"diagnostics copied — paste them into an issue at {Diagnostics.IssuesUrl}");
+            _log("diagnostics copied to the clipboard");
         }
         catch (Exception e)
         {
@@ -205,13 +208,6 @@ public partial class PackDetailViewModel : ViewModelBase
             // somebody pasting whatever was there before and wondering why it made no sense.
             _log($"could not copy diagnostics: {e.Message}");
         }
-    }
-
-    [RelayCommand]
-    private void ReportIssue()
-    {
-        if (!Browser.Open(Diagnostics.IssuesUrl))
-            _log($"could not open {Diagnostics.IssuesUrl}");
     }
 
     // ---- the game's own logs ----

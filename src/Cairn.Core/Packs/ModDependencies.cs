@@ -39,6 +39,49 @@ public static class ModDependencies
     public sealed record Result(IReadOnlyList<string> Dependencies, string? Problem);
 
     /// <summary>
+    /// Everything a mod's own <c>modinfo.json</c> is willing to say about it.
+    ///
+    /// Sync needs only the dependency ids, but a bug report wants the lot: what the mod
+    /// calls itself is how you tell a renamed or repackaged zip from the one ModDB serves,
+    /// and the declared version is how you tell a lockfile that has drifted from the file
+    /// actually sitting on disk.
+    /// </summary>
+    /// <param name="Requires">
+    /// Raw, in declaration order, with the versions kept and <c>game</c> left in. Sync
+    /// strips those because it cannot install them; a reader wants to see them.
+    /// </param>
+    public sealed record ModInfoSummary(
+        string? ModId,
+        string? Name,
+        string? Version,
+        string? Type,
+        IReadOnlyList<string> Authors,
+        IReadOnlyList<KeyValuePair<string, string?>> Requires,
+        string? Problem)
+    {
+        /// <summary>"genelib 3.2.0 'Genelib' by sekelsta", or whatever survives.</summary>
+        public string Describe()
+        {
+            if (Problem is not null) return $"unreadable — {Problem}";
+
+            var parts = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(ModId)) parts.Add(ModId!);
+            if (!string.IsNullOrWhiteSpace(Version)) parts.Add(Version!);
+            if (!string.IsNullOrWhiteSpace(Name)) parts.Add($"\"{Name}\"");
+            if (Authors.Count > 0) parts.Add($"by {string.Join(", ", Authors)}");
+            if (!string.IsNullOrWhiteSpace(Type)) parts.Add($"({Type})");
+
+            return parts.Count == 0 ? "no modinfo.json" : string.Join(" ", parts);
+        }
+
+        public string DescribeRequires() => Requires.Count == 0
+            ? "nothing"
+            : string.Join(", ", Requires.Select(
+                r => r.Value is null ? r.Key : $"{r.Key} {r.Value}"));
+    }
+
+    /// <summary>
     /// Mod ids the zip at <paramref name="path"/> declares a dependency on, with the game's
     /// own domains removed.
     ///
@@ -55,6 +98,21 @@ public static class ModDependencies
     /// </summary>
     public static Result Read(string path)
     {
+        var info = Describe(path);
+
+        return new Result(
+            [.. info.Requires.Select(r => r.Key)
+                .Where(id => !string.IsNullOrWhiteSpace(id) && !IsBuiltIn(id))],
+            info.Problem);
+    }
+
+    /// <summary>
+    /// Reads the whole of a mod's <c>modinfo.json</c>. The one place that knows how to open
+    /// a mod zip, so <see cref="Read"/> and a diagnostics report cannot disagree about
+    /// whether a given file is readable.
+    /// </summary>
+    public static ModInfoSummary Describe(string path)
+    {
         try
         {
             using var zip = ZipFile.OpenRead(path);
@@ -68,7 +126,7 @@ public static class ModDependencies
             // the game would load either, so it is already being reported by something in
             // a far better position to explain it — and warning here would fire on every
             // sync for every pack carrying one.
-            if (entry is null) return new Result([], null);
+            if (entry is null) return Empty(null);
 
             using var stream = entry.Open();
             using var doc = JsonDocument.Parse(stream, new JsonDocumentOptions
@@ -77,21 +135,78 @@ public static class ModDependencies
                 CommentHandling = JsonCommentHandling.Skip,
             });
 
-            return new Result(Parse(doc.RootElement), null);
+            var root = doc.RootElement;
+
+            return new ModInfoSummary(
+                Text(root, "modid"),
+                Text(root, "name"),
+                Text(root, "version"),
+                Text(root, "type"),
+                Strings(root, "authors"),
+                Pairs(root, "dependencies"),
+                null);
         }
         catch (JsonException e)
         {
             // The case worth naming: the file is there and we cannot read it, so any
             // dependency it declares is one this pack will not install.
-            return new Result([],
-                $"its modinfo.json could not be read, so any mods it requires are not "
-                + $"installed ({e.Message})");
+            return Empty($"its modinfo.json could not be read, so any mods it requires are "
+                         + $"not installed ({e.Message})");
         }
         catch (Exception e) when (e is IOException or InvalidDataException
                                       or UnauthorizedAccessException)
         {
-            return new Result([], $"its zip could not be opened ({e.Message})");
+            return Empty($"its zip could not be opened ({e.Message})");
         }
+
+        static ModInfoSummary Empty(string? problem) => new(null, null, null, null, [], [], problem);
+    }
+
+    /// <summary>A string property, whatever case the author wrote it in.</summary>
+    private static string? Text(JsonElement obj, string name)
+    {
+        if (obj.ValueKind != JsonValueKind.Object) return null;
+
+        var found = obj.EnumerateObject().FirstOrDefault(
+            p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        return found.Value.ValueKind == JsonValueKind.String ? found.Value.GetString() : null;
+    }
+
+    /// <summary>
+    /// A list of strings, tolerating the author who wrote one bare string instead — the
+    /// game accepts both for <c>authors</c>, so a report that refused would lose the name.
+    /// </summary>
+    private static IReadOnlyList<string> Strings(JsonElement obj, string name)
+    {
+        if (obj.ValueKind != JsonValueKind.Object) return [];
+
+        var found = obj.EnumerateObject().FirstOrDefault(
+            p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        return found.Value.ValueKind switch
+        {
+            JsonValueKind.String => [found.Value.GetString()!],
+            JsonValueKind.Array =>
+                [.. found.Value.EnumerateArray()
+                    .Where(e => e.ValueKind == JsonValueKind.String)
+                    .Select(e => e.GetString()!)],
+            _ => [],
+        };
+    }
+
+    /// <summary>An id → declared-minimum map, kept in the order the author wrote it.</summary>
+    private static IReadOnlyList<KeyValuePair<string, string?>> Pairs(JsonElement obj, string name)
+    {
+        if (obj.ValueKind != JsonValueKind.Object) return [];
+
+        var found = obj.EnumerateObject().FirstOrDefault(
+            p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (found.Value.ValueKind != JsonValueKind.Object) return [];
+
+        return [.. found.Value.EnumerateObject().Select(p => new KeyValuePair<string, string?>(
+            p.Name, p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null))];
     }
 
     /// <summary>

@@ -183,7 +183,7 @@ public class BrokenPackTests : IDisposable
             manifest, ModsDir, LockPath,
             progress: new Progress<SyncStep>(s => log.Add($"{s.Action} {s.ModId} {s.Detail}")));
 
-        var text = Diagnostics.Report(manifest, report.Lock, log);
+        var text = Diagnostics.Report(manifest, report.Lock, log, modsDir: ModsDir);
 
         // The one line that explains why this pack will not launch or publish.
         Assert.Contains("NOT INSTALLED: missingmod", text);
@@ -192,6 +192,12 @@ public class BrokenPackTests : IDisposable
         Assert.Contains("Pack 'broken' — Broken On Purpose", text);
         Assert.Contains("1.22.3", text);
         Assert.Contains("goodmod", text);
+
+        // Every mod described from its own zip, so the two that cannot be read say why
+        // right where somebody is already looking rather than only in the sync log.
+        Assert.Contains("sha256 matches the lock", text);
+        Assert.Contains("modinfo.json could not be read", text);
+        Assert.Contains("zip could not be opened", text);
 
         // Still no name of a real person anywhere in it.
         Assert.DoesNotContain(

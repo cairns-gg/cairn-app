@@ -129,7 +129,8 @@ internal static class Program
             pack: id is null ? null : store.Load(id),
             locked: id is null ? null : store.LoadLock(id),
             log: null,
-            library: library));
+            library: library,
+            modsDir: id is null ? null : store.ModsDir(id)));
 
         return 0;
     }

@@ -663,15 +663,13 @@
                                 <!--
                                     Beside the log because that is where somebody already is
                                     when the thing they want to report has just happened.
-                                    Copy first, then the issue tracker: the report is on the
-                                    clipboard before the browser steals the window, and it
-                                    has been read by the only person entitled to send it.
+                                    There is no "report an issue" beside it: Cairn has no
+                                    public tracker yet, and a button that opens one would be
+                                    sending people somewhere that cannot receive them.
                                 -->
                                 <Button Content="Copy diagnostics"
                                         Command="{Binding Detail.CopyDiagnosticsCommand}"
-                                        ToolTip.Tip="Version, platform, game installs, this pack and the log — copied for you to paste into an issue. Nothing is sent." />
-                                <Button Content="Report an issue"
-                                        Command="{Binding Detail.ReportIssueCommand}" />
+                                        ToolTip.Tip="Version, platform, game installs, every mod in this pack and the log — copied for you to paste wherever you report it. Nothing is sent." />
                             </StackPanel>
                             <ScrollViewer>
                                 <ItemsControl ItemsSource="{Binding Detail.Log}" Margin="4">
