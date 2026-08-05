@@ -20,6 +20,26 @@ public sealed class GameInstall
     public required string Version { get; init; }
 
     /// <summary>
+    /// What this build is, when it is not the stock game — "Optimum", say. Null for a
+    /// plain install, which is nearly all of them.
+    ///
+    /// Read from a <c>.cairn-variant</c> file dropped in the directory rather than guessed
+    /// from the folder name or the version. A modified client reports whatever version it
+    /// was forked from, so it is indistinguishable from the real thing by metadata alone —
+    /// and a variant silently satisfying every pack that asks for that version is the one
+    /// outcome worth ruling out by construction.
+    /// </summary>
+    public string? Variant { get; init; }
+
+    public bool IsVariant => !string.IsNullOrWhiteSpace(Variant);
+
+    /// <summary>"1.22.5" or "1.22.5 (Optimum)", for anywhere an install is named.</summary>
+    public string Describe() => IsVariant ? $"{Version} ({Variant})" : Version;
+
+    /// <summary>Marks a directory as holding something other than the stock game.</summary>
+    public const string VariantMarker = ".cairn-variant";
+
+    /// <summary>
     /// Architecture of the game's apphost. The published clients are x64 on every
     /// platform, so this exists to be checked against an available runtime rather than
     /// to support other targets.
@@ -130,6 +150,7 @@ public sealed class GameInstall
             Version = ReadVersion(api),
             Architecture = ExecutableImage.ReadArchitecture(exe),
             RequiredFramework = ReadRequiredFramework(dir) ?? FallbackFramework,
+            Variant = ReadVariant(dir),
         };
     }
 
@@ -163,6 +184,32 @@ public sealed class GameInstall
     /// assembly attributes are not trustworthy across releases: 1.22.5 carries
     /// AssemblyVersion 1.22.5.0, but 1.21.5 carries 1.0.0.0 with FileVersion 1.21.0.
     /// </summary>
+    /// <summary>
+    /// The label in the directory's variant marker, or null for a stock install.
+    ///
+    /// Silent about an unreadable one: a marker nobody can read means the same thing as no
+    /// marker for every decision that follows, and refusing to see an install over it would
+    /// be worse than treating it as ordinary.
+    /// </summary>
+    private static string? ReadVariant(string dir)
+    {
+        try
+        {
+            var path = Path.Combine(dir, VariantMarker);
+            if (!File.Exists(path)) return null;
+
+            var label = File.ReadAllText(path).Trim();
+
+            // A marker with nothing in it still says "not the stock game", so it names
+            // itself after its folder rather than reading as ordinary.
+            return label.Length > 0 ? label : Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static string ReadVersion(string apiDllPath)
     {
         var declared = AssemblyConstantReader.ReadStringConstant(

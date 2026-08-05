@@ -783,8 +783,61 @@ public partial class PackDetailViewModel : ViewModelBase
 
     public string ModsDirectory => _store.ModsDir(Id);
 
-    /// <summary>The install this pack will actually launch, or null when its version is absent.</summary>
-    public GameInstall? ResolvedInstall => _library.ForVersion(Manifest.GameVersion);
+    /// <summary>
+    /// The install this pack will actually launch, or null when its version is absent.
+    ///
+    /// A chosen install wins, and only a chosen one: <see cref="GameLibrary.ForVersion"/>
+    /// never returns a modified build, so running something other than the stock game is
+    /// always something this pack was told to do.
+    ///
+    /// A choice that has gone — the directory deleted, the build replaced by something that
+    /// is not an install — falls back rather than failing. Somebody who removes a build will
+    /// not connect it to a pack refusing to start, and <see cref="ChosenInstallMissing"/> is
+    /// what says so instead.
+    /// </summary>
+    public GameInstall? ResolvedInstall =>
+        ChosenInstall ?? _library.ForVersion(Manifest.GameVersion);
+
+    /// <summary>The install this pack was told to use, if it is still there.</summary>
+    public GameInstall? ChosenInstall =>
+        _store.LoadLocalState(Id).InstallDirectory is { } dir ? GameInstall.TryAt(dir) : null;
+
+    /// <summary>A choice was made and the install behind it is no longer there.</summary>
+    public bool ChosenInstallMissing =>
+        _store.LoadLocalState(Id).InstallDirectory is not null && ChosenInstall is null;
+
+    /// <summary>Every install this pack could run, stock first. See GameLibrary.ChoicesFor.</summary>
+    public IReadOnlyList<GameInstall> InstallChoices =>
+        _library.ChoicesFor(Manifest.GameVersion);
+
+    /// <summary>Offered only where there is a real choice to make.</summary>
+    public bool HasInstallChoice => InstallChoices.Count > 1 || ChosenInstall is not null;
+
+    public string InstallChoiceLine => ChosenInstallMissing
+        ? "The install this pack was set to use is gone; it will run the stock game instead."
+        : ResolvedInstall is { IsVariant: true } v
+            ? $"Running with {v.Variant}."
+            : "";
+
+    /// <summary>
+    /// Picks the install this pack launches with. Null clears it, which is not the same as
+    /// choosing the stock one — a cleared pack follows whatever the stock install becomes.
+    /// </summary>
+    public void ChooseInstall(GameInstall? install)
+    {
+        var state = _store.LoadLocalState(Id);
+
+        // The stock install is stored as no choice at all, so a pack does not end up
+        // pinned to a directory that Cairn is about to replace on the next game update.
+        state.InstallDirectory = install is { IsVariant: true } ? install.Directory : null;
+        _store.SaveLocalState(Id, state);
+
+        RefreshGameState();
+        OnPropertyChanged(nameof(ChosenInstall));
+        OnPropertyChanged(nameof(ChosenInstallMissing));
+        OnPropertyChanged(nameof(InstallChoiceLine));
+        OnPropertyChanged(nameof(HasInstallChoice));
+    }
 
     /// <summary>
     /// True while this pack's game version is being downloaded. The provisioning pane
