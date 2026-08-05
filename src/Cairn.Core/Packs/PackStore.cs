@@ -62,6 +62,16 @@ public sealed class PackStore
         manifest.Save(UpstreamPath(id));
 
     /// <summary>
+    /// Decisions this machine has made about this pack. Never shared — see PackLocalState.
+    /// </summary>
+    public string LocalStatePath(string id) => Path.Combine(PackDir(id), "local.json");
+
+    public PackLocalState LoadLocalState(string id) => PackLocalState.Load(LocalStatePath(id));
+
+    public void SaveLocalState(string id, PackLocalState state) =>
+        state.Save(LocalStatePath(id));
+
+    /// <summary>
     /// Takes the author's newer revision, with the plan's answers applied.
     ///
     /// Writes four things and they have to agree: the merged manifest, the author's
@@ -82,6 +92,7 @@ public sealed class PackStore
         Save(merged);
         SaveUpstream(id, theirs);
         MergeLock(id, merged, bundle.Lock);
+        RecordDeclines(id, plan, merged);
 
         if (LoadLink(id) is { } link)
         {
@@ -90,6 +101,33 @@ public sealed class PackStore
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// Remembers the mods this update was told to stop asking about, and forgets the ones
+    /// that are back in the pack.
+    ///
+    /// Only what a person ticked. Taking the mod back clears any earlier decline with it,
+    /// because putting a mod in by hand is a clearer statement than the box ever was — and
+    /// leaving the record would mean removing it a second time went unmentioned for ever.
+    /// </summary>
+    private void RecordDeclines(string id, PackUpdatePlan plan, PackManifest merged)
+    {
+        var state = LoadLocalState(id);
+        var before = state.DeclinedMods.Count;
+
+        foreach (var change in plan.Changes)
+        {
+            if (change.CanSilence && change.Silence && !change.Take) state.Decline(change.ModId);
+        }
+
+        foreach (var mod in merged.Mods) state.Restore(mod.ModId);
+
+        // Writing an empty file for the overwhelmingly common case — nobody declined
+        // anything — would put a file in every pack directory to say nothing.
+        if (before == 0 && state.DeclinedMods.Count == 0 && !File.Exists(LocalStatePath(id))) return;
+
+        SaveLocalState(id, state);
     }
 
     /// <summary>

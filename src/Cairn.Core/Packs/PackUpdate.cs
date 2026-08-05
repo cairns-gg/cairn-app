@@ -46,6 +46,18 @@ public sealed record ModChange(
     /// </summary>
     public bool Take { get; set; }
 
+    /// <summary>
+    /// Stop raising this one. Only meaningful for a mod you removed that the author still
+    /// ships, which is the difference that stays true for ever and would otherwise be
+    /// mentioned at every revision.
+    ///
+    /// Set by a person ticking a box and by nothing else. Ignored when
+    /// <see cref="Take"/> is set, because putting the mod back leaves nothing to ask about.
+    /// </summary>
+    public bool Silence { get; set; }
+
+    public bool CanSilence => Kind == ModChangeKind.DroppedByYou;
+
     /// <summary>Whether this one is a question. The rest are reported, not asked.</summary>
     public bool IsChoice => Kind is ModChangeKind.PinConflict or ModChangeKind.DroppedByYou;
 
@@ -79,12 +91,20 @@ public sealed class PackUpdatePlan
     private readonly PackManifest _mine;
     private readonly PackManifest _theirs;
 
+    /// <summary>
+    /// Mods left out of <see cref="Changes"/> because they were already declined. Merge has
+    /// to know: a mod with no change reads as "nothing to decide, take theirs", which for
+    /// a declined one would put it back — silencing the question by granting it.
+    /// </summary>
+    private readonly HashSet<string> _declined;
+
     private PackUpdatePlan(
         PackManifest mine, PackManifest theirs, int fromRevision, int toRevision,
-        IReadOnlyList<ModChange> changes, bool hadBase)
+        IReadOnlyList<ModChange> changes, bool hadBase, HashSet<string> declined)
     {
         _mine = mine;
         _theirs = theirs;
+        _declined = declined;
         FromRevision = fromRevision;
         ToRevision = toRevision;
         Changes = changes;
@@ -145,12 +165,18 @@ public sealed class PackUpdatePlan
     /// The author's manifest at the revision this copy follows. Null when there is none,
     /// which costs the ability to recognise a local removal.
     /// </param>
+    /// <param name="state">
+    /// What this machine has already decided. A mod declined here is left out silently
+    /// rather than raised again — the difference is still real, but it has been answered,
+    /// and asking once per revision for ever is the thing the answer was given to stop.
+    /// </param>
     public static PackUpdatePlan Between(
         PackManifest mine,
         PackManifest theirs,
         PackManifest? @base,
         int fromRevision = 0,
-        int toRevision = 0)
+        int toRevision = 0,
+        PackLocalState? state = null)
     {
         // No base is not the same as an empty base: an empty one would call every mod they
         // have an addition and every mod you have yours, which is accidentally the right
@@ -170,6 +196,7 @@ public sealed class PackUpdatePlan
         foreach (var id in basis.Keys.Concat(local.Keys).Concat(author.Keys)) ids.Add(id);
 
         var changes = new List<ModChange>();
+        var declined = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var id in ids.Order(StringComparer.OrdinalIgnoreCase))
         {
@@ -197,7 +224,10 @@ public sealed class PackUpdatePlan
                 // They ship it and you do not. Which of the two meanings depends on the base.
                 case (false, true) when inBase:
                     // You took it out on purpose. Left out by default, because undoing that
-                    // silently on every update is worse than an update that leaves a gap.
+                    // silently on every update is worse than an update that leaves a gap —
+                    // and left out of the plan entirely once you have said not to ask.
+                    if (state?.HasDeclined(id) == true) { declined.Add(id); continue; }
+
                     changes.Add(new ModChange(id, ModChangeKind.DroppedByYou, null, theirPin) { Take = false });
                     continue;
 
@@ -222,7 +252,8 @@ public sealed class PackUpdatePlan
             changes.Add(new ModChange(id, ModChangeKind.PinConflict, myPin, theirPin) { Take = false });
         }
 
-        return new PackUpdatePlan(mine, theirs, fromRevision, toRevision, changes, @base is not null);
+        return new PackUpdatePlan(
+            mine, theirs, fromRevision, toRevision, changes, @base is not null, declined);
     }
 
     /// <summary>
@@ -248,6 +279,10 @@ public sealed class PackUpdatePlan
         // Walk the author's list first so their order survives, then append what is yours.
         foreach (var mod in _theirs.Mods)
         {
+            // Declined earlier, so it was never raised — and must not arrive by the back
+            // door of having nothing recorded against it.
+            if (_declined.Contains(mod.ModId)) continue;
+
             if (!decided.TryGetValue(mod.ModId, out var change))
             {
                 merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });

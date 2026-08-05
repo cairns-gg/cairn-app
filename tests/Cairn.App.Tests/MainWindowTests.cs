@@ -2639,6 +2639,65 @@ public class MainWindowTests : IDisposable
         Assert.Empty(vm.Detail!.Log);
     }
 
+    /// <summary>
+    /// The indicator that an author has published again.
+    ///
+    /// It sits with the pack's heading rather than behind a tab, because it is news nobody
+    /// opens a tab to look for — so the thing worth asserting is that it appears at all,
+    /// and that it stays away for a pack with nothing waiting.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_waiting_revision_is_announced_on_the_pack_itself()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        // Nothing waiting: nothing on screen. The button is in the tree either way — the
+        // panel around it is what collapses — so this has to ask whether it is actually
+        // being drawn, not merely whether it exists.
+        Assert.False(vm.Detail!.HasPackUpdate);
+        Assert.False(Buttons(window)["Review update"].IsEffectivelyVisible);
+
+        vm.Detail.PackUpdate = new PackUpdateAvailable(1, 4, new PackBundle());
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.Detail.HasPackUpdate);
+        Assert.True(Buttons(window)["Review update"].IsEffectivelyVisible);
+        Assert.NotNull(Buttons(window)["Review update"].Command);
+
+        // Says both numbers: "an update is available" is not worth reading twice, and
+        // which revision you are on is what tells you whether you have missed several.
+        var line = vm.Detail.PackUpdateLine;
+        Assert.Contains("4", line);
+        Assert.Contains("1", line);
+
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.IsVisible).Select(t => t.Text), t => t == line);
+    }
+
+    [AvaloniaFact]
+    public async Task Reviewing_an_update_shows_it_before_anything_is_applied()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        PackUpdateViewModel? shown = null;
+        vm.Detail!.ConfirmPackUpdate = update => { shown = update; return Task.FromResult(false); };
+
+        // No server behind it, so the fresh fetch finds nothing and the command stops
+        // there. What matters is that it stops rather than throwing, and that nothing was
+        // applied — the pack must be untouched by looking at it.
+        await vm.Detail.ApplyPackUpdateCommand.ExecuteAsync(null);
+
+        Assert.Null(shown);
+        Assert.Equal(["carryon"], vm.Detail.Manifest.Mods.Select(m => m.ModId).ToArray());
+        Assert.Null(vm.Detail.Error);
+    }
+
     [AvaloniaFact]
     public async Task Copy_diagnostics_puts_the_report_on_the_clipboard()
     {

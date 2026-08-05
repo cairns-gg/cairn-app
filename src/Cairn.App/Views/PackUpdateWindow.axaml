@@ -82,6 +82,18 @@
                                               IsChecked="{Binding Take, Mode=TwoWay}"
                                               Content="{Binding ChoiceLabel}"
                                               FontSize="11" MinHeight="0" Padding="6,0,0,0" />
+
+                                    <!--
+                                        Only where the difference is permanent. A pin
+                                        conflict ends the moment either side moves; a mod
+                                        you removed from a pack that still ships it is true
+                                        for ever, and is the one worth being able to silence.
+                                    -->
+                                    <CheckBox IsVisible="{Binding CanSilence}"
+                                              IsChecked="{Binding Silence, Mode=TwoWay}"
+                                              Content="stop asking about this one"
+                                              FontSize="11" Opacity="0.75"
+                                              MinHeight="0" Padding="6,0,0,0" />
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>

@@ -568,7 +568,7 @@ public partial class PackDetailViewModel : ViewModelBase
 
             var plan = PackUpdatePlan.Between(
                 Manifest, available.Bundle.Pack!, _store.LoadUpstream(Id),
-                available.From, available.To);
+                available.From, available.To, _store.LoadLocalState(Id));
 
             if (ConfirmPackUpdate is null) return;
             if (!await ConfirmPackUpdate(new PackUpdateViewModel(plan, Title))) return;

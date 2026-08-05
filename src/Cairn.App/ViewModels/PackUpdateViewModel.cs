@@ -48,6 +48,7 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
             Change.Take = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(ChoiceLabel));
+            OnPropertyChanged(nameof(CanSilence));
         }
     }
 
@@ -63,6 +64,27 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
             : $"keep yours ({Change.Mine ?? "newest"})",
         _ => "",
     };
+
+    /// <summary>
+    /// Offered only where the difference is permanent. A pin conflict resolves itself the
+    /// moment either side moves; a mod you removed from a pack that still ships it stays
+    /// true for ever, and is the only one worth being able to silence.
+    ///
+    /// Hidden once "put it back" is ticked, because there is then nothing left to ask.
+    /// </summary>
+    public bool CanSilence => Change.CanSilence && !Take;
+
+    public bool Silence
+    {
+        get => Change.Silence;
+        set
+        {
+            if (Change.Silence == value) return;
+
+            Change.Silence = value;
+            OnPropertyChanged();
+        }
+    }
 }
 
 /// <summary>

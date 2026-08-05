@@ -575,7 +575,7 @@ internal static class Program
         var mine = store.Load(id);
         var plan = PackUpdatePlan.Between(
             mine, available.Bundle.Pack!, store.LoadUpstream(id),
-            available.From, available.To);
+            available.From, available.To, store.LoadLocalState(id));
 
         Console.WriteLine(plan.Summary());
 

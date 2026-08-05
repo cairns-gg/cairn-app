@@ -69,6 +69,115 @@ public class PackUpdateApplyTests : IDisposable
         return imported;
     }
 
+    /// <summary>
+    /// The escape from the standing notice: told once to stop asking, it stops.
+    ///
+    /// Only ever set by somebody ticking a box. An inferred version would be worse than
+    /// none — a pack that silently stops mentioning a mod is precisely what a person who
+    /// never asked for silence would want to know about.
+    /// </summary>
+    [Fact]
+    public void A_removal_you_asked_not_to_be_asked_about_again_is_not_raised_again()
+    {
+        Follow(Pack("1.22.5", Mod("carryon"), Mod("heavyweight")));
+
+        var mine = Pack("1.22.5", Mod("carryon"));
+        _store.Save(mine);
+
+        var theirs = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"));
+
+        var first = PackUpdatePlan.Between(
+            mine, theirs, _store.LoadUpstream("anego"), state: _store.LoadLocalState("anego"));
+
+        var dropped = first.Choices.Single();
+        Assert.True(dropped.CanSilence);
+        dropped.Silence = true;
+
+        _store.ApplyUpdate("anego", first, Bundle(theirs, null, revision: 2));
+
+        Assert.True(_store.LoadLocalState("anego").HasDeclined("heavyweight"));
+
+        // The next revision says nothing about it, and still leaves it out.
+        var next = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"), Mod("newthing"));
+        var second = PackUpdatePlan.Between(
+            _store.Load("anego"), next, _store.LoadUpstream("anego"),
+            state: _store.LoadLocalState("anego"));
+
+        Assert.Empty(second.Choices);
+        Assert.DoesNotContain("heavyweight", second.Changes.Select(c => c.ModId));
+        Assert.DoesNotContain("heavyweight",
+            second.Merge().Mods.Select(m => m.ModId));
+    }
+
+    [Fact]
+    public void Putting_the_mod_back_beats_silencing_it()
+    {
+        Follow(Pack("1.22.5", Mod("carryon"), Mod("heavyweight")));
+        _store.Save(Pack("1.22.5", Mod("carryon")));
+
+        var theirs = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"));
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), theirs, _store.LoadUpstream("anego"),
+            state: _store.LoadLocalState("anego"));
+
+        // Both boxes ticked is contradictory: taking the mod back leaves nothing to be
+        // asked about, so nothing is recorded and the pack simply has the mod.
+        var dropped = plan.Choices.Single();
+        dropped.Take = true;
+        dropped.Silence = true;
+
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, null, revision: 2));
+
+        Assert.False(_store.LoadLocalState("anego").HasDeclined("heavyweight"));
+        Assert.Contains("heavyweight", _store.Load("anego").Mods.Select(m => m.ModId));
+    }
+
+    [Fact]
+    public void Adding_the_mod_back_by_hand_forgets_that_you_declined_it()
+    {
+        Follow(Pack("1.22.5", Mod("carryon"), Mod("heavyweight")));
+        _store.Save(Pack("1.22.5", Mod("carryon")));
+
+        var theirs = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"));
+
+        var first = PackUpdatePlan.Between(
+            _store.Load("anego"), theirs, _store.LoadUpstream("anego"),
+            state: _store.LoadLocalState("anego"));
+
+        first.Choices.Single().Silence = true;
+        _store.ApplyUpdate("anego", first, Bundle(theirs, null, revision: 2));
+        Assert.True(_store.LoadLocalState("anego").HasDeclined("heavyweight"));
+
+        // You change your mind and add it yourself. That is a clearer statement than the
+        // box was, and removing it again later must be mentioned rather than swallowed.
+        var withIt = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"));
+        _store.Save(withIt);
+
+        var next = Pack("1.22.5", Mod("carryon"), Mod("heavyweight"), Mod("newthing"));
+        var second = PackUpdatePlan.Between(
+            withIt, next, _store.LoadUpstream("anego"), state: _store.LoadLocalState("anego"));
+
+        _store.ApplyUpdate("anego", second, Bundle(next, null, revision: 3));
+
+        Assert.False(_store.LoadLocalState("anego").HasDeclined("heavyweight"));
+    }
+
+    [Fact]
+    public void A_pack_nobody_declined_anything_in_gets_no_state_file()
+    {
+        Follow(Pack("1.22.5", Mod("carryon")));
+
+        var theirs = Pack("1.22.5", Mod("carryon"), Mod("newthing"));
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), theirs, _store.LoadUpstream("anego"));
+
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, null, revision: 2));
+
+        // An empty document in every pack directory, saying nothing, is clutter people
+        // then have to wonder about.
+        Assert.False(File.Exists(_store.LocalStatePath("anego")));
+    }
+
     [Fact]
     public void Importing_a_published_pack_records_the_base_it_will_be_merged_against()
     {
