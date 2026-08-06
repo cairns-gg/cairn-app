@@ -610,17 +610,18 @@
                             </StackPanel>
                             <!--
                                 Changing the game version re-resolves every mod, so it is
-                                not a field you edit and save with the others: pick a target,
-                                see what it would do, then commit.
+                                not a field you edit and save with the others: picking one
+                                works out what it would do and asks. Nothing is written
+                                until that is confirmed, and declining puts the picker back
+                                — so the control always shows the version the pack is on.
                             -->
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <ComboBox MinWidth="150"
+                                    <ComboBox x:Name="GameVersionChoice" MinWidth="150"
+                                              IsEnabled="{Binding !Detail.IsCheckingVersion}"
                                               ItemsSource="{Binding Detail.GameVersionChoices}"
                                               SelectedItem="{Binding Detail.TargetGameVersion}" />
-                                    <Button Content="Check…"
-                                            Command="{Binding Detail.CheckVersionCommand}" />
                                     <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.6"
                                                IsVisible="{Binding Detail.IsCheckingVersion}"
                                                Text="{Binding Detail.CheckingMod, StringFormat='checking {0}…'}" />

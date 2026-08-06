@@ -1376,7 +1376,18 @@ public partial class PackDetailViewModel : ViewModelBase
         }
         catch (Exception e)
         {
-            if (generation == _versionCheckGeneration) Error = e.Message;
+            if (generation != _versionCheckGeneration) return;
+
+            Error = e.Message;
+
+            // Put back, because the change did not happen. Not the offline case — failing
+            // to reach ModDB is a verdict on the mods, not an exception — but the
+            // unforeseen one: a lockfile that will not parse, a path that will not read.
+            // With the check started by the picker there is no button left to press again,
+            // and picking the same entry twice raises no change to retry from, so a
+            // failure that left the target showing would strand the pane on a version the
+            // pack is not on and cannot be moved to.
+            TargetGameVersion = Manifest.GameVersion;
         }
         finally
         {

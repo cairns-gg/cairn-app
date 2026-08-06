@@ -1723,7 +1723,7 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task The_picker_and_its_check_button_sit_in_the_settings_tab()
+    public async Task The_version_picker_sits_in_the_settings_tab_with_no_button_beside_it()
     {
         var (window, vm) = ShowWithModDb();
         var detail = await Retargetable(vm);
@@ -1731,9 +1731,11 @@ public class MainWindowTests : IDisposable
         detail.TargetGameVersion = "1.22.6";
         ShowSettingsTab(window);
 
-        // The verdicts themselves are a dialog now; see VersionChangeWindowTests.
-        Assert.True(Buttons(window).ContainsKey("Check…"));
         Assert.Contains(VisibleText(window), t => t.Contains("Game version"));
+
+        // Picking a version is what starts the check, so there is nothing to press. The
+        // verdicts themselves are a dialog; see VersionChangeWindowTests.
+        Assert.False(Buttons(window).ContainsKey("Check…"));
     }
 
     // ---- sharing ----

@@ -333,6 +333,36 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task A_version_check_that_fails_outright_puts_the_picker_back()
+    {
+        var (_, _, detail) = Open(Supported);
+
+        // A lockfile that will not parse: not the offline case — failing to reach ModDB is
+        // a verdict on the mods rather than an exception — but the unforeseen one the
+        // catch-all exists for. Written after the pack, and read when the check runs.
+        File.WriteAllText(Store.LockPath("anego"), "{ not json");
+
+        detail.GameVersionChoices.Add("1.22.6");
+        detail.TargetGameVersion = "1.22.6";
+
+        for (var i = 0; i < 200 && detail.HasPendingGameVersion; i++)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await Task.Delay(10);
+        }
+
+        // There is no Check button to press again, and picking the same entry twice raises
+        // no change to retry from — so a failure that left the target showing would strand
+        // the pane on a version the pack is not on and cannot be moved to.
+        Assert.Equal(Supported, detail.TargetGameVersion);
+        Assert.False(detail.HasPendingGameVersion);
+        Assert.True(detail.HasError);
+
+        // And the button it was blocking comes back with it.
+        Assert.True(detail.CanBuildOptimumNow);
+    }
+
+    [AvaloniaFact]
     public void The_panel_is_absent_where_optimum_does_not_apply()
     {
         // Most packs. An advanced option that is simply not there beats one that is there
