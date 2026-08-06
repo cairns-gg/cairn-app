@@ -297,6 +297,42 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void Retargeting_the_game_version_stops_a_chosen_variant_applying()
+    {
+        Install($"{Supported}-optimum", "Optimum");
+        Install("1.22.4");
+
+        var (_, _, detail) = Open(Supported);
+        detail.UseOptimumCommand.Execute(null);
+        Assert.True(detail.IsUsingVariant);
+
+        // The pack moves to a version the build is not for. The choice is a directory and
+        // the version is not fixed, so the two come apart — and the pack's mods were
+        // resolved against the version it now targets, not the one the client is.
+        detail.Manifest.GameVersion = "1.22.4";
+        detail.RefreshGameState();
+
+        Assert.False(detail.IsUsingVariant);
+        Assert.Null(detail.ChosenInstall);
+
+        // Said out loud, naming both sides: the fix is either to retarget back or to build
+        // this version, and which one is not guessable from silence.
+        Assert.Contains("1.22.4", detail.InstallChoiceLine);
+        Assert.Contains(Supported, detail.InstallChoiceLine);
+
+        // Ignored rather than erased: going back picks it up again, so trying another
+        // version for a minute does not throw away a twenty-minute build.
+        Assert.Equal(
+            Path.Combine(_home, "games", $"{Supported}-optimum"),
+            Store.LoadLocalState("anego").InstallDirectory);
+
+        detail.Manifest.GameVersion = Supported;
+        detail.RefreshGameState();
+
+        Assert.True(detail.IsUsingVariant);
+    }
+
+    [AvaloniaFact]
     public void The_panel_is_absent_where_optimum_does_not_apply()
     {
         // Most packs. An advanced option that is simply not there beats one that is there

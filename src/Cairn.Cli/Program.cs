@@ -167,14 +167,15 @@ internal static class Program
         return 0;
     }
 
-    /// <summary>The install a pack would launch: its own choice if it has one, else stock.</summary>
-    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id)
-    {
-        if (store.LoadLocalState(id).InstallDirectory is { } dir
-            && GameInstall.TryAt(dir) is { } chosen) return chosen;
-
-        return library.ForVersion(store.Load(id).GameVersion);
-    }
+    /// <summary>
+    /// The install a pack would launch: its own choice if it has one and that still fits,
+    /// else stock. See GameLibrary.ResolveFor — a recorded choice stops applying when the
+    /// pack's game version moves away from it.
+    /// </summary>
+    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id) =>
+        library.ResolveFor(
+            store.Load(id).GameVersion,
+            store.LoadLocalState(id).InstallDirectory).Install;
 
     private static int Info()
     {

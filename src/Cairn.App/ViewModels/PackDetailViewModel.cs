@@ -797,16 +797,20 @@ public partial class PackDetailViewModel : ViewModelBase
     /// not connect it to a pack refusing to start, and <see cref="ChosenInstallMissing"/> is
     /// what says so instead.
     /// </summary>
-    public GameInstall? ResolvedInstall =>
-        ChosenInstall ?? _library.ForVersion(Manifest.GameVersion);
+    public GameInstall? ResolvedInstall => Resolution.Install;
 
-    /// <summary>The install this pack was told to use, if it is still there.</summary>
+    /// <summary>
+    /// What this pack runs and why, answered by Core so the CLI answers it the same way.
+    /// </summary>
+    private GameLibrary.InstallResolution Resolution => _library.ResolveFor(
+        Manifest.GameVersion, _store.LoadLocalState(Id).InstallDirectory);
+
+    /// <summary>The install this pack was told to use, if it is still there and still fits.</summary>
     public GameInstall? ChosenInstall =>
-        _store.LoadLocalState(Id).InstallDirectory is { } dir ? GameInstall.TryAt(dir) : null;
+        Resolution.State == GameLibrary.ChoiceState.Honoured ? Resolution.Chosen : null;
 
     /// <summary>A choice was made and the install behind it is no longer there.</summary>
-    public bool ChosenInstallMissing =>
-        _store.LoadLocalState(Id).InstallDirectory is not null && ChosenInstall is null;
+    public bool ChosenInstallMissing => Resolution.State == GameLibrary.ChoiceState.Missing;
 
     public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
 
@@ -845,11 +849,21 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand]
     private void UseStockGame() => ChooseInstall(null);
 
-    public string InstallChoiceLine => ChosenInstallMissing
-        ? "The install this pack was set to use is gone; it will run the stock game instead."
-        : ResolvedInstall is { IsVariant: true } v
-            ? $"Running with {v.Variant}."
-            : "";
+    public string InstallChoiceLine => Resolution switch
+    {
+        { State: GameLibrary.ChoiceState.Missing } =>
+            "The install this pack was set to use is gone; it will run the stock game instead.",
+
+        // Named on both sides, because the fix depends on knowing which is which: either
+        // retarget the pack back, or build this version.
+        { State: GameLibrary.ChoiceState.WrongVersion, Chosen: { } c } =>
+            $"{c.Describe} is for {c.Version}, and this pack now targets "
+            + $"{Manifest.GameVersion} — it will run the stock game.",
+
+        { Install: { IsVariant: true } v } => $"Running with {v.Variant}.",
+
+        _ => "",
+    };
 
     /// <summary>
     /// Picks the install this pack launches with. Null clears it, which is not the same as

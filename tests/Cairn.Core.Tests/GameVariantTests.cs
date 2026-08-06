@@ -186,4 +186,90 @@ public class GameVariantTests : IDisposable
         Assert.Single(installed);
         Assert.True(installed[0].IsVariant);
     }
+
+    // ---- a pack's recorded choice, against a version that can move ----
+
+    /// <summary>
+    /// A choice is a directory and a pack's game version is not fixed, so the two can come
+    /// apart. When they do the choice must stop applying: the pack's mods were resolved
+    /// against the version it now targets, and a client nothing in it was chosen for is
+    /// exactly what variants exist to prevent.
+    /// </summary>
+    /// <summary>
+    /// A variant whose reported version is the directory's name.
+    ///
+    /// Planted outside the store, because the store names its directories by version and
+    /// two installs cannot share one name. That is also how a real variant reaches this:
+    /// by a path recorded in a pack, not by being listed.
+    /// </summary>
+    private string Elsewhere(string version, string variant)
+    {
+        var dir = Path.Combine(_root, "elsewhere", version);
+        Directory.CreateDirectory(dir);
+
+        File.WriteAllText(Path.Combine(dir, OperatingSystem.IsWindows()
+            ? "Vintagestory.exe" : "Vintagestory"), "");
+        File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker), variant);
+
+        return dir;
+    }
+
+    [Fact]
+    public void A_choice_for_another_version_is_ignored_rather_than_honoured()
+    {
+        var stock = Install("1.22.4");
+        var variant = Elsewhere("1.22.5", "Optimum");
+
+        var library = new GameLibrary(new GameStore(_root), null);
+
+        var resolved = library.ResolveFor("1.22.4", variant);
+
+        Assert.Equal(GameLibrary.ChoiceState.WrongVersion, resolved.State);
+        Assert.Equal(stock, resolved.Install?.Directory);
+
+        // Reported rather than erased, so retargeting back picks it up again — nobody
+        // should lose a twenty-minute build by trying another version for a minute.
+        Assert.NotNull(resolved.Chosen);
+        Assert.Equal("Optimum", resolved.Chosen.Variant);
+    }
+
+    [Fact]
+    public void A_choice_for_this_version_is_honoured()
+    {
+        Install("1.22.5");
+        var variant = Elsewhere("1.22.5", "Optimum");
+
+        var resolved = new GameLibrary(new GameStore(_root), null).ResolveFor("1.22.5", variant);
+
+        Assert.Equal(GameLibrary.ChoiceState.Honoured, resolved.State);
+        Assert.Equal(variant, resolved.Install?.Directory);
+        Assert.True(resolved.Install!.IsVariant);
+    }
+
+    [Fact]
+    public void A_choice_whose_directory_has_gone_falls_back_and_is_reported()
+    {
+        var stock = Install("1.22.5");
+
+        var resolved = new GameLibrary(new GameStore(_root), null)
+            .ResolveFor("1.22.5", Path.Combine(_root, "deleted-build"));
+
+        Assert.Equal(GameLibrary.ChoiceState.Missing, resolved.State);
+        Assert.Equal(stock, resolved.Install?.Directory);
+        Assert.Null(resolved.Chosen);
+    }
+
+    [Fact]
+    public void No_choice_follows_the_stock_install()
+    {
+        var stock = Install("1.22.5");
+        Install("1.22.5-optimum", "Optimum");
+
+        var resolved = new GameLibrary(new GameStore(_root), null).ResolveFor("1.22.5", null);
+
+        // Never the variant: it runs because somebody said so, and nobody has.
+        Assert.Equal(GameLibrary.ChoiceState.None, resolved.State);
+        Assert.Equal(stock, resolved.Install?.Directory);
+    }
 }
