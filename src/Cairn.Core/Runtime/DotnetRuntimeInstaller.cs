@@ -121,9 +121,8 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         return $"linux-{cpu}";
     }
 
-    /// <summary>Latest patch of the given major, for the given rid.</summary>
-    public async Task<DotnetRuntimeRelease> ResolveAsync(
-        int major, string rid, CancellationToken ct = default)
+    /// <summary>The published release list for one major, newest first.</summary>
+    private async Task<ChannelReleases> LoadChannelAsync(int major, CancellationToken ct)
     {
         var index = await http.GetFromJsonAsync<ReleasesIndex>(ReleasesIndexUrl, Json, ct)
                         .ConfigureAwait(false)
@@ -135,9 +134,46 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         if (channel?.ReleasesJson is null)
             throw new DotnetRuntimeException($"No .NET {major} channel is published.");
 
-        var releases = await http.GetFromJsonAsync<ChannelReleases>(channel.ReleasesJson, Json, ct)
-                           .ConfigureAwait(false)
-                       ?? throw new DotnetRuntimeException($"Could not read the .NET {major} channel.");
+        return await http.GetFromJsonAsync<ChannelReleases>(channel.ReleasesJson, Json, ct)
+                   .ConfigureAwait(false)
+               ?? throw new DotnetRuntimeException($"Could not read the .NET {major} channel.");
+    }
+
+    /// <summary>
+    /// Latest SDK of the given major, for the given rid.
+    ///
+    /// Needed because building Optimum means running <c>dotnet build</c>, and Cairn's
+    /// private .NET is a runtime — it can host the game but cannot compile anything. Rather
+    /// than making a compiler toolchain a prerequisite the user must go and satisfy, this
+    /// fetches one the same way the runtime is fetched.
+    /// </summary>
+    public async Task<DotnetRuntimeRelease> ResolveSdkAsync(
+        int major, string rid, CancellationToken ct = default)
+    {
+        var releases = await LoadChannelAsync(major, ct).ConfigureAwait(false);
+
+        var sdk = releases.Releases.FirstOrDefault()?.Sdk
+                  ?? throw new DotnetRuntimeException($"No SDK listed for .NET {major}.");
+
+        // Named for the same reason the runtime asset is named below: an rid lists several
+        // archives and the first is not the one wanted.
+        var file = sdk.Files.FirstOrDefault(f =>
+            string.Equals(f.Rid, rid, StringComparison.OrdinalIgnoreCase)
+            && ArchiveExtractor.IsSupported(f.Name)
+            && f.Name.StartsWith("dotnet-sdk", StringComparison.OrdinalIgnoreCase));
+
+        if (file?.Url is null)
+            throw new DotnetRuntimeException(
+                $".NET SDK {sdk.Version} publishes no archive for {rid}.");
+
+        return new DotnetRuntimeRelease(sdk.Version, rid, file.Url, file.Hash);
+    }
+
+    /// <summary>Latest patch of the given major, for the given rid.</summary>
+    public async Task<DotnetRuntimeRelease> ResolveAsync(
+        int major, string rid, CancellationToken ct = default)
+    {
+        var releases = await LoadChannelAsync(major, ct).ConfigureAwait(false);
 
         // releases[0] is the newest; its runtime is what latest-runtime refers to.
         var runtime = releases.Releases.FirstOrDefault()?.Runtime
@@ -288,6 +324,9 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
     private sealed class ReleaseEntry
     {
         [JsonPropertyName("runtime")] public RuntimeEntry? Runtime { get; set; }
+
+        // Same shape as the runtime entry — a version and a file list.
+        [JsonPropertyName("sdk")] public RuntimeEntry? Sdk { get; set; }
     }
 
     private sealed class RuntimeEntry
