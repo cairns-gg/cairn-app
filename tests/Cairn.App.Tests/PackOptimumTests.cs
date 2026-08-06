@@ -143,9 +143,9 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void A_new_install_refreshes_the_picker_too()
+    public void A_new_install_refreshes_what_the_pack_runs_with()
     {
-        // Same staleness, the other direction: the install choices are derived from the
+        // Same staleness, the other direction: what a pack runs with is derived from the
         // library, and nothing told the view when that changed either.
         var (_, _, detail) = Open(Supported);
 
@@ -154,9 +154,9 @@ public class PackOptimumTests : IDisposable
 
         detail.RefreshGameState();
 
-        Assert.Contains(nameof(detail.InstallChoices), changed);
-        Assert.Contains(nameof(detail.HasInstallChoice), changed);
-        Assert.Contains(nameof(detail.SelectedInstall), changed);
+        Assert.Contains(nameof(detail.InstallChoiceLine), changed);
+        Assert.Contains(nameof(detail.CanUseOptimum), changed);
+        Assert.Contains(nameof(detail.IsUsingVariant), changed);
     }
 
     [AvaloniaFact]
@@ -270,46 +270,40 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void The_picker_offers_the_same_objects_it_reports_as_selected()
-    {
-        Install($"{Supported}-optimum", "Optimum");
-        Install(Supported);
-
-        var (_, _, detail) = Open(Supported);
-
-        // GameInstall compares by reference, and this list used to be rebuilt from disk on
-        // every read — so the install SelectedInstall returned was never one the picker was
-        // holding, and the box rendered blank with entries in it.
-        Assert.Same(detail.InstallChoices, detail.InstallChoices);
-
-        if (detail.SelectedInstall is { } selected)
-            Assert.Contains(selected, detail.InstallChoices);
-    }
-
-    [AvaloniaFact]
-    public void Refreshing_rebuilds_the_choices_rather_than_serving_a_stale_list()
-    {
-        var (_, _, detail) = Open(Supported);
-
-        var before = detail.InstallChoices;
-        detail.RefreshGameState();
-
-        // Cached, but only until something could have changed it — otherwise an install
-        // that just finished downloading would never appear.
-        Assert.NotSame(before, detail.InstallChoices);
-    }
-
-    [AvaloniaFact]
-    public void An_install_describes_itself_for_the_picker()
+    public void A_built_client_can_be_switched_on_and_off_again()
     {
         Install($"{Supported}-optimum", "Optimum");
 
         var (_, _, detail) = Open(Supported);
 
-        // Bound by the view. As a method it could not be bound at all, and every row
-        // rendered as "Cairn.Core.GameInstall".
-        foreach (var install in detail.InstallChoices)
-            Assert.False(string.IsNullOrWhiteSpace(install.Describe));
+        // Built but not in use: the panel offers using it rather than making it again.
+        Assert.False(detail.CanBuildOptimum);
+        Assert.True(detail.CanUseOptimum);
+        Assert.False(detail.IsUsingVariant);
+
+        detail.UseOptimumCommand.Execute(null);
+
+        Assert.True(detail.IsUsingVariant);
+        Assert.False(detail.CanUseOptimum);
+        Assert.Contains("Optimum", detail.InstallChoiceLine);
+
+        // And back. Without this, running a modified client would be a decision nothing on
+        // screen could undo.
+        detail.UseStockGameCommand.Execute(null);
+
+        Assert.False(detail.IsUsingVariant);
+        Assert.True(detail.CanUseOptimum);
+        Assert.Null(Store.LoadLocalState("anego").InstallDirectory);
+    }
+
+    [AvaloniaFact]
+    public void The_panel_is_absent_where_optimum_does_not_apply()
+    {
+        // Most packs. An advanced option that is simply not there beats one that is there
+        // and does nothing.
+        var (_, _, detail) = Open("1.20.0");
+
+        Assert.False(detail.HasOptimumPanel);
     }
 
     [AvaloniaFact]

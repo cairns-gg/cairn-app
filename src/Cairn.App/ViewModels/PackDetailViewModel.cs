@@ -808,52 +808,42 @@ public partial class PackDetailViewModel : ViewModelBase
     public bool ChosenInstallMissing =>
         _store.LoadLocalState(Id).InstallDirectory is not null && ChosenInstall is null;
 
-    private IReadOnlyList<GameInstall>? _installChoices;
+    public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
+
+    /// <summary>The Optimum build for this pack's version, if one has been made.</summary>
+    private GameInstall? OptimumInstall =>
+        OptimumSource.Pinned.Supports(Manifest.GameVersion)
+            ? GameInstall.TryAt(_library.Store.InstallDir(OptimumSource.Pinned.InstallName))
+            : null;
+
+    /// <summary>Whether this pack is currently set to run something other than the stock game.</summary>
+    public bool IsUsingVariant => ResolvedInstall is { IsVariant: true };
 
     /// <summary>
-    /// Every install this pack could run, stock first. See GameLibrary.ChoicesFor.
+    /// A built client is available and this pack is not using it.
     ///
-    /// Held rather than recomputed on every read, and that is a correctness matter rather
-    /// than a saving. GameInstall is a class, so it compares by reference, and every read
-    /// of this used to walk the disk and build new objects — so the one
-    /// <see cref="SelectedInstall"/> returned was never among the ones the picker was
-    /// holding, and the box rendered empty however many installs were in it. Cleared by
-    /// <see cref="RefreshGameState"/>, which is what already runs whenever the answer can
-    /// have changed.
+    /// The other half of <see cref="CanBuildOptimum"/>: between them the panel offers
+    /// exactly one action at a time — make it, use it, or stop using it. It replaced a
+    /// picker listing every install, which asked somebody to choose from a list that on
+    /// almost every machine has two entries and one obvious answer.
     /// </summary>
-    public IReadOnlyList<GameInstall> InstallChoices =>
-        _installChoices ??= _library.ChoicesFor(Manifest.GameVersion);
+    public bool CanUseOptimum => OptimumInstall is not null && !IsUsingVariant;
 
-    /// <summary>
-    /// Offered only where there is a real choice to make — and where one has been made and
-    /// gone wrong.
-    ///
-    /// That last case is not symmetry for its own sake. The note about a missing install
-    /// lives inside this panel, so without it the picker and the explanation vanish
-    /// together the moment the build behind them is deleted, leaving a pack that quietly
-    /// reverted to the stock game with nothing on screen saying so or letting it be fixed.
-    /// </summary>
-    public bool HasInstallChoice =>
-        InstallChoices.Count > 1 || ChosenInstall is not null || ChosenInstallMissing;
-
-    /// <summary>
-    /// Bound to the picker. Writing it records the choice; the setter is where that happens
-    /// rather than a command, because a combo box has no other way to say what was picked.
-    /// </summary>
-    public GameInstall? SelectedInstall
+    /// <summary>Points this pack at the built client.</summary>
+    [RelayCommand]
+    private void UseOptimum()
     {
-        get => InstallChoices.FirstOrDefault(
-                   i => string.Equals(i.Directory, ResolvedInstall?.Directory,
-                       StringComparison.OrdinalIgnoreCase))
-               ?? InstallChoices.FirstOrDefault();
-        set
-        {
-            if (value is null || value.Directory == ChosenInstall?.Directory) return;
-            ChooseInstall(value);
-        }
+        if (OptimumInstall is { } install) ChooseInstall(install);
     }
 
-    public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
+    /// <summary>
+    /// Puts this pack back on the stock game.
+    ///
+    /// Its own command rather than a value in a list, and it must exist: without it,
+    /// choosing a modified client would be a decision nothing on screen could undo.
+    /// </summary>
+    [RelayCommand]
+    private void UseStockGame() => ChooseInstall(null);
 
     public string InstallChoiceLine => ChosenInstallMissing
         ? "The install this pack was set to use is gone; it will run the stock game instead."
@@ -925,6 +915,15 @@ public partial class PackDetailViewModel : ViewModelBase
             : "";
 
     public bool HasBuildOptimumBlockedNote => !string.IsNullOrEmpty(BuildOptimumBlockedNote);
+
+    /// <summary>
+    /// Whether the optimised-client panel has anything to say at all.
+    ///
+    /// False on every pack targeting a version Optimum is not for, which is most of them —
+    /// and the panel disappearing entirely is the point: it is an advanced option, not a
+    /// setting everybody has to have an opinion about.
+    /// </summary>
+    public bool HasOptimumPanel => CanBuildOptimum || CanUseOptimum || IsUsingVariant;
 
     /// <summary>
     /// Builds Optimum, then points this pack at it.
@@ -1409,10 +1408,6 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public void RefreshGameState()
     {
-        // Dropped before anything is notified, so every getter below rebuilds from disk
-        // and the picker's items and its selection come from the same objects.
-        _installChoices = null;
-
         OnPropertyChanged(nameof(ResolvedInstall));
         OnPropertyChanged(nameof(IsProvisioning));
         OnPropertyChanged(nameof(CanLaunch));
@@ -1420,13 +1415,13 @@ public partial class PackDetailViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(ChosenInstall));
         OnPropertyChanged(nameof(ChosenInstallMissing));
-        OnPropertyChanged(nameof(InstallChoices));
-        OnPropertyChanged(nameof(HasInstallChoice));
         OnPropertyChanged(nameof(InstallChoiceLine));
         OnPropertyChanged(nameof(HasInstallNote));
-        OnPropertyChanged(nameof(SelectedInstall));
 
         OnPropertyChanged(nameof(CanBuildOptimum));
+        OnPropertyChanged(nameof(CanUseOptimum));
+        OnPropertyChanged(nameof(IsUsingVariant));
+        OnPropertyChanged(nameof(HasOptimumPanel));
         NotifyPendingVersionChanged();
     }
 

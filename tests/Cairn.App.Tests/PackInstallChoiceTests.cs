@@ -14,6 +14,9 @@ namespace Cairn.App.Tests;
 /// Core already refuses to return one from any automatic path; this is the other half —
 /// that the launcher records a choice, honours it, and copes when the build behind it goes
 /// away without leaving a pack that will not start and will not say why.
+///
+/// The choice is made by the Optimum panel's buttons rather than a list of installs; see
+/// PackOptimumTests for that. What is held here is what the choice means once recorded.
 /// </summary>
 [Collection(AvaloniaTests.Collection)]
 public class PackInstallChoiceTests : IDisposable
@@ -79,7 +82,7 @@ public class PackInstallChoiceTests : IDisposable
 
         Assert.Null(detail.ChosenInstall);
         Assert.False(detail.ChosenInstallMissing);
-        Assert.False(detail.HasInstallChoice);
+        Assert.False(detail.HasInstallNote);
         Assert.Equal("", detail.InstallChoiceLine);
     }
 
@@ -133,11 +136,11 @@ public class PackInstallChoiceTests : IDisposable
         Directory.Delete(optimum, recursive: true);
 
         // Nobody deletes a build and connects it to a pack refusing to start, so this
-        // reports rather than failing — and the picker is still offered, because the pack
-        // is still carrying a choice that needs changing.
+        // reports rather than failing — and it has to be said out loud, because the pack
+        // silently reverting to the stock game is otherwise invisible.
         Assert.True(detail.ChosenInstallMissing);
         Assert.Null(detail.ChosenInstall);
-        Assert.True(detail.HasInstallChoice);
+        Assert.True(detail.HasInstallNote);
         Assert.Contains("gone", detail.InstallChoiceLine);
     }
 }

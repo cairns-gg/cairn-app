@@ -628,56 +628,58 @@
                             </StackPanel>
 
                             <!--
-                                Only where there is a choice. Almost every pack has one
-                                install for its version, and a picker with a single entry
-                                is a question nobody was asked.
+                                What this pack runs, when it is not simply the stock game.
+                                A sentence rather than a picker: there is one modified
+                                client Cairn can produce, so listing every install asked
+                                somebody to choose from two entries with one obvious answer.
                             -->
-                            <StackPanel Spacing="6"
-                                        IsVisible="{Binding Detail.HasInstallChoice, FallbackValue=False}">
-                                <TextBlock Text="Run with" FontSize="12" Opacity="0.7" />
-                                <!--
-                                    Templated, or each row renders as the type name: a
-                                    GameInstall is a plain class and its ToString is the
-                                    default one. Describe() is the same "1.22.5 (Optimum)"
-                                    the CLI and the diagnostics report use.
-                                -->
-                                <ComboBox x:Name="InstallChoice" MinWidth="220"
-                                          ItemsSource="{Binding Detail.InstallChoices}"
-                                          SelectedItem="{Binding Detail.SelectedInstall, Mode=TwoWay}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="core:GameInstall">
-                                            <TextBlock Text="{Binding Describe}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Text="{Binding Detail.InstallChoiceLine}"
-                                           FontSize="11" TextWrapping="Wrap"
-                                           IsVisible="{Binding Detail.HasInstallNote}"
-                                           Foreground="{DynamicResource VsWarningBrush}" />
-                            </StackPanel>
+                            <TextBlock x:Name="InstallNote"
+                                       Text="{Binding Detail.InstallChoiceLine}"
+                                       FontSize="11" TextWrapping="Wrap"
+                                       IsVisible="{Binding Detail.HasInstallNote, FallbackValue=False}"
+                                       Foreground="{DynamicResource VsWarningBrush}" />
 
                             <!--
-                                Offered only for the one game version Optimum targets, and
-                                only until it exists. It sits by the install picker because
-                                that is what it produces: another thing to run this pack with.
+                                One action at a time: make it, use it, or stop using it.
+                                Gone entirely on the versions Optimum is not for, which is
+                                most of them — this is an advanced option rather than a
+                                setting everybody needs an opinion about.
                             -->
                             <StackPanel Spacing="6"
-                                        IsVisible="{Binding Detail.CanBuildOptimum, FallbackValue=False}">
+                                        IsVisible="{Binding Detail.HasOptimumPanel, FallbackValue=False}">
                                 <TextBlock Text="Optimised client" FontSize="12" Opacity="0.7" />
+
                                 <Button x:Name="BuildOptimum"
                                         Content="{Binding Detail.BuildOptimumLabel}"
+                                        IsVisible="{Binding Detail.CanBuildOptimum}"
                                         Command="{Binding Detail.BuildOptimumCommand}"
                                         HorizontalAlignment="Left" Padding="12,5" />
 
-                                <!-- Which version a build would be for, while the picker
-                                     shows another. Disabled without this is a mystery. -->
+                                <Button x:Name="UseOptimum" Content="Use Optimum"
+                                        IsVisible="{Binding Detail.CanUseOptimum}"
+                                        Command="{Binding Detail.UseOptimumCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+
+                                <!-- Without this, running a modified client would be a
+                                     decision nothing on screen could undo. -->
+                                <Button x:Name="UseStockGame" Content="Use the stock game"
+                                        IsVisible="{Binding Detail.IsUsingVariant}"
+                                        Command="{Binding Detail.UseStockGameCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+
+                                <!-- Which version a build would be for, while the version
+                                     picker shows another. Disabled without this is a
+                                     mystery. -->
                                 <TextBlock x:Name="BuildOptimumBlocked"
                                            Text="{Binding Detail.BuildOptimumBlockedNote}"
                                            IsVisible="{Binding Detail.HasBuildOptimumBlockedNote}"
                                            FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource VsWarningBrush}" />
 
+                                <!-- Only while it is a thing to make. Once it exists, the
+                                     cost has been paid and describing it again is noise. -->
                                 <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
+                                           IsVisible="{Binding Detail.CanBuildOptimum}"
                                            Text="Compiles a faster community build of the game on this machine. Takes a while and needs several GB." />
                             </StackPanel>
 
