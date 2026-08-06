@@ -56,7 +56,22 @@ public sealed class GameStore
         if (GameVersions.IsPlausibleVersion(install.Version)) return install;
 
         var name = Path.GetFileName(dir);
-        if (!GameVersions.IsPlausibleVersion(name)) return install;
+
+        if (!GameVersions.IsPlausibleVersion(name))
+        {
+            // Cairn names a variant's directory "<version>-<label>" — "1.22.5-optimum".
+            // The whole name is deliberately not a plausible version, because "optimum" is
+            // not a release kind, but the part in front of the label is one and this store
+            // is what wrote it. Without this a variant whose metadata could not be read
+            // reports no version at all, so no pack matches it and the choice is quietly
+            // discarded as being for something else.
+            var dash = name.IndexOf('-');
+            var prefix = dash > 0 ? name[..dash] : null;
+
+            if (prefix is null || !GameVersions.IsPlausibleVersion(prefix)) return install;
+
+            name = prefix;
+        }
 
         return new GameInstall
         {
@@ -65,8 +80,24 @@ public sealed class GameStore
             Version = name,
             Architecture = install.Architecture,
             RequiredFramework = install.RequiredFramework,
+
+            // Carried, emphatically. Rebuilding the install without this turns a modified
+            // client whose metadata could not be read into one indistinguishable from the
+            // stock game — which is the single outcome the variant marker exists to make
+            // impossible, arrived at by an unrelated fallback.
+            Variant = install.Variant,
         };
     }
+
+    /// <summary>
+    /// The install in a directory, named the way <see cref="ListInstalled"/> names one.
+    ///
+    /// Used wherever a directory is looked up by path rather than found by listing — a
+    /// pack's recorded choice, most of all — so that the same install does not report one
+    /// version when listed and another when addressed.
+    /// </summary>
+    public GameInstall? At(string directory) =>
+        GameInstall.TryAt(directory) is { } install ? Named(install, directory) : null;
 
     /// <summary>A managed install whose reported version matches, or null.</summary>
     public GameInstall? Find(string version)
@@ -173,5 +204,59 @@ public sealed class GameLibrary(GameStore store, GameInstall? system)
     }
 
     /// <summary>The install in a particular directory, whatever it is. Null if not one.</summary>
-    public GameInstall? At(string directory) => GameInstall.TryAt(directory);
+    public GameInstall? At(string directory) => store.At(directory);
+
+    /// <summary>What became of a pack's recorded install choice.</summary>
+    public enum ChoiceState
+    {
+        /// <summary>Nothing was recorded; the pack follows the stock install.</summary>
+        None,
+
+        /// <summary>The recorded install is there and is for this pack's version.</summary>
+        Honoured,
+
+        /// <summary>Something was recorded and the directory is no longer an install.</summary>
+        Missing,
+
+        /// <summary>The recorded install is for a different game version than the pack.</summary>
+        WrongVersion,
+    }
+
+    /// <param name="Install">What the pack will actually launch, stock or otherwise.</param>
+    /// <param name="State">Why, so a front-end can say so rather than silently differ.</param>
+    /// <param name="Chosen">The recorded install, when it is real — even if unusable here.</param>
+    public sealed record InstallResolution(
+        GameInstall? Install, ChoiceState State, GameInstall? Chosen = null);
+
+    /// <summary>
+    /// The install a pack runs: its recorded choice when that still fits, otherwise the
+    /// stock install for its version.
+    ///
+    /// The version check is the whole reason this exists rather than each front-end reading
+    /// the recorded path. A choice is a directory, and a pack's game version can move after
+    /// it was made — so a pack that chose the 1.22.5 Optimum build and then retargeted
+    /// 1.22.4 went on launching 1.22.5, which is precisely the "a variant silently
+    /// satisfying every pack that asks for a version" outcome that variants are constructed
+    /// to prevent. Worse, the pack's mods were resolved against the version it now targets,
+    /// so nothing in it was chosen for the client it was still running.
+    ///
+    /// A mismatched choice is ignored rather than erased, so retargeting back to the
+    /// version it was made for picks it up again. Somebody trying two game versions should
+    /// not lose the client they spent twenty minutes building.
+    /// </summary>
+    public InstallResolution ResolveFor(string version, string? chosenDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(chosenDirectory))
+            return new InstallResolution(ForVersion(version), ChoiceState.None);
+
+        var chosen = store.At(chosenDirectory);
+
+        if (chosen is null)
+            return new InstallResolution(ForVersion(version), ChoiceState.Missing);
+
+        if (!string.Equals(chosen.Version, version, StringComparison.OrdinalIgnoreCase))
+            return new InstallResolution(ForVersion(version), ChoiceState.WrongVersion, chosen);
+
+        return new InstallResolution(chosen, ChoiceState.Honoured, chosen);
+    }
 }

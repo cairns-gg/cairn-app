@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.OptimumBuildWindow"
+        x:DataType="vm:OptimumBuildViewModel"
+        Title="{Binding Title}"
+        Width="560" SizeToContent="Height"
+        MinHeight="200" MaxHeight="640"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <DockPanel Margin="18" LastChildFill="True">
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}"
+                   FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                   Margin="0,0,0,10" />
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    Spacing="8" Margin="0,14,0,0">
+            <!-- One button that changes meaning: while it runs the only useful action is
+                 stopping, and afterwards the only one is leaving. -->
+            <Button Name="StopButton" Content="Stop" Padding="16,5"
+                    IsVisible="{Binding IsRunning}"
+                    Command="{Binding CancelCommand}" />
+            <Button Name="CloseButton" Content="Close" Padding="16,5"
+                    Classes="accent" IsVisible="{Binding IsFinished}"
+                    Click="OnClose" IsCancel="True" />
+        </StackPanel>
+
+        <StackPanel Spacing="10">
+
+            <!-- What is happening, always. The bootstrap runs for most of the build without
+                 reporting anything, so this line is the only thing distinguishing working
+                 from hung. -->
+            <TextBlock Name="PhaseText" Text="{Binding Detail}"
+                       FontSize="12" TextWrapping="Wrap" />
+
+            <ProgressBar Name="Progress"
+                         Minimum="0" Maximum="1" Value="{Binding Fraction}"
+                         IsIndeterminate="{Binding IsIndeterminate}"
+                         IsVisible="{Binding IsRunning}"
+                         Height="4" />
+
+            <TextBlock Name="ErrorText" Text="{Binding Error}"
+                       IsVisible="{Binding Failed}"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsWarningBrush}" />
+
+            <!-- Collapsed by default: the log is reassurance for anybody who wants it, not
+                 the thing being communicated. A failure opens it, because then it is. -->
+            <Expander Name="LogExpander" Header="Show build log"
+                      IsExpanded="{Binding LogExpanded}">
+                <ScrollViewer Name="LogScroller" Height="260"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                    <ItemsControl Name="LogLines" ItemsSource="{Binding Log}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="monospace"
+                                           FontSize="11" TextWrapping="NoWrap" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Expander>
+
+            <TextBlock Name="LogPathText" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                       IsVisible="{Binding Failed}"
+                       Text="{Binding LogPath, StringFormat='The full log is at {0}'}" />
+        </StackPanel>
+    </DockPanel>
+</Window>

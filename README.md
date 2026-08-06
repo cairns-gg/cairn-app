@@ -393,11 +393,77 @@ that would not otherwise start but cannot break one that already works. Sources 
 Microsoft's public release metadata (`releases-index.json` → per-channel `releases.json`),
 which publishes a SHA512 per file.
 
+### Optimised clients, built on the machine
+
+[Optimum](https://mods.vintagestory.at/optimum) is not a mod. It is a fork of the client,
+distributed as ~95 patches that have to be applied to a *decompiled* copy of the game and
+recompiled — a procedure well beyond what most players will do, and the reason it is far
+less used than its performance would justify. Cairn can do it for them:
+
+```
+cairn-cli optimum                   what it would cost, without doing any of it
+cairn-cli optimum build [--yes]     clone, decompile, patch, compile, install
+cairn-cli optimum clean             delete the build tree, keeping the client
+```
+
+or **Build Optimum…** in a pack's Settings tab, which shows the same warning and then a
+window with the live build log.
+
+The warning matters more than it looks. Everything else Cairn installs is a download
+measured in minutes; this is a **15–30 minute compile needing 4–6 GB**, so starting it
+without saying so would be a trick. It can be cancelled at any point, and cancelling
+leaves packs and existing installs untouched.
+
+Four things about this are deliberate:
+
+- **Optimum's own scripts do the work.** Cairn drives `bootstrap`, `dotnet build` and the
+  platform packager rather than reimplementing them. A second implementation of a
+  95-patch bootstrap would only ever prove it agrees with itself, and its failure mode is
+  a client that looks right and is not.
+- **The build is pinned to a commit**, not a branch — Cairn builds the revision that was
+  actually tested, so somebody else's push cannot turn into a Cairn feature that stopped
+  working. The pin carries the game version with it, because Optimum targets exactly one
+  Vintage Story version at a time.
+- **Cairn cannot install the prerequisites**, so it names all of them at once with a
+  reason and a command each. Windows needs only Git (`bootstrap.ps1` implements every
+  fixup natively); Linux and macOS additionally need perl, python3, curl and tar. A .NET
+  SDK is *not* a prerequisite — Cairn fetches a private one the same way it fetches a
+  private runtime.
+- **The result is a variant, and a variant never runs by accident.** See below.
+
+### A modified client only runs because you said so
+
+A fork reports the version it was forked from, so it is indistinguishable from the real
+game by metadata alone. An Optimum build of 1.22.5 answers "is 1.22.5 installed?" exactly
+as the stock game does — and would then be handed silently to every 1.22.5 pack on the
+machine. That is ruled out by construction rather than by care:
+
+- a build marks itself with a `.cairn-variant` file, and no automatic lookup ever returns
+  one — only a choice recorded against a specific pack;
+- the marker names **which executable to run**. Optimum ships a copy of the vanilla client
+  plus its own launcher, byte-identical game binaries and all, and does its patching at
+  startup from that launcher. An install without this runs the stock game while every
+  message says otherwise — which is exactly what happened before the marker carried it;
+- a recorded choice stops applying when the pack's game version moves away from it. The
+  pack's mods were resolved against the version it *now* targets, so a client nothing in
+  it was chosen for is not an override, it is a mismatch;
+- the diagnostics report says which install a pack actually runs, and marks a variant
+  loudly. "The game is behaving oddly" is unanswerable without it.
+
+The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
+another full decompile. It is a few gigabytes idle between pin bumps, hence
+`optimum clean`.
+
 ## Requirements
 
 **Cairn needs nothing installed.** Release builds are self-contained single files, so
 there is no .NET prerequisite — download one binary and run it. A launcher that itself
 required a runtime install could not help a user who has neither.
+
+The one exception is [building an optimised client](#optimised-clients-built-on-the-machine),
+which compiles the game from source and so needs Git — plus perl, python3, curl and tar
+outside Windows. Nothing else in Cairn touches them, and it names whichever are missing
+before it starts rather than failing partway.
 
 **The game does need .NET.** Vintage Story is framework-dependent: its
 `Vintagestory.runtimeconfig.json` asks for `Microsoft.NETCore.App` 10.0.0 and it bundles

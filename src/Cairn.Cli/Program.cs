@@ -1,5 +1,6 @@
 using Cairn.Core;
 using Cairn.Core.Games;
+using Cairn.Core.Games.Optimum;
 using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
@@ -60,6 +61,7 @@ internal static class Program
                 "export" => Export(store, args),
                 "import" => await Import(store, http, args),
                 "games" => await Games(games, http, args),
+                "optimum" => await Optimum(games, runtimes, http, args),
                 "runtimes" => await Runtimes(runtimes, http, args),
                 "pull" => await Pull(store, http, args),
                 "sync" => await Sync(store, moddb, http, args),
@@ -98,6 +100,9 @@ internal static class Program
               cairn-cli games                         list installed and available game versions
               cairn-cli games install <version>       download and install a game version
               cairn-cli games remove <version>        delete an installed game version
+              cairn-cli optimum                       what building the Optimum client would cost
+              cairn-cli optimum build [--yes]         build and install it (long; see the warning)
+              cairn-cli optimum clean                 delete the build tree, keeping the client
               cairn-cli runtimes                      list .NET runtimes Cairn manages
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
@@ -162,14 +167,15 @@ internal static class Program
         return 0;
     }
 
-    /// <summary>The install a pack would launch: its own choice if it has one, else stock.</summary>
-    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id)
-    {
-        if (store.LoadLocalState(id).InstallDirectory is { } dir
-            && GameInstall.TryAt(dir) is { } chosen) return chosen;
-
-        return library.ForVersion(store.Load(id).GameVersion);
-    }
+    /// <summary>
+    /// The install a pack would launch: its own choice if it has one and that still fits,
+    /// else stock. See GameLibrary.ResolveFor — a recorded choice stops applying when the
+    /// pack's game version moves away from it.
+    /// </summary>
+    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id) =>
+        library.ResolveFor(
+            store.Load(id).GameVersion,
+            store.LoadLocalState(id).InstallDirectory).Install;
 
     private static int Info()
     {
@@ -401,7 +407,7 @@ internal static class Program
         // the version it was told not to use.
         if (ArgValue(args, "--install") is not null && install is not null
             && !string.Equals(install.Version, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
-            return Fail($"'{install.Directory}' is {install.Describe()}, but '{id}' targets "
+            return Fail($"'{install.Directory}' is {install.Describe}, but '{id}' targets "
                         + $"{manifest.GameVersion}. Retarget the pack, or point it at a "
                         + $"{manifest.GameVersion} build.");
 
@@ -565,7 +571,7 @@ internal static class Program
         foreach (var i in installed)
             // Describe rather than Version: two entries both reading "1.22.5" with nothing
             // to tell them apart is a puzzle, and one of them may not be the game.
-            Console.WriteLine($"  {i.Describe(),-24} {i.Architecture,-6} needs .NET {i.RequiredFramework}"
+            Console.WriteLine($"  {i.Describe,-24} {i.Architecture,-6} needs .NET {i.RequiredFramework}"
                               + (i.IsVariant ? $"   ({Path.GetFileName(i.Directory)})" : ""));
 
         var system = GameInstall.TryLocate();
@@ -747,6 +753,105 @@ internal static class Program
                           + $"({manifest.Mods.Count} mods, {pinned} pinned, {how})");
         Console.WriteLine($"  sync it with: cairn-cli sync {manifest.Id}");
         return 0;
+    }
+
+    /// <summary>
+    /// Building the Optimum client.
+    ///
+    /// Prints the same plan the launcher shows in its confirmation, because the cost is the
+    /// decision: this is a twenty-minute compile of a game client, and every other thing
+    /// Cairn installs is a download. With no arguments it only reports, so somebody can see
+    /// what it would take without starting anything.
+    /// </summary>
+    private static async Task<int> Optimum(
+        GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
+    {
+        var provisioner = new OptimumProvisioner(http, games, runtimes);
+        var source = OptimumSource.Pinned;
+        var plan = provisioner.Plan(source.GameVersion, source);
+
+        var action = args.Length > 1 ? args[1] : "plan";
+
+        if (action == "plan")
+        {
+            Console.WriteLine(plan.Describe());
+
+            if (plan.AlreadyBuilt)
+                Console.WriteLine($"\nAlready built: {games.InstallDir(source.InstallName)}");
+
+            Console.WriteLine($"\nBuild it with: cairn-cli optimum build");
+            return 0;
+        }
+
+        if (action == "clean")
+        {
+            var freed = provisioner.Clean();
+
+            Console.WriteLine(freed == 0
+                ? "nothing to remove"
+                : $"removed the build tree, freeing {freed / 1024 / 1024} MB");
+
+            // Said plainly, because the two are easy to confuse and only one of them is
+            // the client somebody actually plays.
+            if (plan.AlreadyBuilt)
+                Console.WriteLine("the installed client is untouched; a rebuild will take"
+                                  + " the full time again");
+
+            return 0;
+        }
+
+        if (action != "build")
+            return Fail("usage: cairn-cli optimum [plan|build|clean] [--yes]");
+
+        if (!plan.CanStart) return Fail(plan.Describe());
+
+        if (plan.AlreadyBuilt && !args.Contains("--force"))
+        {
+            Console.WriteLine($"Optimum is already installed at {games.InstallDir(source.InstallName)}");
+            Console.WriteLine("Rebuild it with --force.");
+            return 0;
+        }
+
+        Console.WriteLine(plan.Describe());
+
+        // A CLI cannot show a dialog, so it says what it is about to do and waits — unless
+        // it is being scripted, which is what --yes is for.
+        if (!args.Contains("--yes"))
+        {
+            Console.Write("\nStart the build? [y/N] ");
+            var answer = Console.ReadLine()?.Trim();
+
+            if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
+                return Fail("cancelled");
+        }
+
+        // Ctrl-C stops the build rather than killing the CLI out from under it, so a
+        // half-written install is cleaned up by the same path a cancel in the launcher uses.
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        var progress = new Progress<OptimumStep>(s =>
+            Console.WriteLine($"[{s.Phase}] {s.Detail}"));
+
+        // Straight to stdout: on a terminal the live log is the progress indicator, and a
+        // twenty-minute silence is indistinguishable from a hang.
+        var log = new Progress<string>(Console.WriteLine);
+
+        var vanilla = games.Find(source.GameVersion) ?? GameInstall.TryLocate();
+        if (vanilla is not null && vanilla.Version != source.GameVersion) vanilla = null;
+
+        try
+        {
+            var install = await provisioner.BuildAsync(source, vanilla, progress, log, cts.Token);
+
+            Console.WriteLine($"\ninstalled {install.Describe} at {install.Directory}");
+            Console.WriteLine($"launch a pack with it: cairn-cli launch <id> --install {install.Directory}");
+            return 0;
+        }
+        catch (OperationCanceledException)
+        {
+            return Fail($"cancelled; the working tree is kept at {provisioner.WorkingTree}");
+        }
     }
 
     private static async Task<int> Runtimes(RuntimeStore store, HttpClient http, string[] args)

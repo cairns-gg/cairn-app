@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Cairn.Core;
 using Cairn.Core.Games;
+using Cairn.Core.Games.Optimum;
 using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
@@ -796,57 +797,73 @@ public partial class PackDetailViewModel : ViewModelBase
     /// not connect it to a pack refusing to start, and <see cref="ChosenInstallMissing"/> is
     /// what says so instead.
     /// </summary>
-    public GameInstall? ResolvedInstall =>
-        ChosenInstall ?? _library.ForVersion(Manifest.GameVersion);
+    public GameInstall? ResolvedInstall => Resolution.Install;
 
-    /// <summary>The install this pack was told to use, if it is still there.</summary>
+    /// <summary>
+    /// What this pack runs and why, answered by Core so the CLI answers it the same way.
+    /// </summary>
+    private GameLibrary.InstallResolution Resolution => _library.ResolveFor(
+        Manifest.GameVersion, _store.LoadLocalState(Id).InstallDirectory);
+
+    /// <summary>The install this pack was told to use, if it is still there and still fits.</summary>
     public GameInstall? ChosenInstall =>
-        _store.LoadLocalState(Id).InstallDirectory is { } dir ? GameInstall.TryAt(dir) : null;
+        Resolution.State == GameLibrary.ChoiceState.Honoured ? Resolution.Chosen : null;
 
     /// <summary>A choice was made and the install behind it is no longer there.</summary>
-    public bool ChosenInstallMissing =>
-        _store.LoadLocalState(Id).InstallDirectory is not null && ChosenInstall is null;
-
-    /// <summary>Every install this pack could run, stock first. See GameLibrary.ChoicesFor.</summary>
-    public IReadOnlyList<GameInstall> InstallChoices =>
-        _library.ChoicesFor(Manifest.GameVersion);
-
-    /// <summary>
-    /// Offered only where there is a real choice to make — and where one has been made and
-    /// gone wrong.
-    ///
-    /// That last case is not symmetry for its own sake. The note about a missing install
-    /// lives inside this panel, so without it the picker and the explanation vanish
-    /// together the moment the build behind them is deleted, leaving a pack that quietly
-    /// reverted to the stock game with nothing on screen saying so or letting it be fixed.
-    /// </summary>
-    public bool HasInstallChoice =>
-        InstallChoices.Count > 1 || ChosenInstall is not null || ChosenInstallMissing;
-
-    /// <summary>
-    /// Bound to the picker. Writing it records the choice; the setter is where that happens
-    /// rather than a command, because a combo box has no other way to say what was picked.
-    /// </summary>
-    public GameInstall? SelectedInstall
-    {
-        get => InstallChoices.FirstOrDefault(
-                   i => string.Equals(i.Directory, ResolvedInstall?.Directory,
-                       StringComparison.OrdinalIgnoreCase))
-               ?? InstallChoices.FirstOrDefault();
-        set
-        {
-            if (value is null || value.Directory == ChosenInstall?.Directory) return;
-            ChooseInstall(value);
-        }
-    }
+    public bool ChosenInstallMissing => Resolution.State == GameLibrary.ChoiceState.Missing;
 
     public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
 
-    public string InstallChoiceLine => ChosenInstallMissing
-        ? "The install this pack was set to use is gone; it will run the stock game instead."
-        : ResolvedInstall is { IsVariant: true } v
-            ? $"Running with {v.Variant}."
-            : "";
+    /// <summary>The Optimum build for this pack's version, if one has been made.</summary>
+    private GameInstall? OptimumInstall =>
+        OptimumSource.Pinned.Supports(Manifest.GameVersion)
+            ? GameInstall.TryAt(_library.Store.InstallDir(OptimumSource.Pinned.InstallName))
+            : null;
+
+    /// <summary>Whether this pack is currently set to run something other than the stock game.</summary>
+    public bool IsUsingVariant => ResolvedInstall is { IsVariant: true };
+
+    /// <summary>
+    /// A built client is available and this pack is not using it.
+    ///
+    /// The other half of <see cref="CanBuildOptimum"/>: between them the panel offers
+    /// exactly one action at a time — make it, use it, or stop using it. It replaced a
+    /// picker listing every install, which asked somebody to choose from a list that on
+    /// almost every machine has two entries and one obvious answer.
+    /// </summary>
+    public bool CanUseOptimum => OptimumInstall is not null && !IsUsingVariant;
+
+    /// <summary>Points this pack at the built client.</summary>
+    [RelayCommand]
+    private void UseOptimum()
+    {
+        if (OptimumInstall is { } install) ChooseInstall(install);
+    }
+
+    /// <summary>
+    /// Puts this pack back on the stock game.
+    ///
+    /// Its own command rather than a value in a list, and it must exist: without it,
+    /// choosing a modified client would be a decision nothing on screen could undo.
+    /// </summary>
+    [RelayCommand]
+    private void UseStockGame() => ChooseInstall(null);
+
+    public string InstallChoiceLine => Resolution switch
+    {
+        { State: GameLibrary.ChoiceState.Missing } =>
+            "The install this pack was set to use is gone; it will run the stock game instead.",
+
+        // Named on both sides, because the fix depends on knowing which is which: either
+        // retarget the pack back, or build this version.
+        { State: GameLibrary.ChoiceState.WrongVersion, Chosen: { } c } =>
+            $"{c.Describe} is for {c.Version}, and this pack now targets "
+            + $"{Manifest.GameVersion} — it will run the stock game.",
+
+        { Install: { IsVariant: true } v } => $"Running with {v.Variant}.",
+
+        _ => "",
+    };
 
     /// <summary>
     /// Picks the install this pack launches with. Null clears it, which is not the same as
@@ -862,12 +879,109 @@ public partial class PackDetailViewModel : ViewModelBase
         _store.SaveLocalState(Id, state);
 
         RefreshGameState();
-        OnPropertyChanged(nameof(ChosenInstall));
-        OnPropertyChanged(nameof(ChosenInstallMissing));
-        OnPropertyChanged(nameof(InstallChoiceLine));
-        OnPropertyChanged(nameof(HasInstallChoice));
-        OnPropertyChanged(nameof(HasInstallNote));
-        OnPropertyChanged(nameof(SelectedInstall));
+    }
+
+    // ---- building a variant ----
+
+    /// <summary>Set by the view; the cost warning, before anything starts.</summary>
+    public Func<ConfirmViewModel, Task<bool>>? Confirm { get; set; }
+
+    /// <summary>Set by the view; shows the build happening and returns whether it worked.</summary>
+    public Func<OptimumBuildViewModel, Task<bool>>? RunOptimumBuild { get; set; }
+
+    /// <summary>
+    /// Whether building Optimum is worth offering for this pack.
+    ///
+    /// Only where it would actually apply: Optimum targets exactly one Vintage Story
+    /// version at a time, so offering it to a pack on any other one is an invitation to
+    /// spend twenty minutes producing a client the pack cannot use. Withdrawn once it is
+    /// built, because from then on it is an install to pick, not a thing to make.
+    /// </summary>
+    public bool CanBuildOptimum =>
+        OptimumSource.Pinned.Supports(Manifest.GameVersion)
+        && OptimumPrereqs.UnsupportedReason() is null
+        // Asked of the install directory rather than of the choices offered for this
+        // version, because the two differ exactly when the build is broken: a half-written
+        // install reports no version, drops out of the picker, and would otherwise leave
+        // this hidden with nothing on screen able to rebuild it.
+        && GameInstall.TryAt(
+            _library.Store.InstallDir(OptimumSource.Pinned.InstallName)) is null;
+
+    public string BuildOptimumLabel => $"Build Optimum {OptimumSource.Pinned.Version}…";
+
+    /// <summary>
+    /// Whether it can be started right now, as opposed to whether it applies to this pack.
+    ///
+    /// Separate from <see cref="CanBuildOptimum"/> so a pending version change disables the
+    /// button rather than hiding it: the panel vanishing the moment somebody touches the
+    /// version picker reads as a bug, and it would come back looking identical whichever
+    /// way the check went. Disabled with a reason says which version the build would be for
+    /// — the one the pack still targets, not the one now showing in the picker.
+    /// </summary>
+    public bool CanBuildOptimumNow =>
+        CanBuildOptimum && !HasPendingGameVersion && !IsCheckingVersion;
+
+    /// <summary>Why the button is greyed, or empty when it is not.</summary>
+    public string BuildOptimumBlockedNote =>
+        CanBuildOptimum && HasPendingGameVersion
+            ? $"Finish the change to {TargetGameVersion} first — a build now would be for "
+              + $"{Manifest.GameVersion}."
+            : "";
+
+    public bool HasBuildOptimumBlockedNote => !string.IsNullOrEmpty(BuildOptimumBlockedNote);
+
+    /// <summary>
+    /// Whether the optimised-client panel has anything to say at all.
+    ///
+    /// False on every pack targeting a version Optimum is not for, which is most of them —
+    /// and the panel disappearing entirely is the point: it is an advanced option, not a
+    /// setting everybody has to have an opinion about.
+    /// </summary>
+    public bool HasOptimumPanel => CanBuildOptimum || CanUseOptimum || IsUsingVariant;
+
+    /// <summary>
+    /// Builds Optimum, then points this pack at it.
+    ///
+    /// The confirmation comes first and states the cost in full, because this is unlike
+    /// everything else Cairn installs: a twenty-minute compile rather than a download. The
+    /// pack is only moved onto the result if it was really built — a cancelled or failed
+    /// build leaves the pack exactly as it was.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanBuildOptimumNow))]
+    private async Task BuildOptimumAsync()
+    {
+        if (Confirm is null || RunOptimumBuild is null) return;
+
+        var provisioner = new OptimumProvisioner(_http, _library.Store, _runtimes);
+        var source = OptimumSource.Pinned;
+        var plan = provisioner.Plan(source.GameVersion, source);
+
+        if (!plan.CanStart)
+        {
+            // Missing tools and a full disk are both things only the person at the machine
+            // can fix, so this reports and stops rather than offering to press on.
+            await Confirm(new ConfirmViewModel(
+                "Optimum cannot be built here", plan.Describe(), "OK"));
+            return;
+        }
+
+        if (!await Confirm(new ConfirmViewModel(
+                "Build Optimum?", plan.Describe(), "Build it")))
+            return;
+
+        // The stock install of the same version, so the packager overlays the client
+        // already on disk instead of downloading a second copy of it.
+        var vanilla = _library.ForVersion(source.GameVersion);
+
+        var build = new OptimumBuildViewModel(provisioner, source, vanilla);
+
+        if (!await RunOptimumBuild(build) || build.Result is null) return;
+
+        _log($"Built {build.Result.Describe}.");
+
+        // Records the choice and re-reads the whole game situation, which is what makes the
+        // new install appear in the picker and this button go away.
+        ChooseInstall(build.Result);
     }
 
     /// <summary>
@@ -1145,10 +1259,19 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange { get; set; }
 
-    public bool CanCheckVersion =>
-        !IsCheckingVersion
-        && !string.IsNullOrWhiteSpace(TargetGameVersion)
+    /// <summary>
+    /// A version has been picked that the pack does not yet target.
+    ///
+    /// The gap between the two is the whole point of the check step: nothing is written
+    /// until it has run, so while this is true the picker says one thing and the pack still
+    /// is another. Anything derived from the game version has to say which of the two it
+    /// means, or act on neither.
+    /// </summary>
+    public bool HasPendingGameVersion =>
+        !string.IsNullOrWhiteSpace(TargetGameVersion)
         && !string.Equals(TargetGameVersion, Manifest.GameVersion, StringComparison.OrdinalIgnoreCase);
+
+    public bool CanCheckVersion => !IsCheckingVersion && HasPendingGameVersion;
 
     partial void OnTargetGameVersionChanged(string? value)
     {
@@ -1156,12 +1279,33 @@ public partial class PackDetailViewModel : ViewModelBase
         VersionChange = null;
         OnPropertyChanged(nameof(CanCheckVersion));
         CheckVersionCommand.NotifyCanExecuteChanged();
+        NotifyPendingVersionChanged();
+
+        if (!HasPendingGameVersion) return;
+
+        // Picking a version starts its check. Nothing is written until the result is
+        // confirmed — that is still the point of the step — but leaving it to a separate
+        // button meant the picker could sit showing a version the pack was not on and had
+        // no intention of moving to, which reads as a setting that did not take.
+        //
+        // Any check already running is for a version nobody is looking at now.
+        CheckVersionCommand.Cancel();
+        CheckVersionCommand.Execute(null);
     }
 
     partial void OnIsCheckingVersionChanged(bool value)
     {
         OnPropertyChanged(nameof(CanCheckVersion));
         CheckVersionCommand.NotifyCanExecuteChanged();
+        NotifyPendingVersionChanged();
+    }
+
+    private void NotifyPendingVersionChanged()
+    {
+        OnPropertyChanged(nameof(HasPendingGameVersion));
+        OnPropertyChanged(nameof(CanBuildOptimumNow));
+        OnPropertyChanged(nameof(BuildOptimumBlockedNote));
+        BuildOptimumCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Fills the picker. Cheap and idempotent; called when the pane is shown.</summary>
@@ -1189,10 +1333,18 @@ public partial class PackDetailViewModel : ViewModelBase
         TargetGameVersion = chosen;
     }
 
+    /// <summary>
+    /// Which check is current. Picking a third version while the second is still resolving
+    /// leaves two in flight, and the older one must not report its answer or clear the
+    /// busy flag out from under the newer.
+    /// </summary>
+    private int _versionCheckGeneration;
+
     [RelayCommand(CanExecute = nameof(CanCheckVersion))]
     private async Task CheckVersion(CancellationToken ct)
     {
         var target = TargetGameVersion!.Trim();
+        var generation = ++_versionCheckGeneration;
 
         IsCheckingVersion = true;
         VersionChange = null;
@@ -1206,6 +1358,8 @@ public partial class PackDetailViewModel : ViewModelBase
                 progress: new Progress<string>(m => CheckingMod = m),
                 ct: ct);
 
+            if (generation != _versionCheckGeneration) return;
+
             var change = new VersionChangeViewModel(plan);
             VersionChange = change;
             _log($"checked {Manifest.GameVersion} -> {target}: {plan.Summary()}");
@@ -1218,16 +1372,30 @@ public partial class PackDetailViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            // Leaving the pane mid-check is not an error.
+            // Leaving the pane mid-check, or picking another version, is not an error.
         }
         catch (Exception e)
         {
+            if (generation != _versionCheckGeneration) return;
+
             Error = e.Message;
+
+            // Put back, because the change did not happen. Not the offline case — failing
+            // to reach ModDB is a verdict on the mods, not an exception — but the
+            // unforeseen one: a lockfile that will not parse, a path that will not read.
+            // With the check started by the picker there is no button left to press again,
+            // and picking the same entry twice raises no change to retry from, so a
+            // failure that left the target showing would strand the pane on a version the
+            // pack is not on and cannot be moved to.
+            TargetGameVersion = Manifest.GameVersion;
         }
         finally
         {
-            IsCheckingVersion = false;
-            CheckingMod = "";
+            if (generation == _versionCheckGeneration)
+            {
+                IsCheckingVersion = false;
+                CheckingMod = "";
+            }
         }
     }
 
@@ -1257,8 +1425,23 @@ public partial class PackDetailViewModel : ViewModelBase
         _log($"pack now targets game {target}; press Play to install it and update mods");
     }
 
+    /// <summary>
+    /// Abandons a checked change and puts the picker back where the pack actually is.
+    ///
+    /// The picker matters as much as the plan. Saying no used to leave the other version
+    /// showing, so the control claimed a version the pack had just declined to move to —
+    /// and every later glance at the pane read as a setting that had not taken.
+    /// </summary>
     [RelayCommand]
-    public void CancelVersionChange() => VersionChange = null;
+    public void CancelVersionChange()
+    {
+        VersionChange = null;
+
+        // Bumped so the check this abandons cannot come back and reopen its dialog.
+        _versionCheckGeneration++;
+
+        if (HasPendingGameVersion) TargetGameVersion = Manifest.GameVersion;
+    }
 
     public bool NotBusy => !IsBusy;
 
@@ -1277,13 +1460,33 @@ public partial class PackDetailViewModel : ViewModelBase
     /// author on the way out.</summary>
     private bool CanExport => NotBusy && !IsFollowing;
 
-    /// <summary>Re-evaluates which install serves this pack, after a version edit or a new install.</summary>
+    /// <summary>
+    /// Re-evaluates everything that depends on the game situation: which install serves this
+    /// pack, what else it could run, and whether a client can be built for it.
+    ///
+    /// One method for all of it because they all answer to the same three events — the
+    /// pack's version changed, an install appeared or went away, or a choice was made — and
+    /// every caller that knows about one of those knows about all three. Split up, each new
+    /// derived property had to be added to each call site, and the ones that were missed
+    /// simply went stale on screen until the pack was reselected.
+    /// </summary>
     public void RefreshGameState()
     {
         OnPropertyChanged(nameof(ResolvedInstall));
         OnPropertyChanged(nameof(IsProvisioning));
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
+
+        OnPropertyChanged(nameof(ChosenInstall));
+        OnPropertyChanged(nameof(ChosenInstallMissing));
+        OnPropertyChanged(nameof(InstallChoiceLine));
+        OnPropertyChanged(nameof(HasInstallNote));
+
+        OnPropertyChanged(nameof(CanBuildOptimum));
+        OnPropertyChanged(nameof(CanUseOptimum));
+        OnPropertyChanged(nameof(IsUsingVariant));
+        OnPropertyChanged(nameof(HasOptimumPanel));
+        NotifyPendingVersionChanged();
     }
 
     // ---- mods ----

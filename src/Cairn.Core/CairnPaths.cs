@@ -26,6 +26,15 @@ public static class CairnPaths
     public static string ExportsRoot => Path.Combine(Root, "exports");
 
     /// <summary>
+    /// Working trees for clients Cairn builds from source, one directory per build.
+    ///
+    /// Deliberately not under <see cref="CacheRoot"/> despite being reproducible: a build
+    /// tree is several gigabytes and takes twenty minutes to recreate, so "delete this to
+    /// free space" and "delete this, it costs nothing" want to be different directories.
+    /// </summary>
+    public static string BuildsRoot => Path.Combine(Root, "builds");
+
+    /// <summary>
     /// Things Cairn can always fetch again. Kept apart from packs, games and runtimes so
     /// it can be deleted without losing anything that matters.
     /// </summary>

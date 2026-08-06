@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Cairn.App.ViewModels"
+        xmlns:core="using:Cairn.Core"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
@@ -609,17 +610,18 @@
                             </StackPanel>
                             <!--
                                 Changing the game version re-resolves every mod, so it is
-                                not a field you edit and save with the others: pick a target,
-                                see what it would do, then commit.
+                                not a field you edit and save with the others: picking one
+                                works out what it would do and asks. Nothing is written
+                                until that is confirmed, and declining puts the picker back
+                                — so the control always shows the version the pack is on.
                             -->
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <ComboBox MinWidth="150"
+                                    <ComboBox x:Name="GameVersionChoice" MinWidth="150"
+                                              IsEnabled="{Binding !Detail.IsCheckingVersion}"
                                               ItemsSource="{Binding Detail.GameVersionChoices}"
                                               SelectedItem="{Binding Detail.TargetGameVersion}" />
-                                    <Button Content="Check…"
-                                            Command="{Binding Detail.CheckVersionCommand}" />
                                     <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.6"
                                                IsVisible="{Binding Detail.IsCheckingVersion}"
                                                Text="{Binding Detail.CheckingMod, StringFormat='checking {0}…'}" />
@@ -627,20 +629,59 @@
                             </StackPanel>
 
                             <!--
-                                Only where there is a choice. Almost every pack has one
-                                install for its version, and a picker with a single entry
-                                is a question nobody was asked.
+                                What this pack runs, when it is not simply the stock game.
+                                A sentence rather than a picker: there is one modified
+                                client Cairn can produce, so listing every install asked
+                                somebody to choose from two entries with one obvious answer.
+                            -->
+                            <TextBlock x:Name="InstallNote"
+                                       Text="{Binding Detail.InstallChoiceLine}"
+                                       FontSize="11" TextWrapping="Wrap"
+                                       IsVisible="{Binding Detail.HasInstallNote, FallbackValue=False}"
+                                       Foreground="{DynamicResource VsWarningBrush}" />
+
+                            <!--
+                                One action at a time: make it, use it, or stop using it.
+                                Gone entirely on the versions Optimum is not for, which is
+                                most of them — this is an advanced option rather than a
+                                setting everybody needs an opinion about.
                             -->
                             <StackPanel Spacing="6"
-                                        IsVisible="{Binding Detail.HasInstallChoice, FallbackValue=False}">
-                                <TextBlock Text="Run with" FontSize="12" Opacity="0.7" />
-                                <ComboBox x:Name="InstallChoice" MinWidth="220"
-                                          ItemsSource="{Binding Detail.InstallChoices}"
-                                          SelectedItem="{Binding Detail.SelectedInstall, Mode=TwoWay}" />
-                                <TextBlock Text="{Binding Detail.InstallChoiceLine}"
+                                        IsVisible="{Binding Detail.HasOptimumPanel, FallbackValue=False}">
+                                <TextBlock Text="Optimised client" FontSize="12" Opacity="0.7" />
+
+                                <Button x:Name="BuildOptimum"
+                                        Content="{Binding Detail.BuildOptimumLabel}"
+                                        IsVisible="{Binding Detail.CanBuildOptimum}"
+                                        Command="{Binding Detail.BuildOptimumCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+
+                                <Button x:Name="UseOptimum" Content="Use Optimum"
+                                        IsVisible="{Binding Detail.CanUseOptimum}"
+                                        Command="{Binding Detail.UseOptimumCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+
+                                <!-- Without this, running a modified client would be a
+                                     decision nothing on screen could undo. -->
+                                <Button x:Name="UseStockGame" Content="Use the stock game"
+                                        IsVisible="{Binding Detail.IsUsingVariant}"
+                                        Command="{Binding Detail.UseStockGameCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+
+                                <!-- Which version a build would be for, while the version
+                                     picker shows another. Disabled without this is a
+                                     mystery. -->
+                                <TextBlock x:Name="BuildOptimumBlocked"
+                                           Text="{Binding Detail.BuildOptimumBlockedNote}"
+                                           IsVisible="{Binding Detail.HasBuildOptimumBlockedNote}"
                                            FontSize="11" TextWrapping="Wrap"
-                                           IsVisible="{Binding Detail.HasInstallNote}"
                                            Foreground="{DynamicResource VsWarningBrush}" />
+
+                                <!-- Only while it is a thing to make. Once it exists, the
+                                     cost has been paid and describing it again is noise. -->
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
+                                           IsVisible="{Binding Detail.CanBuildOptimum}"
+                                           Text="Compiles a faster community build of the game on this machine. Takes a while and needs several GB." />
                             </StackPanel>
 
                             <StackPanel Spacing="4">

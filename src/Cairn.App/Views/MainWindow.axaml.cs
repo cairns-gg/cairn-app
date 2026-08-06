@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         vm.ConfirmPackUpdate = ConfirmPackUpdateAsync;
         vm.ConfirmImport = ConfirmImportAsync;
         vm.Confirm = ConfirmAsync;
+        vm.RunOptimumBuild = RunOptimumBuildAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
     }
 
@@ -68,6 +69,9 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmVersionChangeAsync(VersionChangeViewModel change) =>
         new VersionChangeWindow { DataContext = change }.ShowDialog<bool>(this);
+
+    private Task<bool> RunOptimumBuildAsync(OptimumBuildViewModel build) =>
+        new OptimumBuildWindow { DataContext = build }.ShowDialog<bool>(this);
 
     private Task<bool> ConfirmAsync(ConfirmViewModel confirm) =>
         new ConfirmWindow { DataContext = confirm }.ShowDialog<bool>(this);
