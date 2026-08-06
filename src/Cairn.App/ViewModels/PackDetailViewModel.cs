@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Cairn.Core;
 using Cairn.Core.Games;
+using Cairn.Core.Games.Optimum;
 using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
 using Cairn.Core.ModDb;
@@ -868,6 +869,79 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasInstallChoice));
         OnPropertyChanged(nameof(HasInstallNote));
         OnPropertyChanged(nameof(SelectedInstall));
+    }
+
+    // ---- building a variant ----
+
+    /// <summary>Set by the view; the cost warning, before anything starts.</summary>
+    public Func<ConfirmViewModel, Task<bool>>? Confirm { get; set; }
+
+    /// <summary>Set by the view; shows the build happening and returns whether it worked.</summary>
+    public Func<OptimumBuildViewModel, Task<bool>>? RunOptimumBuild { get; set; }
+
+    /// <summary>
+    /// Whether building Optimum is worth offering for this pack.
+    ///
+    /// Only where it would actually apply: Optimum targets exactly one Vintage Story
+    /// version at a time, so offering it to a pack on any other one is an invitation to
+    /// spend twenty minutes producing a client the pack cannot use. Withdrawn once it is
+    /// built, because from then on it is an install to pick, not a thing to make.
+    /// </summary>
+    public bool CanBuildOptimum =>
+        OptimumSource.Pinned.Supports(Manifest.GameVersion)
+        && OptimumPrereqs.UnsupportedReason() is null
+        // Asked of the install directory rather than of the choices offered for this
+        // version, because the two differ exactly when the build is broken: a half-written
+        // install reports no version, drops out of the picker, and would otherwise leave
+        // this hidden with nothing on screen able to rebuild it.
+        && GameInstall.TryAt(
+            _library.Store.InstallDir(OptimumSource.Pinned.InstallName)) is null;
+
+    public string BuildOptimumLabel => $"Build Optimum {OptimumSource.Pinned.Version}…";
+
+    /// <summary>
+    /// Builds Optimum, then points this pack at it.
+    ///
+    /// The confirmation comes first and states the cost in full, because this is unlike
+    /// everything else Cairn installs: a twenty-minute compile rather than a download. The
+    /// pack is only moved onto the result if it was really built — a cancelled or failed
+    /// build leaves the pack exactly as it was.
+    /// </summary>
+    [RelayCommand]
+    private async Task BuildOptimumAsync()
+    {
+        if (Confirm is null || RunOptimumBuild is null) return;
+
+        var provisioner = new OptimumProvisioner(_http, _library.Store, _runtimes);
+        var source = OptimumSource.Pinned;
+        var plan = provisioner.Plan(source.GameVersion, source);
+
+        if (!plan.CanStart)
+        {
+            // Missing tools and a full disk are both things only the person at the machine
+            // can fix, so this reports and stops rather than offering to press on.
+            await Confirm(new ConfirmViewModel(
+                "Optimum cannot be built here", plan.Describe(), "OK"));
+            return;
+        }
+
+        if (!await Confirm(new ConfirmViewModel(
+                "Build Optimum?", plan.Describe(), "Build it")))
+            return;
+
+        // The stock install of the same version, so the packager overlays the client
+        // already on disk instead of downloading a second copy of it.
+        var vanilla = _library.ForVersion(source.GameVersion);
+
+        var build = new OptimumBuildViewModel(provisioner, source, vanilla);
+
+        if (!await RunOptimumBuild(build) || build.Result is null) return;
+
+        _log($"Built {build.Result.Describe()}.");
+
+        ChooseInstall(build.Result);
+        OnPropertyChanged(nameof(CanBuildOptimum));
+        OnPropertyChanged(nameof(InstallChoices));
     }
 
     /// <summary>

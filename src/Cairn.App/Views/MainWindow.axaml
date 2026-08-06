@@ -643,6 +643,22 @@
                                            Foreground="{DynamicResource VsWarningBrush}" />
                             </StackPanel>
 
+                            <!--
+                                Offered only for the one game version Optimum targets, and
+                                only until it exists. It sits by the install picker because
+                                that is what it produces: another thing to run this pack with.
+                            -->
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding Detail.CanBuildOptimum, FallbackValue=False}">
+                                <TextBlock Text="Optimised client" FontSize="12" Opacity="0.7" />
+                                <Button x:Name="BuildOptimum"
+                                        Content="{Binding Detail.BuildOptimumLabel}"
+                                        Command="{Binding Detail.BuildOptimumCommand}"
+                                        HorizontalAlignment="Left" Padding="12,5" />
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
+                                           Text="Compiles a faster community build of the game on this machine. Takes a while and needs several GB." />
+                            </StackPanel>
+
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Server to auto-join on launch"
                                            FontSize="12" Opacity="0.7" />
