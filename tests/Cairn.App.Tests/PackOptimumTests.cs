@@ -270,6 +270,49 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void The_picker_offers_the_same_objects_it_reports_as_selected()
+    {
+        Install($"{Supported}-optimum", "Optimum");
+        Install(Supported);
+
+        var (_, _, detail) = Open(Supported);
+
+        // GameInstall compares by reference, and this list used to be rebuilt from disk on
+        // every read — so the install SelectedInstall returned was never one the picker was
+        // holding, and the box rendered blank with entries in it.
+        Assert.Same(detail.InstallChoices, detail.InstallChoices);
+
+        if (detail.SelectedInstall is { } selected)
+            Assert.Contains(selected, detail.InstallChoices);
+    }
+
+    [AvaloniaFact]
+    public void Refreshing_rebuilds_the_choices_rather_than_serving_a_stale_list()
+    {
+        var (_, _, detail) = Open(Supported);
+
+        var before = detail.InstallChoices;
+        detail.RefreshGameState();
+
+        // Cached, but only until something could have changed it — otherwise an install
+        // that just finished downloading would never appear.
+        Assert.NotSame(before, detail.InstallChoices);
+    }
+
+    [AvaloniaFact]
+    public void An_install_describes_itself_for_the_picker()
+    {
+        Install($"{Supported}-optimum", "Optimum");
+
+        var (_, _, detail) = Open(Supported);
+
+        // Bound by the view. As a method it could not be bound at all, and every row
+        // rendered as "Cairn.Core.GameInstall".
+        foreach (var install in detail.InstallChoices)
+            Assert.False(string.IsNullOrWhiteSpace(install.Describe));
+    }
+
+    [AvaloniaFact]
     public void The_button_is_on_screen_when_it_is_offered()
     {
         var (window, _, _) = Open(Supported);

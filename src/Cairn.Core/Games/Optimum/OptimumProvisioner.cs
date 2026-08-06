@@ -170,6 +170,12 @@ public sealed class OptimumProvisioner
 
         var install = Place(source, packaged, progress);
 
+        // Only once the client is safely in the library. What is left behind is the
+        // redistributable the packager also made — a 700 MB disk image on macOS, a tarball
+        // on Linux — which is of no use to Cairn: it installs the directory, not the
+        // archive of it. Keeping it doubled the cost of the feature for nothing.
+        DiscardPackagerOutput(both);
+
         progress?.Report(new OptimumStep("ready", $"Optimum {source.Version} is installed.", 1));
         return install;
     }
@@ -285,6 +291,71 @@ public sealed class OptimumProvisioner
             .ConfigureAwait(false);
     }
 
+    /// <summary>Where the packager assembles its output before Cairn takes the client from it.</summary>
+    public string PackagerOutput => Path.Combine(_buildsRoot, "optimum-out");
+
+    /// <summary>
+    /// Removes the packager's leftovers.
+    ///
+    /// Never fatal. The build has succeeded by the time this runs, and failing it over a
+    /// file that would not delete would throw away a client that took twenty minutes to
+    /// make in order to reclaim disk.
+    /// </summary>
+    private void DiscardPackagerOutput(IProgress<string>? log)
+    {
+        try
+        {
+            if (Directory.Exists(PackagerOutput)) Directory.Delete(PackagerOutput, recursive: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            log?.Report($"could not remove {PackagerOutput}: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Deletes the working tree and anything left beside it, returning the bytes freed.
+    ///
+    /// Separate from the build because the tree is worth keeping by default: it is what
+    /// makes a rebuild minutes rather than the full decompile again. It is also several
+    /// gigabytes sitting idle between pin bumps, so there has to be a way to say no.
+    /// </summary>
+    public long Clean()
+    {
+        var freed = 0L;
+
+        foreach (var path in new[] { WorkingTree, PackagerOutput })
+        {
+            if (!Directory.Exists(path)) continue;
+
+            freed += DirectorySize(path);
+
+            try
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new OptimumBuildException($"Could not remove {path}: {e.Message}", e);
+            }
+        }
+
+        return freed;
+    }
+
+    private static long DirectorySize(string path)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                .Sum(f => { try { return new FileInfo(f).Length; } catch (IOException) { return 0; } });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
     /// <summary>Which packager to drive. A parameter so all three can be tested from one host.</summary>
     public enum BuildPlatform { Windows, MacOS, Linux }
 
@@ -350,7 +421,7 @@ public sealed class OptimumProvisioner
     {
         progress?.Report(new OptimumStep("packaging", "assembling the client", 0.85));
 
-        var output = Path.Combine(_buildsRoot, "optimum-out");
+        var output = PackagerOutput;
         if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
         Directory.CreateDirectory(output);
 

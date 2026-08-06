@@ -102,6 +102,7 @@ internal static class Program
               cairn-cli games remove <version>        delete an installed game version
               cairn-cli optimum                       what building the Optimum client would cost
               cairn-cli optimum build [--yes]         build and install it (long; see the warning)
+              cairn-cli optimum clean                 delete the build tree, keeping the client
               cairn-cli runtimes                      list .NET runtimes Cairn manages
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
@@ -405,7 +406,7 @@ internal static class Program
         // the version it was told not to use.
         if (ArgValue(args, "--install") is not null && install is not null
             && !string.Equals(install.Version, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
-            return Fail($"'{install.Directory}' is {install.Describe()}, but '{id}' targets "
+            return Fail($"'{install.Directory}' is {install.Describe}, but '{id}' targets "
                         + $"{manifest.GameVersion}. Retarget the pack, or point it at a "
                         + $"{manifest.GameVersion} build.");
 
@@ -569,7 +570,7 @@ internal static class Program
         foreach (var i in installed)
             // Describe rather than Version: two entries both reading "1.22.5" with nothing
             // to tell them apart is a puzzle, and one of them may not be the game.
-            Console.WriteLine($"  {i.Describe(),-24} {i.Architecture,-6} needs .NET {i.RequiredFramework}"
+            Console.WriteLine($"  {i.Describe,-24} {i.Architecture,-6} needs .NET {i.RequiredFramework}"
                               + (i.IsVariant ? $"   ({Path.GetFileName(i.Directory)})" : ""));
 
         var system = GameInstall.TryLocate();
@@ -781,7 +782,25 @@ internal static class Program
             return 0;
         }
 
-        if (action != "build") return Fail("usage: cairn-cli optimum [plan|build] [--yes]");
+        if (action == "clean")
+        {
+            var freed = provisioner.Clean();
+
+            Console.WriteLine(freed == 0
+                ? "nothing to remove"
+                : $"removed the build tree, freeing {freed / 1024 / 1024} MB");
+
+            // Said plainly, because the two are easy to confuse and only one of them is
+            // the client somebody actually plays.
+            if (plan.AlreadyBuilt)
+                Console.WriteLine("the installed client is untouched; a rebuild will take"
+                                  + " the full time again");
+
+            return 0;
+        }
+
+        if (action != "build")
+            return Fail("usage: cairn-cli optimum [plan|build|clean] [--yes]");
 
         if (!plan.CanStart) return Fail(plan.Describe());
 
@@ -824,7 +843,7 @@ internal static class Program
         {
             var install = await provisioner.BuildAsync(source, vanilla, progress, log, cts.Token);
 
-            Console.WriteLine($"\ninstalled {install.Describe()} at {install.Directory}");
+            Console.WriteLine($"\ninstalled {install.Describe} at {install.Directory}");
             Console.WriteLine($"launch a pack with it: cairn-cli launch <id> --install {install.Directory}");
             return 0;
         }

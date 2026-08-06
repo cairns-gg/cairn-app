@@ -108,7 +108,7 @@ public static class Diagnostics
         var managed = Safely(() => library.Managed, []);
 
         foreach (var install in managed)
-            text.AppendLine($"  managed  {install.Describe(),-22} {install.Architecture}, "
+            text.AppendLine($"  managed  {install.Describe,-22} {install.Architecture}, "
                             + $"needs .NET {install.RequiredFramework}  {Redact(install.Directory)}");
 
         var system = Safely(() => library.System, null);
@@ -134,7 +134,7 @@ public static class Diagnostics
         // pointed at a modified client behaves unlike everyone else's copy of the same
         // pack, and nothing else in this report would say so.
         if (install is not null)
-            text.AppendLine($"  runs with  {install.Describe()}  {Redact(install.Directory)}"
+            text.AppendLine($"  runs with  {install.Describe}  {Redact(install.Directory)}"
                             + (install.IsVariant ? "   ← NOT THE STOCK GAME" : ""));
         else
             text.AppendLine("  runs with  nothing installed for this version");

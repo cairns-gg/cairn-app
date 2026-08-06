@@ -808,9 +808,21 @@ public partial class PackDetailViewModel : ViewModelBase
     public bool ChosenInstallMissing =>
         _store.LoadLocalState(Id).InstallDirectory is not null && ChosenInstall is null;
 
-    /// <summary>Every install this pack could run, stock first. See GameLibrary.ChoicesFor.</summary>
+    private IReadOnlyList<GameInstall>? _installChoices;
+
+    /// <summary>
+    /// Every install this pack could run, stock first. See GameLibrary.ChoicesFor.
+    ///
+    /// Held rather than recomputed on every read, and that is a correctness matter rather
+    /// than a saving. GameInstall is a class, so it compares by reference, and every read
+    /// of this used to walk the disk and build new objects — so the one
+    /// <see cref="SelectedInstall"/> returned was never among the ones the picker was
+    /// holding, and the box rendered empty however many installs were in it. Cleared by
+    /// <see cref="RefreshGameState"/>, which is what already runs whenever the answer can
+    /// have changed.
+    /// </summary>
     public IReadOnlyList<GameInstall> InstallChoices =>
-        _library.ChoicesFor(Manifest.GameVersion);
+        _installChoices ??= _library.ChoicesFor(Manifest.GameVersion);
 
     /// <summary>
     /// Offered only where there is a real choice to make — and where one has been made and
@@ -952,7 +964,7 @@ public partial class PackDetailViewModel : ViewModelBase
 
         if (!await RunOptimumBuild(build) || build.Result is null) return;
 
-        _log($"Built {build.Result.Describe()}.");
+        _log($"Built {build.Result.Describe}.");
 
         // Records the choice and re-reads the whole game situation, which is what makes the
         // new install appear in the picker and this button go away.
@@ -1397,6 +1409,10 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public void RefreshGameState()
     {
+        // Dropped before anything is notified, so every getter below rebuilds from disk
+        // and the picker's items and its selection come from the same objects.
+        _installChoices = null;
+
         OnPropertyChanged(nameof(ResolvedInstall));
         OnPropertyChanged(nameof(IsProvisioning));
         OnPropertyChanged(nameof(CanLaunch));

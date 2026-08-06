@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Cairn.App.ViewModels"
+        xmlns:core="using:Cairn.Core"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
@@ -634,9 +635,21 @@
                             <StackPanel Spacing="6"
                                         IsVisible="{Binding Detail.HasInstallChoice, FallbackValue=False}">
                                 <TextBlock Text="Run with" FontSize="12" Opacity="0.7" />
+                                <!--
+                                    Templated, or each row renders as the type name: a
+                                    GameInstall is a plain class and its ToString is the
+                                    default one. Describe() is the same "1.22.5 (Optimum)"
+                                    the CLI and the diagnostics report use.
+                                -->
                                 <ComboBox x:Name="InstallChoice" MinWidth="220"
                                           ItemsSource="{Binding Detail.InstallChoices}"
-                                          SelectedItem="{Binding Detail.SelectedInstall, Mode=TwoWay}" />
+                                          SelectedItem="{Binding Detail.SelectedInstall, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="core:GameInstall">
+                                            <TextBlock Text="{Binding Describe}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <TextBlock Text="{Binding Detail.InstallChoiceLine}"
                                            FontSize="11" TextWrapping="Wrap"
                                            IsVisible="{Binding Detail.HasInstallNote}"

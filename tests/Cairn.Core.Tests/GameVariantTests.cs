@@ -62,7 +62,7 @@ public class GameVariantTests : IDisposable
         Assert.NotNull(install);
         Assert.True(install.IsVariant);
         Assert.Equal("Optimum", install.Variant);
-        Assert.Contains("Optimum", install.Describe());
+        Assert.Contains("Optimum", install.Describe);
     }
 
     [Fact]

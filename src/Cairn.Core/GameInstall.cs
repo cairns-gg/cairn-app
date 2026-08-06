@@ -33,8 +33,14 @@ public sealed class GameInstall
 
     public bool IsVariant => !string.IsNullOrWhiteSpace(Variant);
 
-    /// <summary>"1.22.5" or "1.22.5 (Optimum)", for anywhere an install is named.</summary>
-    public string Describe() => IsVariant ? $"{Version} ({Variant})" : Version;
+    /// <summary>
+    /// "1.22.5" or "1.22.5 (Optimum)", for anywhere an install is named.
+    ///
+    /// A property rather than a method because it is a name, not a computed report — and
+    /// because XAML cannot bind a method, so the install picker rendered every row as the
+    /// type name until this changed.
+    /// </summary>
+    public string Describe => IsVariant ? $"{Version} ({Variant})" : Version;
 
     /// <summary>Marks a directory as holding something other than the stock game.</summary>
     public const string VariantMarker = ".cairn-variant";
