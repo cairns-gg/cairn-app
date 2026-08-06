@@ -121,11 +121,17 @@ public partial class ModRowViewModel : ViewModelBase
 
     public bool IsPinned => Mod.Version is not null;
 
-    /// <summary>The version when pinned, and an invitation when not.</summary>
-    public string PinLabel => Mod.Version ?? "Pin…";
+    /// <summary>
+    /// The version, shown only while pinned.
+    ///
+    /// Nothing when it is not: an unpinned row is the ordinary state of most mods, and
+    /// thirty rows each saying "Pin…" is thirty invitations to do something rare. The
+    /// faded pin is enough to say the control is there, and the tooltip says what it does.
+    /// </summary>
+    public string PinLabel => Mod.Version ?? "";
 
     /// <summary>Faded when nothing is pinned, so the state reads without being laboured.</summary>
-    public double PinOpacity => IsPinned ? 1.0 : 0.35;
+    public double PinOpacity => IsPinned ? 1.0 : 0.4;
 
     /// <summary>
     /// Re-reads everything derived from the pin.

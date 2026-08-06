@@ -485,16 +485,38 @@
                                                     whatever the mod that requires it needs.
                                                 -->
                                                 <Button Grid.Column="3" x:Name="PinButton"
-                                                        MinWidth="92" Padding="8,4"
+                                                        Padding="10,4"
                                                         IsVisible="{Binding CanChange}"
                                                         Command="{Binding TogglePinCommand}"
                                                         ToolTip.Tip="{Binding PinTip}"
                                                         VerticalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <TextBlock Text="📌" FontSize="11"
-                                                                   VerticalAlignment="Center"
-                                                                   Opacity="{Binding PinOpacity}" />
+                                                        <!--
+                                                            Drawn rather than a glyph: 📌 is
+                                                            an emoji, so it renders in colour
+                                                            at whatever weight the font feels
+                                                            like, beside a ✕ that is neither.
+                                                            Bars in the button's own ink match
+                                                            it at any scale.
+                                                        -->
+                                                        <Path Width="12" Height="12"
+                                                              Stretch="Uniform"
+                                                              Fill="{DynamicResource VsButtonTextBrush}"
+                                                              Opacity="{Binding PinOpacity}"
+                                                              VerticalAlignment="Center"
+                                                              Data="M 1,1 H 13 V 4.5 H 1 Z M 6,4.5 H 8 V 14 H 6 Z">
+                                                            <!-- Upright, the head and shaft
+                                                                 read as a letter T sitting
+                                                                 between View and ✕. Turned,
+                                                                 the same two bars read as a
+                                                                 tack pushed into the row. -->
+                                                            <Path.RenderTransform>
+                                                                <RotateTransform Angle="-45" />
+                                                            </Path.RenderTransform>
+                                                        </Path>
+                                                        <!-- Only when pinned; see PinLabel. -->
                                                         <TextBlock Text="{Binding PinLabel}"
+                                                                   IsVisible="{Binding IsPinned}"
                                                                    FontSize="11"
                                                                    VerticalAlignment="Center" />
                                                     </StackPanel>

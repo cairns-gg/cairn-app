@@ -243,6 +243,18 @@ public class ListingShots : IDisposable
         }
 
 
+        // One pinned row among unpinned ones, so the two states are visible side by side.
+        vm.Detail.CacheReleaseChoices("carryon", ["2.0.0"]);
+        vm.Detail.ChoosePinnedVersion = c =>
+        {
+            c.Selected = c.Choices.First(x => !x.IsTrackNewest);
+            return Task.FromResult(true);
+        };
+        if (vm.Detail.Mods.FirstOrDefault(m => m.ModId == "carryon") is { } toPin)
+            await toPin.TogglePinCommand.ExecuteAsync(null);
+        Settle(1);
+        Shot("11-a-pinned-mod");
+
         ShowSettings(window);
         Shot("06-build-an-optimised-client");
 

@@ -131,6 +131,7 @@ app. It writes:
 | `08-watching-it-build` | the live log |
 | `09-running-with-optimum` | what the pack says afterwards |
 | `10-pinning-a-version` | choosing which release a mod is held at |
+| `11-a-pinned-mod` | the pin in both states, in a pack |
 
 The last four are a sequence and read best in order: what is offered, what it costs, what
 it looks like while it happens, and what the pack says at the end. They are the ones that
