@@ -18,6 +18,12 @@ internal static class Program
     {
         if (args.Length == 0) { Usage(); return 1; }
 
+        // A default Windows console is IBM437, which silently drops every character this
+        // codebase writes above ASCII — the em dashes throughout its messages, the arrow
+        // in "1.0.0 -> 2.0.0", and the one marking a pack as running something other than
+        // the stock game. The diagnostics report is the text people are told to paste into
+        // an issue, so losing characters from it is worse than cosmetic.
+        //
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1 (+https://github.com/dizzyd/cairn)");
         var moddb = new ModDbClient(http);
@@ -372,6 +378,18 @@ internal static class Program
             ? GameInstall.TryAt(dir) ?? throw new InvalidOperationException(
                   $"'{dir}' is not a Vintage Story install.")
             : Resolve(store, library, id);
+
+        // The same rule the launcher's picker applies, which it was not making here: a
+        // build is offered for the version it is a build of and no other. A pack's mods
+        // were resolved against its game version, so running a different one is not an
+        // override, it is a pack running a client nothing in it was chosen for — and the
+        // symptom is this command announcing the variant and then offering to download
+        // the version it was told not to use.
+        if (ArgValue(args, "--install") is not null && install is not null
+            && !string.Equals(install.Version, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
+            return Fail($"'{install.Directory}' is {install.Describe()}, but '{id}' targets "
+                        + $"{manifest.GameVersion}. Retarget the pack, or point it at a "
+                        + $"{manifest.GameVersion} build.");
 
         if (install is { IsVariant: true } modified)
             Console.WriteLine($"running {modified.Variant}, not the stock game");
