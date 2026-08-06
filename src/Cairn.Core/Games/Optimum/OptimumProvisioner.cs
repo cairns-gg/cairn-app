@@ -285,6 +285,58 @@ public sealed class OptimumProvisioner
             .ConfigureAwait(false);
     }
 
+    /// <summary>Which packager to drive. A parameter so all three can be tested from one host.</summary>
+    public enum BuildPlatform { Windows, MacOS, Linux }
+
+    public static BuildPlatform HostPlatform =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? BuildPlatform.Windows
+        : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? BuildPlatform.MacOS
+        : BuildPlatform.Linux;
+
+    /// <summary>
+    /// The packager script and its arguments, for one platform.
+    ///
+    /// Separated from running it because the interesting part is which value goes in which
+    /// argument, and that cannot be checked by running a packager on a host that only has
+    /// one of the three. Every script here takes a version and means the <em>Vintage
+    /// Story</em> version by it — it is what builds the client download URL, and each
+    /// script defaults it from forks.json. Optimum's own version is read from its VERSION
+    /// file and is never passed in. Handing over Optimum's version instead asks the CDN for
+    /// a client release numbered 0.3.5 and gets a 404, twenty minutes into a build that had
+    /// otherwise succeeded.
+    /// </summary>
+    public static (string Script, List<string> Arguments) PackagerFor(
+        OptimumSource source,
+        string outputDir,
+        GameInstall? vanilla = null,
+        BuildPlatform? platform = null,
+        bool arm64 = false)
+    {
+        switch (platform ?? HostPlatform)
+        {
+            case BuildPlatform.Windows:
+                List<string> windows = ["-OutputDir", outputDir, "-Version", source.GameVersion];
+
+                // Reuses the client Cairn already downloaded and unpacked. Without this the
+                // packager fetches its own copy of a game that is already on the disk.
+                if (vanilla is not null) windows.AddRange(["-VanillaDir", vanilla.Directory]);
+
+                return ("package.ps1", windows);
+
+            case BuildPlatform.MacOS:
+                return ("package-macos.sh",
+                    [
+                        "--arch", arm64 ? "arm64" : "x64",
+                        "--output", outputDir,
+                        "--version", source.GameVersion,
+                    ]);
+
+            default:
+                return ("package-linux.sh",
+                    ["--output", outputDir, "--version", source.GameVersion]);
+        }
+    }
+
     /// <summary>
     /// Runs the platform's packager and returns the directory it assembled.
     ///
@@ -302,38 +354,15 @@ public sealed class OptimumProvisioner
         if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
         Directory.CreateDirectory(output);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            var script = Path.Combine(WorkingTree, "scripts", "package.ps1");
-            var (host, args) = ProcessRunner.ScriptHost(script);
-            args.AddRange(["-OutputDir", output, "-Version", source.Version]);
+        var (name, packagerArgs) = PackagerFor(
+            source, output, vanilla,
+            arm64: RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
 
-            // Reuses the client Cairn already downloaded and unpacked. Without this the
-            // packager fetches its own copy of a game that is already on the disk.
-            if (vanilla is not null) args.AddRange(["-VanillaDir", vanilla.Directory]);
+        var (host, args) = ProcessRunner.ScriptHost(Path.Combine(WorkingTree, "scripts", name));
+        args.AddRange(packagerArgs);
 
-            await ProcessRunner.RunOrThrowAsync(host, args, WorkingTree, log, BuildEnv(sdk), ct)
-                .ConfigureAwait(false);
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            var script = Path.Combine(WorkingTree, "scripts", "package-macos.sh");
-            var (host, args) = ProcessRunner.ScriptHost(script);
-            var arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
-            args.AddRange(["--arch", arch, "--output", output, "--version", source.Version]);
-
-            await ProcessRunner.RunOrThrowAsync(host, args, WorkingTree, log, BuildEnv(sdk), ct)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            var script = Path.Combine(WorkingTree, "scripts", "package-linux.sh");
-            var (host, args) = ProcessRunner.ScriptHost(script);
-            args.AddRange(["--output", output, "--version", source.Version]);
-
-            await ProcessRunner.RunOrThrowAsync(host, args, WorkingTree, log, BuildEnv(sdk), ct)
-                .ConfigureAwait(false);
-        }
+        await ProcessRunner.RunOrThrowAsync(host, args, WorkingTree, log, BuildEnv(sdk), ct)
+            .ConfigureAwait(false);
 
         return FindPackagedClient(output)
                ?? throw new OptimumBuildException(

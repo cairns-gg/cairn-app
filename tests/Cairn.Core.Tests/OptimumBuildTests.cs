@@ -109,6 +109,24 @@ public class OptimumBuildTests : IDisposable
     }
 
     [Fact]
+    public void A_bundle_whose_only_executable_is_the_launcher_still_marks()
+    {
+        // The real macOS shape, which is not the Windows one: the packager renames
+        // Vintagestory to Optimum, so the stock executable is not there at all. An install
+        // that insisted on finding one would reject a perfectly good bundle.
+        var dir = Dir("Optimum.app");
+        Touch(dir, "VintagestoryAPI.dll");
+        Touch(dir, "Optimum");
+
+        OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned);
+
+        var install = GameInstall.TryAt(dir);
+
+        Assert.NotNull(install);
+        Assert.Equal("Optimum", Path.GetFileName(install.Executable));
+    }
+
+    [Fact]
     public void A_package_with_no_launcher_is_refused_rather_than_marked()
     {
         var dir = Dir("no-launcher");
@@ -189,6 +207,83 @@ public class OptimumBuildTests : IDisposable
         // burying the one actionable sentence under a cost estimate helps nobody.
         Assert.Contains("git", plan.Describe());
         Assert.DoesNotContain("minutes", plan.Describe());
+    }
+
+    // ---- driving the packagers ----
+
+    /// <summary>
+    /// Every packager takes a version and means the Vintage Story version by it — that is
+    /// what builds the client download URL, and each defaults it from forks.json. Optimum's
+    /// own version comes from its VERSION file and is never passed in.
+    ///
+    /// Tested per platform from one host because that is the only way to check the other
+    /// two: passing Optimum's version asked the CDN for a client release numbered 0.3.5 and
+    /// got a 404, twenty minutes into a build that had otherwise succeeded, and the same
+    /// mistake was sitting in all three branches at once.
+    /// </summary>
+    [Theory]
+    [InlineData(OptimumProvisioner.BuildPlatform.Windows, "-Version")]
+    [InlineData(OptimumProvisioner.BuildPlatform.MacOS, "--version")]
+    [InlineData(OptimumProvisioner.BuildPlatform.Linux, "--version")]
+    public void The_packager_is_told_the_game_version_not_optimums(
+        OptimumProvisioner.BuildPlatform platform, string flag)
+    {
+        var source = OptimumSource.Pinned;
+        var (_, args) = OptimumProvisioner.PackagerFor(source, "/tmp/out", platform: platform);
+
+        var value = args[args.IndexOf(flag) + 1];
+
+        Assert.Equal(source.GameVersion, value);
+        Assert.NotEqual(source.Version, value);
+    }
+
+    [Theory]
+    [InlineData(OptimumProvisioner.BuildPlatform.Windows, "package.ps1")]
+    [InlineData(OptimumProvisioner.BuildPlatform.MacOS, "package-macos.sh")]
+    [InlineData(OptimumProvisioner.BuildPlatform.Linux, "package-linux.sh")]
+    public void Each_platform_runs_its_own_packager(
+        OptimumProvisioner.BuildPlatform platform, string script)
+    {
+        var (name, args) = OptimumProvisioner.PackagerFor(
+            OptimumSource.Pinned, "/tmp/out", platform: platform);
+
+        Assert.Equal(script, name);
+        Assert.Contains("/tmp/out", args);
+    }
+
+    [Fact]
+    public void Windows_is_pointed_at_the_client_already_on_disk()
+    {
+        var vanilla = new GameInstall
+        {
+            Directory = "/games/1.22.5", Executable = "/games/1.22.5/Vintagestory",
+            Version = "1.22.5", Architecture = Cairn.Core.Runtime.ExecutableArch.X64,
+            RequiredFramework = new Version(10, 0, 0),
+        };
+
+        var (_, args) = OptimumProvisioner.PackagerFor(
+            OptimumSource.Pinned, "/tmp/out", vanilla,
+            OptimumProvisioner.BuildPlatform.Windows);
+
+        // Only Windows' packager takes one; the others fetch their own client, so passing
+        // it there would be an unrecognised argument rather than a saving.
+        Assert.Contains("-VanillaDir", args);
+        Assert.Contains("/games/1.22.5", args);
+    }
+
+    [Fact]
+    public void The_mac_packager_is_told_which_architecture_to_build()
+    {
+        var (_, arm) = OptimumProvisioner.PackagerFor(
+            OptimumSource.Pinned, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            arm64: true);
+
+        var (_, intel) = OptimumProvisioner.PackagerFor(
+            OptimumSource.Pinned, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            arm64: false);
+
+        Assert.Equal("arm64", arm[arm.IndexOf("--arch") + 1]);
+        Assert.Equal("x64", intel[intel.IndexOf("--arch") + 1]);
     }
 
     // ---- the pin ----
