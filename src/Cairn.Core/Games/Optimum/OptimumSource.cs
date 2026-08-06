@@ -25,13 +25,20 @@ public sealed record OptimumSource(string Url, string Ref, string GameVersion, s
     /// <summary>
     /// What Cairn builds unless told otherwise.
     ///
-    /// This is dizzyd/Optimum's main plus one commit: the archive-root fix, without which
-    /// the macOS build fails on the client tarball unpacking to "Vintage Story.app" where
-    /// bootstrap expects "vintagestory". The pin moves to plain main once that lands there.
+    /// This is dizzyd/Optimum's main plus two commits, both of which Cairn needs:
+    ///
+    /// - the archive-root fix, without which the macOS build fails on the client tarball
+    ///   unpacking to "Vintage Story.app" where bootstrap expects "vintagestory";
+    /// - atomic client downloads, without which cancelling a build during the ~500 MB
+    ///   download leaves a short file at the cache path that every later build reuses and
+    ///   fails on. That one matters more here than upstream, because Cairn makes stopping a
+    ///   build a button rather than a Ctrl-C.
+    ///
+    /// The pin moves to plain main once they land there.
     /// </summary>
     public static readonly OptimumSource Pinned = new(
         Url: "https://github.com/dizzyd/Optimum.git",
-        Ref: "19faa307ddefe10a0d692e349a8e740aa1064b4f",
+        Ref: "98f26d60eb9bb8b11b9e4955f7acbb6e4c58fb34",
         GameVersion: "1.22.5",
         Version: "0.3.5");
 
