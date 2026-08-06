@@ -101,17 +101,60 @@ three are inseparable.
 The first row is a warning, not a feature request: it exists, and building a second thing
 that answers it would give two places to check and two chances to disagree.
 
+## Saving one for later
+
+Reading about a mod and wanting it *eventually* is a different act from adding it to the
+pack in front of you, and it is the one that actually happens while browsing. Without
+somewhere to put it, the choices are add it to a pack you are not ready to change, or
+remember it.
+
+A shortlist is that somewhere: a flat list of mods kept against your account rather than
+any pack, with the date you saved it and room for a line of your own about why.
+
+It changes the shape of the rest. Discovery is **app-level, not per-pack** — you browse as
+yourself, and a pack becomes a filter you can apply ("show me what fits Homestead") rather
+than the thing you browse from. The saved list is where a decision waits until there is a
+pack to make it in.
+
+Three consequences worth stating:
+
+- **The watermark is global.** Somebody with five packs on the same game version should
+  meet a new mod once, not five times. This settles the open question the earlier draft
+  left: per-pack watermarks multiply the same row by the number of packs.
+- **It is user data, not cache.** Snapshots live in `CacheRoot` because they come back on
+  their own; a shortlist does not, and putting it there would let *Clean up* delete
+  something nobody could reconstruct. It belongs beside `settings.json` in `CairnPaths.Root`.
+- **Store the mod, not the row.** A saved entry is a modid, a date and an optional note.
+  Everything shown — name, summary, icon, downloads — is rendered from the current snapshot,
+  so a saved mod that is updated shows its new state rather than a photograph of the day you
+  saved it. A mod that disappears from ModDB entirely should say so and keep the note,
+  rather than vanishing from the list without explanation.
+
+### It makes the deferred feature cheap
+
+"Now works with your game version" was deferred because tracking version support across
+snapshots means keeping history for all 7,941 mods. For a shortlist it means keeping it for
+the handful you saved.
+
+That inverts the economics, and it is the thing that stops a shortlist becoming a
+graveyard. A list you have to remember to re-read is a list you stop re-reading; one that
+tells you **"the mod you saved in March now supports 1.22.6"** is the reason the saving was
+worth doing. Of everything in this document, this is the part that makes the feature earn a
+place rather than merely occupy one.
+
 ## Shape
 
-A view on a pack, not a section of the app. The pack is what supplies the game version,
-the already-have list, and the reason to care.
+An app-level view, with a pack available as a filter rather than as the frame. The pack
+supplies a game version and an already-have list when you want them; browsing does not
+require one.
 
-- **A watermark, not a window.** "Since you last looked", stored per pack, moved when the
-  view is opened — not "the last 7 days", which is a different question and answers it
-  worse every time you check twice in a day.
-- **Already-in-this-pack marked**, so the same rows stop being re-evaluated.
-- **Add in one click**, into the pack being viewed. The current path — read the modid, go
-  to search, type it — is most of the friction.
+- **A watermark, not a window.** "Since you last looked", global, moved when the view is
+  opened — not "the last 7 days", which is a different question and answers it worse every
+  time you check twice in a day.
+- **Already-in-a-pack marked**, naming which, so the same rows stop being re-evaluated.
+- **Save, or add to a pack, in one click.** The current path — read the modid, go to a
+  pack, find the search box, type it — is most of the friction, and saving is the answer
+  when no pack is the right home yet.
 - **Newest first by default**, with ModDB's own trending and download figures shown but not
   used to reorder anything by default.
 
@@ -141,11 +184,11 @@ nothing to say. See `PackUpdateCheck`.
 
 ## Deferred, deliberately
 
-**"Now works with your game version."** A mod that has just gained support for the version
-your pack targets is arguably the most interesting row that could appear — it was not an
-option yesterday and is today. Detecting it means diffing *version support* across
-snapshots, which needs history the first version will not have. The snapshot store makes
-room for it; build it once the store has proved itself.
+**"Now works with your game version", across the whole catalogue.** Detecting it means
+diffing *version support* between snapshots, and version support is the one field the index
+does not carry — so catalogue-wide it costs a detail call per mod per refresh, for 7,941
+mods. Not worth it. Restricted to the shortlist it costs a call per saved mod, which is
+where this belongs and why it is worth building there first. See *Saving one for later*.
 
 **Tag similarity.** Computable locally, tempting, and the point at which Cairn starts
 deciding whose mod is worth your attention. A chronological list with a watermark solves
@@ -153,10 +196,14 @@ most of the same problem without making that claim.
 
 ## Open questions
 
-- **Is the watermark per pack or global?** Per pack is right for "what can I add to this",
-  but somebody with five packs on the same game version then sees the same new mod five
-  times and dismisses it five times. A global seen-set with per-pack filtering may be the
-  better model, and it is a harder thing to change later than to decide now.
+- **Does a shortlist want to be shareable?** It is a list of mods with notes, which is
+  most of what a pack is minus the versions. Exporting one is easy and turning it into a
+  pack is easier still — but "here are 30 mods I like" is a different artefact from a pack
+  that reproduces exactly, and conflating them would weaken the guarantee packs make.
+- **Does saving imply watching?** A saved mod that gains support for a version you target
+  is worth a word; a saved mod that merely released a patch probably is not. Getting that
+  wrong in the noisy direction turns the shortlist into the alert channel this document
+  spends a section avoiding.
 - **What happens on the first run?** There is no previous snapshot, so nothing can be
   classified as new. Showing the last 7 days by `lastreleased` is the obvious fallback, at
   the cost of the new-versus-updated split until the second snapshot lands.
