@@ -811,8 +811,17 @@ public partial class PackDetailViewModel : ViewModelBase
     public IReadOnlyList<GameInstall> InstallChoices =>
         _library.ChoicesFor(Manifest.GameVersion);
 
-    /// <summary>Offered only where there is a real choice to make.</summary>
-    public bool HasInstallChoice => InstallChoices.Count > 1 || ChosenInstall is not null;
+    /// <summary>
+    /// Offered only where there is a real choice to make — and where one has been made and
+    /// gone wrong.
+    ///
+    /// That last case is not symmetry for its own sake. The note about a missing install
+    /// lives inside this panel, so without it the picker and the explanation vanish
+    /// together the moment the build behind them is deleted, leaving a pack that quietly
+    /// reverted to the stock game with nothing on screen saying so or letting it be fixed.
+    /// </summary>
+    public bool HasInstallChoice =>
+        InstallChoices.Count > 1 || ChosenInstall is not null || ChosenInstallMissing;
 
     /// <summary>
     /// Bound to the picker. Writing it records the choice; the setter is where that happens
