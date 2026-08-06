@@ -77,6 +77,60 @@ public class GameVariantTests : IDisposable
         Assert.Equal("1.22.5-optimum", install.Variant);
     }
 
+    /// <summary>
+    /// A build that replaces the client runs its own launcher, not the game's.
+    ///
+    /// Optimum's install is byte-identical vanilla files plus its own executable — it
+    /// patches at startup from there. Launching Vintagestory.exe out of that folder runs
+    /// the stock game while every message on screen says Optimum, which is the worst of
+    /// both: no optimisations and no way to tell.
+    /// </summary>
+    [Fact]
+    public void A_variant_may_name_the_executable_to_launch()
+    {
+        var dir = Install("1.22.5-optimum");
+        var launcher = OperatingSystem.IsWindows() ? "Optimum.exe" : "Optimum";
+
+        File.WriteAllText(Path.Combine(dir, launcher), "");
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker),
+            $$"""{"label":"Optimum","executable":"{{launcher}}"}""");
+
+        var install = GameInstall.TryAt(dir);
+
+        Assert.NotNull(install);
+        Assert.Equal("Optimum", install.Variant);
+        Assert.Equal(Path.Combine(dir, launcher), install.Executable);
+    }
+
+    [Fact]
+    public void A_marker_naming_a_launcher_that_is_not_there_is_refused()
+    {
+        // Falling back to the stock binary would be the silent wrong answer again, just
+        // arrived at from the other direction.
+        var dir = Install("1.22.5-optimum");
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker),
+            """{"label":"Optimum","executable":"NotThere.exe"}""");
+
+        Assert.Null(GameInstall.TryAt(dir));
+    }
+
+    [Fact]
+    public void A_marker_executable_cannot_point_outside_the_install()
+    {
+        // The launch target comes from a file in a directory; a name carrying a path
+        // would point it anywhere on the machine.
+        var dir = Install("1.22.5-optimum");
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker),
+            """{"label":"Optimum","executable":"../../evil"}""");
+
+        var install = GameInstall.TryAt(dir);
+
+        // Rejected as a name, so it falls back to the stock executable, which is present.
+        Assert.NotNull(install);
+        Assert.Equal(Path.Combine(dir, OperatingSystem.IsWindows()
+            ? "Vintagestory.exe" : "Vintagestory"), install.Executable);
+    }
+
     [Fact]
     public void A_variant_is_never_handed_to_a_pack_that_asked_for_the_version()
     {
