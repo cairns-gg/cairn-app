@@ -18,6 +18,26 @@ internal static class Program
     {
         if (args.Length == 0) { Usage(); return 1; }
 
+        // A default Windows console is IBM437, which silently drops every character this
+        // codebase writes above ASCII — the em dashes throughout its messages, the arrow
+        // in "1.0.0 -> 2.0.0", and the one marking a pack as running something other than
+        // the stock game. The diagnostics report is the text people are told to paste into
+        // an issue, so losing characters from it is worse than cosmetic.
+        //
+        // Set whether or not the stream is redirected. Redirection is the case that
+        // matters most — piping the diagnostics report to a file is how somebody captures
+        // it to paste — and it was demonstrably losing the characters: the bytes on disk
+        // held four spaces where the arrow had been, with nothing above ASCII in them.
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                Console.OutputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch (Exception e) when (e is IOException or PlatformNotSupportedException)
+        {
+            // An unusual console is not a reason to refuse to run.
+        }
+
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1 (+https://github.com/dizzyd/cairn)");
         var moddb = new ModDbClient(http);
@@ -86,7 +106,7 @@ internal static class Program
               cairn-cli sync <id>                     install what the lockfile says
               cairn-cli update <id> [modid...]     move followed mods to their newest
               cairn-cli update <id> --check        report updates without installing
-              cairn-cli launch <id> [--dry-run] [--no-install]  sync, then start the game
+              cairn-cli launch <id> [--dry-run] [--no-install] [--install <dir>]  sync, then start
               cairn-cli login [--no-browser]          sign in to cairns.gg
               cairn-cli logout                        forget this machine's token
               cairn-cli whoami                        who this machine is signed in as
@@ -132,9 +152,23 @@ internal static class Program
             locked: id is null ? null : store.LoadLock(id),
             log: null,
             library: library,
-            modsDir: id is null ? null : store.ModsDir(id)));
+            modsDir: id is null ? null : store.ModsDir(id),
+
+            // The same resolution the launcher makes, including a pack pointed at a
+            // modified client — the report is worth less if the two front-ends disagree
+            // about which install it describes.
+            install: id is null ? null : Resolve(store, library, id)));
 
         return 0;
+    }
+
+    /// <summary>The install a pack would launch: its own choice if it has one, else stock.</summary>
+    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id)
+    {
+        if (store.LoadLocalState(id).InstallDirectory is { } dir
+            && GameInstall.TryAt(dir) is { } chosen) return chosen;
+
+        return library.ForVersion(store.Load(id).GameVersion);
     }
 
     private static int Info()
@@ -342,19 +376,47 @@ internal static class Program
 
     private static async Task<int> LaunchPack(PackStore store, GameStore gameStore, RuntimeStore runtimes, ModDbClient moddb, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli launch <id>");
+        if (args.Length < 2)
+            return Fail("usage: cairn-cli launch <id> [--dry-run] [--no-install] [--install <dir>]");
 
         var id = args[1];
         var manifest = store.Load(id);
 
         // A pack names the game version it wants; prefer an install of exactly that.
         var library = new GameLibrary(gameStore, GameInstall.TryLocate());
-        var install = library.ForVersion(manifest.GameVersion);
+
+        // --install overrides for this run only; the pack's own choice is what it was told
+        // to use. Neither is ever inferred: ForVersion will not return a modified client,
+        // so running one is always something somebody asked for.
+        var install = ArgValue(args, "--install") is { } dir
+            ? GameInstall.TryAt(dir) ?? throw new InvalidOperationException(
+                  $"'{dir}' is not a Vintage Story install.")
+            : Resolve(store, library, id);
+
+        // The same rule the launcher's picker applies, which it was not making here: a
+        // build is offered for the version it is a build of and no other. A pack's mods
+        // were resolved against its game version, so running a different one is not an
+        // override, it is a pack running a client nothing in it was chosen for — and the
+        // symptom is this command announcing the variant and then offering to download
+        // the version it was told not to use.
+        if (ArgValue(args, "--install") is not null && install is not null
+            && !string.Equals(install.Version, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
+            return Fail($"'{install.Directory}' is {install.Describe()}, but '{id}' targets "
+                        + $"{manifest.GameVersion}. Retarget the pack, or point it at a "
+                        + $"{manifest.GameVersion} build.");
+
+        if (install is { IsVariant: true } modified)
+            Console.WriteLine($"running {modified.Variant}, not the stock game");
 
         // Same contract as the launcher: fetch what the pack needs rather than telling
         // the user to go and do it.
         var provisioner = new GameProvisioner(http, gameStore, runtimes);
-        var plan = provisioner.Plan(manifest.GameVersion, GameInstall.TryLocate());
+
+        // Told about the install this run will actually use. Plan looks the version up for
+        // itself, and Find deliberately will not return a variant — so without this a pack
+        // pointed at a modified client offered to download the stock game it was told not
+        // to run, having just announced it was running the other one.
+        var plan = provisioner.Plan(manifest.GameVersion, install ?? GameInstall.TryLocate());
 
         if (plan.AnythingToDo)
         {
@@ -447,8 +509,12 @@ internal static class Program
             if (args.Length < 3) return Fail("usage: cairn-cli games remove <version>");
 
             // By the install rather than the version, so a directory whose name differs
-            // from the version its assembly reports is still the one that goes.
-            var found = games.Find(args[2]);
+            // from the version its assembly reports is still the one that goes. A variant
+            // is named by its folder, because Find deliberately will not return one.
+            var found = games.Find(args[2])
+                        ?? games.ListInstalled().FirstOrDefault(i =>
+                               string.Equals(Path.GetFileName(i.Directory), args[2],
+                                   StringComparison.OrdinalIgnoreCase));
             if (found is null) return Fail($"{args[2]} is not installed by Cairn");
 
             games.Remove(found);
@@ -497,7 +563,10 @@ internal static class Program
         Console.WriteLine($"installed ({games.Root}):");
         if (installed.Count == 0) Console.WriteLine("  (none managed by Cairn)");
         foreach (var i in installed)
-            Console.WriteLine($"  {i.Version,-12} {i.Architecture,-6} needs .NET {i.RequiredFramework}");
+            // Describe rather than Version: two entries both reading "1.22.5" with nothing
+            // to tell them apart is a puzzle, and one of them may not be the game.
+            Console.WriteLine($"  {i.Describe(),-24} {i.Architecture,-6} needs .NET {i.RequiredFramework}"
+                              + (i.IsVariant ? $"   ({Path.GetFileName(i.Directory)})" : ""));
 
         var system = GameInstall.TryLocate();
         if (system is not null && !installed.Any(i => i.Directory == system.Directory))

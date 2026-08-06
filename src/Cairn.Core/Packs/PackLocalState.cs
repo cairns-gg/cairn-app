@@ -54,6 +54,18 @@ public sealed class PackLocalState
     /// </summary>
     [JsonPropertyName("unlocked")] public bool Unlocked { get; set; }
 
+    /// <summary>
+    /// A particular install to launch this pack with, instead of the stock one for its game
+    /// version. Null is the ordinary case.
+    ///
+    /// A directory, because that is what identifies an install and what survives a build
+    /// being replaced in place. Local by necessity as well as by design: it names a path on
+    /// this machine, and publishing a pack that told its recipients to run
+    /// <c>/Users/someone/.cairn/games/1.22.5-optimum</c> would be meaningless to them and
+    /// would leak a name besides.
+    /// </summary>
+    [JsonPropertyName("installDirectory")] public string? InstallDirectory { get; set; }
+
     public DateTimeOffset? LastChecked => LastUpdateCheck > 0
         ? DateTimeOffset.FromUnixTimeSeconds(LastUpdateCheck)
         : null;

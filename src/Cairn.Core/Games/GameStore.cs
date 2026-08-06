@@ -75,11 +75,18 @@ public sealed class GameStore
 
         var dir = InstallDir(version);
         var install = GameInstall.TryAt(dir);
-        if (install is not null) return install;
+        if (install is not null && !install.IsVariant) return install;
 
         // The directory name is what we asked for, but trust the assembly metadata: fall
         // back to scanning in case a version was installed under a differing folder name.
-        return ListInstalled().FirstOrDefault(i => i.Version == version);
+        //
+        // Variants are skipped, and that exclusion is the whole reason this reads the
+        // marker at all. A modified client reports the version it was forked from, so an
+        // Optimum build of 1.22.5 answers this scan exactly as the stock game does — and
+        // would then be handed to every 1.22.5 pack on the machine, silently, the moment
+        // the plain install was missing from its expected folder. Running something other
+        // than the game is a choice, never a fallback.
+        return ListInstalled().FirstOrDefault(i => i.Version == version && !i.IsVariant);
     }
 
     public bool IsInstalled(string version) => Find(version) is not null;
@@ -143,5 +150,28 @@ public sealed class GameLibrary(GameStore store, GameInstall? system)
     }
 
     /// <summary>Best available install when a pack's exact version is not present.</summary>
-    public GameInstall? Fallback => system ?? Managed.FirstOrDefault();
+    public GameInstall? Fallback => system ?? Managed.FirstOrDefault(i => !i.IsVariant);
+
+    /// <summary>
+    /// Everything a pack targeting <paramref name="version"/> could be launched with: the
+    /// stock install, plus any modified build of the same version.
+    ///
+    /// Offered rather than chosen. <see cref="ForVersion"/> answers "what runs by default"
+    /// and never returns a variant; this answers "what could you pick", which is a question
+    /// only a person can settle.
+    /// </summary>
+    public IReadOnlyList<GameInstall> ChoicesFor(string version)
+    {
+        var choices = new List<GameInstall>();
+
+        if (ForVersion(version) is { } stock) choices.Add(stock);
+
+        choices.AddRange(Managed.Where(
+            i => i.IsVariant && string.Equals(i.Version, version, StringComparison.OrdinalIgnoreCase)));
+
+        return choices;
+    }
+
+    /// <summary>The install in a particular directory, whatever it is. Null if not one.</summary>
+    public GameInstall? At(string directory) => GameInstall.TryAt(directory);
 }

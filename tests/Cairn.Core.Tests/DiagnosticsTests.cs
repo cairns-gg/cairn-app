@@ -76,6 +76,59 @@ public class DiagnosticsTests
         Assert.Contains("required by carryon", report);
     }
 
+    /// <summary>
+    /// Which install actually runs, which is the fact a report cannot be reconstructed
+    /// without. The installs section says what is on the machine; this says which one this
+    /// pack uses, and the two stop agreeing the moment somebody points a pack at a
+    /// modified client.
+    /// </summary>
+    [Fact]
+    public void The_report_names_the_install_the_pack_would_launch()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cairn-diag-install");
+
+        var stock = new Cairn.Core.GameInstall
+        {
+            Directory = dir, Executable = Path.Combine(dir, "Vintagestory"),
+            Version = "1.22.5", Architecture = Cairn.Core.Runtime.ExecutableArch.X64,
+            RequiredFramework = new Version(10, 0, 0),
+        };
+
+        var report = Diagnostics.Report(Pack("carryon"), Lock("carryon"), install: stock);
+
+        Assert.Contains("runs with  1.22.5", report);
+        Assert.DoesNotContain("NOT THE STOCK GAME", report);
+    }
+
+    [Fact]
+    public void A_pack_running_a_modified_client_says_so_loudly()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cairn-diag-optimum");
+
+        var variant = new Cairn.Core.GameInstall
+        {
+            Directory = dir, Executable = Path.Combine(dir, "Vintagestory"),
+            Version = "1.22.5", Architecture = Cairn.Core.Runtime.ExecutableArch.X64,
+            RequiredFramework = new Version(10, 0, 0),
+            Variant = "Optimum",
+        };
+
+        var report = Diagnostics.Report(Pack("carryon"), Lock("carryon"), install: variant);
+
+        // A pack on a fork behaves unlike everybody else's copy of the same pack, and
+        // nothing else in the report would have said so.
+        Assert.Contains("Optimum", report);
+        Assert.Contains("NOT THE STOCK GAME", report);
+    }
+
+    [Fact]
+    public void A_version_with_no_install_says_that_rather_than_nothing()
+    {
+        var report = Diagnostics.Report(Pack("carryon"), Lock("carryon"), install: null);
+
+        Assert.Contains("nothing installed for this version", report);
+    }
+
     [Fact]
     public void A_mod_the_lock_does_not_have_is_called_out()
     {
