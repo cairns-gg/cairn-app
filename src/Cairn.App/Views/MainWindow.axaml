@@ -626,6 +626,23 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <!--
+                                Only where there is a choice. Almost every pack has one
+                                install for its version, and a picker with a single entry
+                                is a question nobody was asked.
+                            -->
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding Detail.HasInstallChoice, FallbackValue=False}">
+                                <TextBlock Text="Run with" FontSize="12" Opacity="0.7" />
+                                <ComboBox x:Name="InstallChoice" MinWidth="220"
+                                          ItemsSource="{Binding Detail.InstallChoices}"
+                                          SelectedItem="{Binding Detail.SelectedInstall, Mode=TwoWay}" />
+                                <TextBlock Text="{Binding Detail.InstallChoiceLine}"
+                                           FontSize="11" TextWrapping="Wrap"
+                                           IsVisible="{Binding Detail.HasInstallNote}"
+                                           Foreground="{DynamicResource VsWarningBrush}" />
+                            </StackPanel>
+
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Server to auto-join on launch"
                                            FontSize="12" Opacity="0.7" />

@@ -100,6 +100,28 @@ public class GameVariantTests : IDisposable
     }
 
     [Fact]
+    public void A_variant_is_offered_only_beside_the_version_it_is_a_build_of()
+    {
+        // Offered for the version it forked from, and for nothing else. An Optimum build
+        // of 1.22.5 is not a 1.22.6 install, however much somebody on 1.22.6 might want
+        // one — Optimum routinely lags the game by a release, and quietly answering the
+        // wrong version is how that lag turns into a pack running a client it was never
+        // resolved against.
+        Install("1.22.5-optimum", "Optimum");
+
+        var store = new GameStore(_root);
+        var library = new GameLibrary(store, system: null);
+
+        // Read back rather than assumed: a stub dll carries no metadata, so what this
+        // install reports is whatever ReadVersion falls back to. The pairing under test is
+        // "its own version" against "any other", not any particular string.
+        var reported = store.ListInstalled().Single().Version;
+
+        Assert.Single(library.ChoicesFor(reported));
+        Assert.Empty(library.ChoicesFor(reported + "-and-then-some"));
+    }
+
+    [Fact]
     public void A_variant_is_still_listed_as_something_you_could_choose()
     {
         // Excluded from every automatic path, offered on the one deliberate one.

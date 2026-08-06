@@ -813,6 +813,25 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Offered only where there is a real choice to make.</summary>
     public bool HasInstallChoice => InstallChoices.Count > 1 || ChosenInstall is not null;
 
+    /// <summary>
+    /// Bound to the picker. Writing it records the choice; the setter is where that happens
+    /// rather than a command, because a combo box has no other way to say what was picked.
+    /// </summary>
+    public GameInstall? SelectedInstall
+    {
+        get => InstallChoices.FirstOrDefault(
+                   i => string.Equals(i.Directory, ResolvedInstall?.Directory,
+                       StringComparison.OrdinalIgnoreCase))
+               ?? InstallChoices.FirstOrDefault();
+        set
+        {
+            if (value is null || value.Directory == ChosenInstall?.Directory) return;
+            ChooseInstall(value);
+        }
+    }
+
+    public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
+
     public string InstallChoiceLine => ChosenInstallMissing
         ? "The install this pack was set to use is gone; it will run the stock game instead."
         : ResolvedInstall is { IsVariant: true } v
@@ -837,6 +856,8 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(ChosenInstallMissing));
         OnPropertyChanged(nameof(InstallChoiceLine));
         OnPropertyChanged(nameof(HasInstallChoice));
+        OnPropertyChanged(nameof(HasInstallNote));
+        OnPropertyChanged(nameof(SelectedInstall));
     }
 
     /// <summary>
