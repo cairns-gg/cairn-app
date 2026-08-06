@@ -391,4 +391,28 @@ public class PackOptimumTests : IDisposable
         Assert.NotNull(button);
         Assert.True(button.IsEffectivelyVisible);
     }
+
+    [AvaloniaFact]
+    public void The_check_button_gives_way_to_its_progress_line()
+    {
+        var (_, _, detail) = Open(Supported);
+
+        Assert.True(detail.ShowModUpdateCheck);
+
+        detail.CheckingUpdates = true;
+
+        // Hidden rather than greyed: the line beside it says what is happening, and a
+        // disabled button next to "checking carryon… (3 of 28)" is a control asking to be
+        // pressed and refusing.
+        Assert.False(detail.ShowModUpdateCheck);
+
+        // The command guards itself regardless — a hidden button is a courtesy, not a rule,
+        // and a second check would double the requests for the same answer.
+        Assert.False(detail.CheckUpdatesCommand.CanExecute(null));
+
+        detail.CheckingUpdates = false;
+
+        Assert.True(detail.ShowModUpdateCheck);
+        Assert.True(detail.CheckUpdatesCommand.CanExecute(null));
+    }
 }

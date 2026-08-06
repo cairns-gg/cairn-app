@@ -577,8 +577,15 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public bool ShowUnlockedNote => IsFollowing && !IsLocked;
 
-    /// <summary>Hidden while search results are showing, as it always was.</summary>
-    public bool ShowModUpdateCheck => CanEditMods && !ShowingSearch;
+    /// <summary>
+    /// Hidden while search results are showing, as it always was — and while a check is
+    /// running, where the progress line beside it says what is happening instead.
+    ///
+    /// The command keeps its own guard regardless. A hidden button is a courtesy, not a
+    /// rule: nothing stops a keyboard, a script or a later view invoking the command, and
+    /// running a second check would double the requests for the same answer.
+    /// </summary>
+    public bool ShowModUpdateCheck => CanEditMods && !ShowingSearch && !CheckingUpdates;
 
     public string LockedNote =>
         "These mods are the author's. Unlock to add, remove or change versions in your copy.";
@@ -1668,6 +1675,7 @@ public partial class PackDetailViewModel : ViewModelBase
         if (!value) CheckingUpdatesLine = "";
         CheckUpdatesCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsWorking));
+        OnPropertyChanged(nameof(ShowModUpdateCheck));
     }
 
     /// <summary>
