@@ -1650,6 +1650,38 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Set while a check is running, so the button can say so.</summary>
     [ObservableProperty] public partial bool CheckingUpdates { get; set; }
 
+    /// <summary>
+    /// Which mod is being asked about, and how far through.
+    ///
+    /// The check is one ModDB request per unpinned mod, so a thirty-mod pack sits there for
+    /// some seconds. It used to sit there showing nothing at all — the busy flag was set and
+    /// bound to nothing — which is indistinguishable from a button that did not work, and
+    /// invites pressing it again.
+    ///
+    /// A count as well as a name, because a name alone moves without saying whether it is
+    /// nearly done.
+    /// </summary>
+    [ObservableProperty] public partial string CheckingUpdatesLine { get; set; } = "";
+
+    partial void OnCheckingUpdatesChanged(bool value)
+    {
+        if (!value) CheckingUpdatesLine = "";
+        CheckUpdatesCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsWorking));
+    }
+
+    /// <summary>
+    /// Anything the status bar should show a bar for.
+    ///
+    /// Checking for mod updates does not set IsBusy — it leaves the pane usable — but it is
+    /// still several seconds of network, and the status bar is where a second pair of eyes
+    /// looks to see whether the app is doing something.
+    /// </summary>
+    public bool IsWorking => IsBusy || CheckingUpdates;
+
+    /// <summary>Not while one is already running: pressing again would double the requests.</summary>
+    private bool CanCheckUpdates => NotBusy && !CheckingUpdates;
+
     [ObservableProperty] public partial string? UpdateSummary { get; set; }
 
     public bool HasUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummary);
@@ -1662,11 +1694,23 @@ public partial class PackDetailViewModel : ViewModelBase
     /// Asks ModDB what each followed mod would move to. Reports only — nothing is
     /// installed until it is asked for, one mod or all.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(NotBusy))]
+    [RelayCommand(CanExecute = nameof(CanCheckUpdates))]
     private async Task CheckUpdates()
     {
         CheckingUpdates = true;
         Error = null;
+
+        // Only the unpinned ones are asked about; see PackSyncer.CheckUpdatesAsync.
+        var total = Manifest.Mods.Count(m => m.Version is null);
+        var done = 0;
+
+        var progress = new Progress<string>(modId =>
+        {
+            done++;
+            CheckingUpdatesLine = total > 1
+                ? $"checking {modId}… ({done} of {total})"
+                : $"checking {modId}…";
+        });
 
         try
         {
@@ -1675,7 +1719,7 @@ public partial class PackDetailViewModel : ViewModelBase
             // per mod to be told the same thing. Cleared from Preferences → Storage when
             // somebody knows a release has just landed.
             var updates = await syncer.CheckUpdatesAsync(
-                Manifest, _store.LockPath(Id), cache: new ModUpdateCache());
+                Manifest, _store.LockPath(Id), progress, cache: new ModUpdateCache());
 
             foreach (var row in Mods)
                 row.UpdateAvailable = updates

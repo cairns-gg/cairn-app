@@ -316,9 +316,22 @@ internal static class Program
 
         // Remembered for a few minutes: the check is one ModDB request per unpinned mod,
         // and a script polling it should not pay that every time. --fresh overrides.
+        // One request per unpinned mod, so a full pack takes seconds with nothing to look
+        // at. Written to stderr so piping the result stays clean, and only to a terminal —
+        // a redirected run wants the answer, not a play-by-play.
+        var checkedSoFar = 0;
+        var toCheck = manifest.Mods.Count(m => m.Version is null);
+
+        var progress = Console.IsErrorRedirected
+            ? null
+            : new Progress<string>(modId =>
+                Console.Error.Write($"\rchecking {modId} ({++checkedSoFar} of {toCheck})".PadRight(60)));
+
         var updates = await syncer.CheckUpdatesAsync(
-            manifest, store.LockPath(id),
+            manifest, store.LockPath(id), progress,
             cache: new ModUpdateCache(), force: args.Contains("--fresh"));
+
+        if (progress is not null) Console.Error.Write("\r".PadRight(61) + "\r");
 
         if (updates.Count == 0)
         {

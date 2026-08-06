@@ -23,7 +23,7 @@
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" Text="{Binding Status}" FontSize="12" VerticalAlignment="Center" />
                 <ProgressBar Grid.Column="1" Width="110" IsIndeterminate="True"
-                             IsVisible="{Binding Detail.IsBusy, FallbackValue=False}"
+                             IsVisible="{Binding Detail.IsWorking, FallbackValue=False}"
                              VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -398,6 +398,15 @@
                                             IsVisible="{Binding Detail.ShowingSearch}"
                                             Command="{Binding Detail.ClearSearchCommand}"
                                             Padding="10,3" FontSize="11" />
+
+                                    <!-- One request per unpinned mod, so this runs for
+                                         seconds on a full pack. Without it the button
+                                         looked broken and got pressed again. -->
+                                    <TextBlock x:Name="CheckingUpdatesLine"
+                                               VerticalAlignment="Center"
+                                               FontSize="11" Opacity="0.6"
+                                               IsVisible="{Binding Detail.CheckingUpdates, FallbackValue=False}"
+                                               Text="{Binding Detail.CheckingUpdatesLine}" />
                                 </StackPanel>
                             </Grid>
 

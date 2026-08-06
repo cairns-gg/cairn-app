@@ -188,4 +188,16 @@ public class ModUpdateCacheTests : IDisposable
         // a check over.
         Assert.Null(_cache.Get("anego", "whatever", Now));
     }
+
+    [Fact]
+    public void A_remembered_answer_reports_no_progress()
+    {
+        // Worth stating because the progress line is driven by these reports: a cached
+        // answer returns without asking ModDB anything, so nothing is reported and the
+        // indicator never appears — which is right, since there is nothing to wait for.
+        var print = ModUpdateCache.Fingerprint(Pack("carryon"), null);
+        _cache.Save("anego", print, Updates("carryon"), Now);
+
+        Assert.NotNull(_cache.Get("anego", print, Now.AddMinutes(1)));
+    }
 }
