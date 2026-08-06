@@ -110,7 +110,7 @@ internal static class Program
               cairn-cli pull <id> [--check] [--theirs] take an author's newer revision
               cairn-cli sync <id>                     install what the lockfile says
               cairn-cli update <id> [modid...]     move followed mods to their newest
-              cairn-cli update <id> --check        report updates without installing
+              cairn-cli update <id> --check [--fresh]  report updates without installing
               cairn-cli launch <id> [--dry-run] [--no-install] [--install <dir>]  sync, then start
               cairn-cli login [--no-browser]          sign in to cairns.gg
               cairn-cli logout                        forget this machine's token
@@ -314,7 +314,11 @@ internal static class Program
         var manifest = store.Load(id);
         var syncer = new PackSyncer(moddb, http);
 
-        var updates = await syncer.CheckUpdatesAsync(manifest, store.LockPath(id));
+        // Remembered for a few minutes: the check is one ModDB request per unpinned mod,
+        // and a script polling it should not pay that every time. --fresh overrides.
+        var updates = await syncer.CheckUpdatesAsync(
+            manifest, store.LockPath(id),
+            cache: new ModUpdateCache(), force: args.Contains("--fresh"));
 
         if (updates.Count == 0)
         {

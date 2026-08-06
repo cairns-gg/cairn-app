@@ -102,6 +102,15 @@ public partial class PreferencesViewModel : ViewModelBase
         // Reported separately from games because it is neither a game nor a cache: it is
         // the largest thing Cairn writes and the only one that does not come back on its
         // own, so leaving it out of the totals made several gigabytes unaccountable.
+        // Its own row rather than folded into the caches, because it is the one people
+        // have a reason to clear on purpose: a mod author publishes a release, and Cairn
+        // goes on reporting the answer it remembered for another few minutes.
+        var checks = new ModUpdateCache();
+        UpdateChecksDetail = checks.Count() == 0
+            ? "none remembered"
+            : $"{Count(checks.Count(), "pack")}, kept {ModUpdateCache.Lifetime.TotalMinutes:0} minutes";
+        HasUpdateChecks = checks.Count() > 0;
+
         BuildTrees = GameCleanup.BuildTreesUnder(CairnPaths.BuildsRoot);
         var builds = BuildTrees.Sum(t => t.Bytes);
 
@@ -118,6 +127,23 @@ public partial class PreferencesViewModel : ViewModelBase
 
         RuntimesDetail = Count(_runtimes.ListInstalled().Count(), "runtime");
         PacksDetail = Count(_store.ListIds().Count(), "pack");
+    }
+
+    [ObservableProperty] public partial string UpdateChecksDetail { get; set; } = "";
+    [ObservableProperty] public partial bool HasUpdateChecks { get; set; }
+
+    /// <summary>
+    /// Forgets what "check for mod updates" last answered, so the next check asks ModDB.
+    ///
+    /// No confirmation: it deletes a few kilobytes that rebuild themselves on the next
+    /// press, which is the one thing on this page that genuinely costs nothing to undo.
+    /// </summary>
+    [RelayCommand]
+    private void ClearUpdateChecks()
+    {
+        new ModUpdateCache().Clear();
+        CleanupSummary = "Forgot the remembered update checks; the next check will ask ModDB.";
+        Refresh();
     }
 
     [ObservableProperty] public partial string BuildsSize { get; set; } = "";

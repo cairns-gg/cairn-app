@@ -1671,7 +1671,11 @@ public partial class PackDetailViewModel : ViewModelBase
         try
         {
             var syncer = new PackSyncer(_moddb, _http);
-            var updates = await syncer.CheckUpdatesAsync(Manifest, _store.LockPath(Id));
+            // Remembered briefly, so pressing this twice does not spend one ModDB request
+            // per mod to be told the same thing. Cleared from Preferences → Storage when
+            // somebody knows a release has just landed.
+            var updates = await syncer.CheckUpdatesAsync(
+                Manifest, _store.LockPath(Id), cache: new ModUpdateCache());
 
             foreach (var row in Mods)
                 row.UpdateAvailable = updates

@@ -75,7 +75,7 @@
                             default vertical alignment (Stretch, so top) stand left the
                             three columns visibly off each other's baseline.
                         -->
-                        <Grid ColumnDefinitions="180,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                        <Grid ColumnDefinitions="180,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                               ColumnSpacing="12" RowSpacing="8">
                             <Grid.Styles>
                                 <Style Selector="Grid > TextBlock">
@@ -107,6 +107,24 @@
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Packs" />
                             <TextBlock Grid.Row="3" Grid.Column="1" Classes="size" Text="{Binding PacksSize}" />
                             <TextBlock Grid.Row="3" Grid.Column="2" Classes="detail" Text="{Binding PacksDetail}" />
+
+                            <!--
+                                Worth its own row and its own button: it is the one thing
+                                here somebody has a reason to clear deliberately, when an
+                                author has just published and Cairn is still repeating the
+                                answer it remembered.
+                            -->
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Remembered update checks"
+                                       IsVisible="{Binding HasUpdateChecks}" />
+                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="detail"
+                                       IsVisible="{Binding HasUpdateChecks}"
+                                       Text="{Binding UpdateChecksDetail}" />
+                            <Button Grid.Row="5" Grid.Column="3" x:Name="ClearUpdateChecks"
+                                    Content="Forget" Padding="14,4"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding HasUpdateChecks}"
+                                    IsEnabled="{Binding NotCleaningUp}"
+                                    Command="{Binding ClearUpdateChecksCommand}" />
 
                             <!--
                                 Shown only when there is one, because most machines never

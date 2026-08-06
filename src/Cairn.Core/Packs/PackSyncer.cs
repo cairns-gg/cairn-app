@@ -342,13 +342,29 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// What each following mod would move to if updated. Mods pinned to an exact version
     /// are skipped — a pin is an instruction to stay put, not a thing to nag about.
     /// </summary>
+    /// <param name="cache">
+    /// Remembers the answer for a few minutes. Passed in rather than created here so the
+    /// caller decides where it lives, and so a caller that wants a live answer can pass
+    /// nothing — but both front-ends pass one, because the alternative is thirty ModDB
+    /// requests to be told the same thing twice. See <see cref="ModUpdateCache"/>.
+    /// </param>
+    /// <param name="force">Ignores a remembered answer, and replaces it with a fresh one.</param>
     public async Task<List<ModUpdate>> CheckUpdatesAsync(
         PackManifest manifest,
         string lockPath,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ModUpdateCache? cache = null,
+        bool force = false)
     {
         var locks = PackLock.Load(lockPath);
+
+        var fingerprint = cache is null ? "" : ModUpdateCache.Fingerprint(manifest, locks);
+
+        if (cache is not null && !force
+            && cache.Get(manifest.Id, fingerprint, DateTimeOffset.UtcNow) is { } remembered)
+            return remembered;
+
         var updates = new List<ModUpdate>();
 
         foreach (var want in manifest.Mods)
@@ -380,6 +396,11 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             if (!string.Equals(installed.Version, newest.ModVersion, StringComparison.OrdinalIgnoreCase))
                 updates.Add(new ModUpdate(want.ModId, installed.Version, newest.ModVersion));
         }
+
+        // Only a run that finished. A check cancelled halfway has looked at some mods and
+        // not others, so remembering it would report "no updates" for the ones it never
+        // reached, for as long as the answer stands.
+        cache?.Save(manifest.Id, fingerprint, updates, DateTimeOffset.UtcNow);
 
         return updates;
     }
