@@ -166,4 +166,94 @@ public class GameCleanupTests : IDisposable
 
         Assert.True(Directory.Exists(_runtimes.Root));
     }
+
+    // ---- a client built from source is not a download ----
+
+    /// <summary>An install marked as a modified build, named the way Cairn names one.</summary>
+    private string InstallVariant(string version, int bytes = 8192)
+    {
+        var dir = Path.Combine(_games.Root, version + "-optimum");
+        Directory.CreateDirectory(dir);
+
+        File.WriteAllBytes(Path.Combine(dir, OperatingSystem.IsWindows()
+            ? "Vintagestory.exe" : "Vintagestory"), new byte[bytes]);
+        File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker),
+            """{"label":"Optimum"}""");
+
+        return dir;
+    }
+
+    [Fact]
+    public void A_built_client_is_never_swept()
+    {
+        InstallGame("1.22.5");
+        var variant = InstallVariant("1.22.5");
+
+        // No pack targets it, which is exactly when the sweep would take it.
+        var plan = Plan();
+
+        // The sweep's licence is that nothing in it is irreplaceable — every version is a
+        // re-download. A client built from source is twenty minutes of compiling, so on
+        // the same rule it would vanish the moment the last pack using it was retargeted,
+        // from a button offering to tidy up.
+        Assert.DoesNotContain(plan.Versions, v => v.Directory == variant);
+        Assert.Contains(plan.Versions, v => v.Label == "1.22.5");
+
+        Assert.True(Directory.Exists(variant));
+    }
+
+    [Fact]
+    public void A_runtime_the_built_client_needs_is_kept_with_it()
+    {
+        InstallVariant("1.22.5");
+
+        // Nothing else survives the sweep, so a runtime is orphaned only if the variant
+        // does not count — and it launches like anything else, so it does.
+        var plan = Plan();
+
+        Assert.Empty(plan.Versions);
+        Assert.Contains(plan.Kept, k => k.Contains("Optimum"));
+    }
+
+    [Fact]
+    public void The_kept_list_does_not_say_the_same_version_twice()
+    {
+        MakePack("anego", "1.22.5");
+        InstallGame("1.22.5");
+        InstallVariant("1.22.5");
+
+        // A variant reports the version it was built from, so both installs answer to
+        // "1.22.5" and a plain version list would show it twice.
+        Assert.Equal(plan_kept().Distinct().Count(), plan_kept().Count);
+
+        List<string> plan_kept() => [.. Plan().Kept];
+    }
+
+    // ---- build trees ----
+
+    [Fact]
+    public void A_build_tree_is_reported_but_never_swept()
+    {
+        var builds = Path.Combine(_root, "builds");
+        var tree = Path.Combine(builds, "optimum");
+        Directory.CreateDirectory(tree);
+        File.WriteAllBytes(Path.Combine(tree, "big.bin"), new byte[64 * 1024]);
+
+        var trees = GameCleanup.BuildTreesUnder(builds);
+
+        Assert.Single(trees);
+        Assert.Equal("optimum", trees[0].Label);
+        Assert.True(trees[0].Bytes >= 64 * 1024);
+
+        // Reported so the disk it uses is visible; not swept, because it is the one thing
+        // here that does not come back on its own.
+        Assert.DoesNotContain(Plan().Versions, v => v.Directory == tree);
+    }
+
+    [Fact]
+    public void No_builds_root_reports_nothing_rather_than_failing()
+    {
+        Assert.Empty(GameCleanup.BuildTreesUnder(Path.Combine(_root, "never-built")));
+    }
 }

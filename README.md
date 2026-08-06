@@ -300,7 +300,13 @@ Game versions are managed with `cairn-cli games` (above)
 or **Preferences → Storage** in the launcher, which is where installed versions are removed
 and private runtimes managed. **Clean up** there sweeps every version no pack targets, plus
 any private runtime left with nothing to run and the icon and mod-detail caches — one sweep
-for everything that comes back on its own. It lists each item with its size and what it
+for everything that comes back on its own.
+
+A client built from source is deliberately **not** in that sweep, and neither is its build
+tree. Everything else there is a download that Play would fetch again; a built client is
+twenty minutes of compiling, so on the same rule it would vanish the moment the last pack
+using it was retargeted, from a button offering to tidy up. The build tree is listed with
+its size and removed by its own **Remove**, which says what it costs to undo. It lists each item with its size and what it
 frees, and asks first. Nothing it removes is irreplaceable, which is what makes it safe to
 offer: Play downloads whatever a pack needs. A pack whose manifest will not load blocks the
 sweep rather than being treated as needing nothing. Nothing nags about a missing version: pressing **Play** fetches

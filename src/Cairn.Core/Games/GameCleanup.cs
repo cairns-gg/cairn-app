@@ -29,6 +29,16 @@ public sealed record CleanupPlan(
     /// </summary>
     public IReadOnlyList<CleanupTarget> Caches { get; init; } = [];
 
+    /// <summary>
+    /// Working trees for clients built from source — reported, never swept.
+    ///
+    /// The largest thing Cairn writes and the only one that does not come back on its own,
+    /// so it fails this sweep's test on both counts at once: too big to leave unmentioned,
+    /// too expensive to delete without being asked. Listed so the disk it uses is visible
+    /// and can be reclaimed deliberately.
+    /// </summary>
+    public IReadOnlyList<CleanupTarget> BuildTrees { get; init; } = [];
+
     /// <summary>Set when the question could not be answered, as distinct from "nothing to do".</summary>
     public bool IsBlocked => Blocked is not null;
 
@@ -73,7 +83,35 @@ public static class GameCleanup
             return new CleanupPlan([], [], [],
                 Blocked: $"Cannot read {string.Join(", ", unreadable)}, so what is unused is unknown.");
 
-        return Plan(games, runtimes, used);
+        return Plan(games, runtimes, used) with { BuildTrees = BuildTreesUnder(CairnPaths.BuildsRoot) };
+    }
+
+    /// <summary>
+    /// Working trees under the builds root, one entry each, with what they occupy.
+    ///
+    /// Measured rather than assumed: a tree that has been bootstrapped is several
+    /// gigabytes and one that was cancelled early may be a few hundred megabytes, and the
+    /// point of listing them is to say which.
+    /// </summary>
+    public static IReadOnlyList<CleanupTarget> BuildTreesUnder(string root)
+    {
+        try
+        {
+            if (!Directory.Exists(root)) return [];
+
+            return
+            [
+                .. Directory.EnumerateDirectories(root)
+                    .OrderBy(d => d, StringComparer.Ordinal)
+                    .Select(d => new CleanupTarget(
+                        Path.GetFileName(d), d, DirectoryGrowth.Measure(d)))
+                    .Where(t => t.Bytes > 0)
+            ];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     public static CleanupPlan Plan(
@@ -82,10 +120,19 @@ public static class GameCleanup
         var keep = new HashSet<string>(keepVersions, StringComparer.OrdinalIgnoreCase);
 
         var installed = games.ListInstalled().ToList();
-        var kept = installed.Where(i => keep.Contains(i.Version)).ToList();
+
+        // A variant is kept whatever any pack targets. This sweep's whole licence is that
+        // nothing in it is irreplaceable — every version is a re-download, and Play fetches
+        // what a pack needs — and a client built from source is the one thing here that is
+        // not: it costs twenty minutes of compiling and several gigabytes of working tree
+        // to make again. Swept on the same rule as a download, it would vanish the moment
+        // the last pack using it was retargeted, from a button offering to tidy up.
+        var kept = installed
+            .Where(i => i.IsVariant || keep.Contains(i.Version))
+            .ToList();
 
         var versions = installed
-            .Where(i => !keep.Contains(i.Version))
+            .Where(i => !i.IsVariant && !keep.Contains(i.Version))
             .Select(i => new CleanupTarget(i.Version, i.Directory, DirectoryGrowth.Measure(i.Directory)))
             .ToList();
 
@@ -97,7 +144,10 @@ public static class GameCleanup
                 Path.GetFileName(r.Root), r.Root, DirectoryGrowth.Measure(r.Root)))
             .ToList();
 
-        return new CleanupPlan(versions, orphaned, [.. kept.Select(i => i.Version)]);
+        // Distinct, because a variant reports the version it was built from and would
+        // otherwise list "1.22.5" twice beside the stock install of the same version.
+        return new CleanupPlan(versions, orphaned,
+            [.. kept.Select(i => i.Describe).Distinct(StringComparer.OrdinalIgnoreCase)]);
     }
 
     private static bool Serves(DotnetRuntime runtime, GameInstall install) =>

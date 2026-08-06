@@ -99,13 +99,77 @@ public partial class PreferencesViewModel : ViewModelBase
         RuntimesSize = Human(runtimes);
         CacheSize = Human(cache);
         PacksSize = Human(packs);
-        TotalSize = Human(games + runtimes + cache + packs);
+        // Reported separately from games because it is neither a game nor a cache: it is
+        // the largest thing Cairn writes and the only one that does not come back on its
+        // own, so leaving it out of the totals made several gigabytes unaccountable.
+        BuildTrees = GameCleanup.BuildTreesUnder(CairnPaths.BuildsRoot);
+        var builds = BuildTrees.Sum(t => t.Bytes);
+
+        BuildsSize = Human(builds);
+        HasBuildTrees = builds > 0;
+        BuildsDetail = BuildTrees.Count == 0
+            ? "none"
+            : string.Join(", ", BuildTrees.Select(t => t.Label));
+
+        TotalSize = Human(games + runtimes + cache + packs + builds);
 
         var installed = _games.ListInstalled().Count();
         GamesDetail = Count(installed, "version");
 
         RuntimesDetail = Count(_runtimes.ListInstalled().Count(), "runtime");
         PacksDetail = Count(_store.ListIds().Count(), "pack");
+    }
+
+    [ObservableProperty] public partial string BuildsSize { get; set; } = "";
+    [ObservableProperty] public partial string BuildsDetail { get; set; } = "";
+    [ObservableProperty] public partial bool HasBuildTrees { get; set; }
+
+    private IReadOnlyList<CleanupTarget> BuildTrees { get; set; } = [];
+
+    /// <summary>
+    /// Deletes the working trees, keeping any client built from them.
+    ///
+    /// Its own action rather than part of Clean up, because it fails that sweep's promise:
+    /// what it removes does not come back on its own, it comes back after twenty minutes of
+    /// compiling. Worth offering all the same — between pin bumps it is gigabytes doing
+    /// nothing.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotCleaningUp))]
+    private async Task RemoveBuildTrees()
+    {
+        if (BuildTrees.Count == 0) return;
+
+        var total = BuildTrees.Sum(t => t.Bytes);
+
+        var message = "This deletes:\n"
+                      + string.Join("\n", BuildTrees.Select(
+                          t => $"  • {t.Label} build tree ({Bytes.Human(t.Bytes)})"))
+                      + $"\n\nFrees {Bytes.Human(total)}. Any client already built from them "
+                      + "is kept and goes on working.\n\nRebuilding one takes 15–30 minutes, "
+                      + "so this is worth doing only if you need the space.";
+
+        if (Confirm is not null
+            && !await Confirm(new ConfirmViewModel("Remove build trees?", message, "Remove")))
+            return;
+
+        IsCleaningUp = true;
+
+        try
+        {
+            foreach (var tree in BuildTrees)
+                await Task.Run(() =>
+                {
+                    try { Directory.Delete(tree.Directory, recursive: true); }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                });
+
+            CleanupSummary = $"Removed the build trees, freeing {Bytes.Human(total)}.";
+        }
+        finally
+        {
+            IsCleaningUp = false;
+            Refresh();
+        }
     }
 
     /// <summary>Set by the view; the same confirmation dialog the pack delete uses.</summary>

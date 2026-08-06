@@ -31,6 +31,13 @@ public class InstalledGameViewModel(
     public string Origin => IsManaged ? "installed by Cairn" : "found on this machine";
 
     public string Version => Install.Version;
+
+    /// <summary>
+    /// What the row says. Describe rather than Version, because a build made from source
+    /// reports the version it was built from — so an Optimum 1.22.5 and the stock 1.22.5
+    /// were two rows both reading "1.22.5", one of which cannot be replaced by a download.
+    /// </summary>
+    public string Display => Install.Describe;
     public string Directory => Install.Directory;
     public string Needs => $"needs .NET {Install.RequiredFramework}";
     public string RuntimeLine => runtime.Describe();

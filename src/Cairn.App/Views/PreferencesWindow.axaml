@@ -75,7 +75,7 @@
                             default vertical alignment (Stretch, so top) stand left the
                             three columns visibly off each other's baseline.
                         -->
-                        <Grid ColumnDefinitions="180,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+                        <Grid ColumnDefinitions="180,90,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                               ColumnSpacing="12" RowSpacing="8">
                             <Grid.Styles>
                                 <Style Selector="Grid > TextBlock">
@@ -107,6 +107,29 @@
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="Packs" />
                             <TextBlock Grid.Row="3" Grid.Column="1" Classes="size" Text="{Binding PacksSize}" />
                             <TextBlock Grid.Row="3" Grid.Column="2" Classes="detail" Text="{Binding PacksDetail}" />
+
+                            <!--
+                                Shown only when there is one, because most machines never
+                                build a client. It is the largest thing Cairn writes, so
+                                leaving it out of this table made gigabytes unaccountable —
+                                but it is not in the sweep above, because what it removes
+                                comes back after twenty minutes of compiling rather than
+                                on its own.
+                            -->
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Client build trees"
+                                       IsVisible="{Binding HasBuildTrees}" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" Classes="size"
+                                       IsVisible="{Binding HasBuildTrees}"
+                                       Text="{Binding BuildsSize}" />
+                            <TextBlock Grid.Row="4" Grid.Column="2" Classes="detail"
+                                       IsVisible="{Binding HasBuildTrees}"
+                                       Text="{Binding BuildsDetail, StringFormat='{}{0} — kept so a rebuild is quick'}" />
+                            <Button Grid.Row="4" Grid.Column="3"
+                                    Content="Remove" Padding="14,4"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding HasBuildTrees}"
+                                    IsEnabled="{Binding NotCleaningUp}"
+                                    Command="{Binding RemoveBuildTreesCommand}" />
 
                             <!--
                                 One sweep for everything that comes back on its own: unused
@@ -193,7 +216,7 @@
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:InstalledGameViewModel">
                                             <StackPanel Spacing="2" Margin="0,3">
-                                                <TextBlock Text="{Binding Version}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Display}" FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding Origin}" FontSize="11" Opacity="0.7"
                                                            IsVisible="{Binding !IsManaged}" />
                                                 <TextBlock Text="{Binding Needs}" FontSize="11" Opacity="0.7" />

@@ -83,6 +83,12 @@ public class ListingShots : IDisposable
         Games.FakeInstall(OptimumSource.Pinned.GameVersion,
             Path.Combine(_home, "games", OptimumSource.Pinned.GameVersion), bytes: 610 * 1024 * 1024);
 
+        // A machine that has built a client, so Storage shows the row for it. It is the
+        // largest thing Cairn writes and the one most worth seeing accounted for.
+        var tree = Path.Combine(_home, "builds", "optimum");
+        Directory.CreateDirectory(tree);
+        File.WriteAllBytes(Path.Combine(tree, "working-tree.bin"), new byte[3_300L > 0 ? 8 * 1024 * 1024 : 0]);
+
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
     }
 
@@ -184,6 +190,14 @@ public class ListingShots : IDisposable
 
         var prefsWindow = new PreferencesWindow { DataContext = prefs };
         prefsWindow.Show();
+
+        // The Storage tab, which is what this frame is called after. Without selecting it
+        // the shot was of the Overview tab — a version string and a scale picker — under a
+        // filename promising what is on disk.
+        var prefTabs = prefsWindow.GetVisualDescendants().OfType<TabControl>().Single();
+        prefTabs.SelectedItem = prefTabs.GetVisualDescendants().OfType<TabItem>()
+            .Single(t => (t.Header as string) == "Storage");
+
         Settle(2);
 
         using (var frame = prefsWindow.CaptureRenderedFrame())
