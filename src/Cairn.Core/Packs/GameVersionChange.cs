@@ -158,13 +158,15 @@ public static class GameVersionChange
                 continue;
             }
 
-            verdicts.Add(Judge(want, installed, release, target));
+            verdicts.Add(Judge(want, installed, release, manifest.GameVersion, target));
         }
 
         return new VersionChangePlan(manifest.GameVersion, target, verdicts, worlds ?? []);
     }
 
-    private static ModVerdict Judge(PackMod want, string? installed, ResolvedRelease? release, string target)
+    /// <param name="from">The version the pack is on now. See the approximate case below.</param>
+    private static ModVerdict Judge(
+        PackMod want, string? installed, ResolvedRelease? release, string from, string target)
     {
         if (release is null)
             return want.Version is null
@@ -173,22 +175,38 @@ public static class GameVersionChange
                 : new ModVerdict(want.ModId, installed, null, ModOutcome.PinUnavailable,
                     $"pinned to {want.Version}, which has no release for {target}");
 
-        // Approximate wins over moved-or-not: that a release is not marked for the target
-        // is the actionable fact, and it is true whether or not the file changes.
-        if (release.Quality == MatchQuality.SameMinor)
+        // Approximate is worth reporting when the move causes it, and not otherwise. A
+        // release marked for 1.22.3 is no more approximate at 1.22.5 than it already was at
+        // 1.22.6 — flagging it as a consequence of the change says something untrue about
+        // the change, and on a pack whose mods mostly trail the game version it is most of
+        // the preview. A warning that appears against two thirds of the rows every time is
+        // one nobody reads by the third version change.
+        //
+        // Null here means the release does not serve the version being left at all, which
+        // is a real difference and stays reported: moving 1.21.7 → 1.22.5 genuinely puts
+        // the mod on a release it was not on.
+        var alreadyApproximate = release.QualityFor(from) == MatchQuality.SameMinor;
+
+        if (release.Quality == MatchQuality.SameMinor && !alreadyApproximate)
             return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Approximate,
                 $"marked for another {Minor(target)} release, not {target}");
 
+        // Still worth a word when it stays approximate — it is a standing fact about the
+        // mod — but as part of "nothing happens" rather than as a consequence.
+        var stays = release.Quality == MatchQuality.SameMinor
+            ? $"; still marked for another {Minor(target)} release, as it was for {from}"
+            : "";
+
         if (string.Equals(installed, release.ModVersion, StringComparison.OrdinalIgnoreCase))
             return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Unchanged,
-                $"already on the release for {target}");
+                $"already on the release for {target}{stays}");
 
         return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Moves,
-            installed is null
+            (installed is null
                 // Naming the version either way: the row shows this note and nothing else,
                 // so "not installed yet" alone would hide what is about to be installed.
                 ? $"not installed yet; would install {release.ModVersion}"
-                : $"{installed} → {release.ModVersion}");
+                : $"{installed} → {release.ModVersion}") + stays);
     }
 
     private static string Minor(string version)

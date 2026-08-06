@@ -175,13 +175,15 @@ public class GameVersionChangeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_release_marked_for_another_patch_in_the_same_minor_warns_rather_than_breaks()
+    public async Task A_move_that_makes_a_mod_approximate_warns_rather_than_breaks()
     {
         // Vintage Story itself treats same-minor releases as installable, which is why most
-        // mods survive a point release without their author touching anything.
+        // mods survive a point release without their author touching anything. Warned about
+        // because the move is what made it inexact: it was marked for 1.22.5 exactly, and
+        // the pack is leaving 1.22.5.
         var (db, http) = Make(new()
         {
-            ["olla"] = [("1.1.0", ["1.22.0"])],
+            ["olla"] = [("1.1.0", ["1.22.5"])],
         });
         using var _ = http;
 
@@ -191,6 +193,58 @@ public class GameVersionChangeTests : IDisposable
         Assert.Equal(ModOutcome.Approximate, olla.Outcome);
         Assert.False(olla.Breaks);
         Assert.Contains("1.22.x", olla.Note);
+    }
+
+    [Fact]
+    public async Task A_mod_that_was_already_approximate_is_not_reported_as_a_consequence()
+    {
+        // The case that made this rule necessary. A release marked for 1.22.3 is no more
+        // approximate at 1.22.5 than it already was at 1.22.6, and most mods on a pack
+        // trail the game version — so reporting each of them as a consequence of the move
+        // says something untrue and buries the rows that are real.
+        var (db, http) = Make(new()
+        {
+            ["olla"] = [("1.1.0", ["1.22.3"])],
+        });
+        using var _ = http;
+
+        var plan = await GameVersionChange.PreviewAsync(
+            db, Pack("1.22.6", Mod("olla")),
+            new PackLock
+            {
+                GameVersion = "1.22.6",
+                Mods = [new LockedMod { ModId = "olla", Version = "1.1.0" }],
+            },
+            "1.22.5");
+
+        var olla = plan.Mods.Single();
+
+        Assert.NotEqual(ModOutcome.Approximate, olla.Outcome);
+        Assert.Equal(ModOutcome.Unchanged, olla.Outcome);
+        Assert.False(olla.Breaks);
+
+        // Still said, because it is a standing fact about the mod — just not as something
+        // the change is doing.
+        Assert.Contains("as it was for 1.22.6", olla.Note);
+    }
+
+    [Fact]
+    public async Task A_release_that_does_not_serve_the_old_version_at_all_is_still_reported()
+    {
+        // Not the same thing as "already approximate": moving 1.21.7 → 1.22.5 genuinely
+        // puts this mod on a release it was not on, and the inexactness arrives with the
+        // move even though the release is marked for neither version exactly.
+        var (db, http) = Make(new()
+        {
+            ["olla"] = [("1.1.0", ["1.21.0"]), ("2.0.0", ["1.22.3"])],
+        });
+        using var _ = http;
+
+        var plan = await GameVersionChange.PreviewAsync(db, Pack("1.21.7", Mod("olla")), null, "1.22.5");
+
+        var olla = plan.Mods.Single();
+        Assert.Equal(ModOutcome.Approximate, olla.Outcome);
+        Assert.Equal("2.0.0", olla.To);
     }
 
     [Fact]

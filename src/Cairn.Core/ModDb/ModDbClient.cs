@@ -37,7 +37,25 @@ public sealed record ResolvedRelease(
     int FileId,
     MatchQuality Quality,
     string? Side,
-    string? DeclaredModId = null);
+    string? DeclaredModId = null,
+
+    /// <summary>
+    /// The game versions this release is marked for, as ModDB lists them.
+    ///
+    /// Carried so a caller can ask how well it matches some *other* version without a
+    /// second request. <see cref="Quality"/> only ever describes the version that was
+    /// resolved for, and "would this release be as good a match for the version we are
+    /// leaving?" is a question the version-change preview has to answer for every mod.
+    /// </summary>
+    IReadOnlyList<string>? GameVersions = null)
+{
+    /// <summary>
+    /// How well this release matches an arbitrary game version, or null if it does not
+    /// serve it at all. Null also when the tags were not carried.
+    /// </summary>
+    public MatchQuality? QualityFor(string gameVersion) =>
+        GameVersions is null ? null : ModDbClient.Classify(GameVersions, gameVersion);
+}
 
 public sealed class ModDbException(string message) : Exception(message);
 
@@ -350,13 +368,24 @@ public sealed class ModDbClient(HttpClient http)
         ModDbMod mod, ModDbRelease r, MatchQuality q, string requestedId) =>
         new(string.IsNullOrWhiteSpace(requestedId) ? mod.Name : requestedId,
             r.ModVersion, r.FileName, r.MainFile, r.ReleaseId ?? 0, r.FileId ?? 0, q, mod.Side,
-            DeclaredModId: string.IsNullOrWhiteSpace(r.ModIdStr) ? null : r.ModIdStr);
+            DeclaredModId: string.IsNullOrWhiteSpace(r.ModIdStr) ? null : r.ModIdStr,
+            GameVersions: r.Tags);
 
-    private static MatchQuality? Classify(ModDbRelease r, string gameVersion)
+    private static MatchQuality? Classify(ModDbRelease r, string gameVersion) =>
+        Classify(r.Tags, gameVersion);
+
+    /// <summary>
+    /// How well a set of game-version tags matches one version. Public so
+    /// <see cref="ResolvedRelease.QualityFor"/> answers it the same way a resolve does —
+    /// two implementations of "does this release serve 1.22.5" is one too many.
+    /// </summary>
+    public static MatchQuality? Classify(IEnumerable<string> tags, string gameVersion)
     {
-        if (r.Tags.Any(t => t == gameVersion)) return MatchQuality.Exact;
+        var all = tags as IReadOnlyList<string> ?? [.. tags];
 
-        foreach (var t in r.Tags)
+        if (all.Any(t => t == gameVersion)) return MatchQuality.Exact;
+
+        foreach (var t in all)
         {
             try
             {
