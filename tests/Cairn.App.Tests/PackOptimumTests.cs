@@ -123,6 +123,43 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void Changing_the_game_version_moves_the_button_at_once()
+    {
+        var (_, _, detail) = Open("1.20.0");
+
+        var changed = new List<string>();
+        detail.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
+
+        Assert.False(detail.CanBuildOptimum);
+
+        detail.Manifest.GameVersion = Supported;
+        detail.RefreshGameState();
+
+        // Not merely correct when next asked: the pane stays on screen across a version
+        // change, so a property nobody was told about reads as a button that does not
+        // work until the pack is reselected.
+        Assert.True(detail.CanBuildOptimum);
+        Assert.Contains(nameof(detail.CanBuildOptimum), changed);
+    }
+
+    [AvaloniaFact]
+    public void A_new_install_refreshes_the_picker_too()
+    {
+        // Same staleness, the other direction: the install choices are derived from the
+        // library, and nothing told the view when that changed either.
+        var (_, _, detail) = Open(Supported);
+
+        var changed = new List<string>();
+        detail.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
+
+        detail.RefreshGameState();
+
+        Assert.Contains(nameof(detail.InstallChoices), changed);
+        Assert.Contains(nameof(detail.HasInstallChoice), changed);
+        Assert.Contains(nameof(detail.SelectedInstall), changed);
+    }
+
+    [AvaloniaFact]
     public async Task Nothing_starts_without_a_yes_to_the_cost()
     {
         var (_, main, detail) = Open(Supported);

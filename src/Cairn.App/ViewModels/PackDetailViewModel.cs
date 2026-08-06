@@ -863,12 +863,6 @@ public partial class PackDetailViewModel : ViewModelBase
         _store.SaveLocalState(Id, state);
 
         RefreshGameState();
-        OnPropertyChanged(nameof(ChosenInstall));
-        OnPropertyChanged(nameof(ChosenInstallMissing));
-        OnPropertyChanged(nameof(InstallChoiceLine));
-        OnPropertyChanged(nameof(HasInstallChoice));
-        OnPropertyChanged(nameof(HasInstallNote));
-        OnPropertyChanged(nameof(SelectedInstall));
     }
 
     // ---- building a variant ----
@@ -939,9 +933,9 @@ public partial class PackDetailViewModel : ViewModelBase
 
         _log($"Built {build.Result.Describe()}.");
 
+        // Records the choice and re-reads the whole game situation, which is what makes the
+        // new install appear in the picker and this button go away.
         ChooseInstall(build.Result);
-        OnPropertyChanged(nameof(CanBuildOptimum));
-        OnPropertyChanged(nameof(InstallChoices));
     }
 
     /// <summary>
@@ -1351,13 +1345,32 @@ public partial class PackDetailViewModel : ViewModelBase
     /// author on the way out.</summary>
     private bool CanExport => NotBusy && !IsFollowing;
 
-    /// <summary>Re-evaluates which install serves this pack, after a version edit or a new install.</summary>
+    /// <summary>
+    /// Re-evaluates everything that depends on the game situation: which install serves this
+    /// pack, what else it could run, and whether a client can be built for it.
+    ///
+    /// One method for all of it because they all answer to the same three events — the
+    /// pack's version changed, an install appeared or went away, or a choice was made — and
+    /// every caller that knows about one of those knows about all three. Split up, each new
+    /// derived property had to be added to each call site, and the ones that were missed
+    /// simply went stale on screen until the pack was reselected.
+    /// </summary>
     public void RefreshGameState()
     {
         OnPropertyChanged(nameof(ResolvedInstall));
         OnPropertyChanged(nameof(IsProvisioning));
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
+
+        OnPropertyChanged(nameof(ChosenInstall));
+        OnPropertyChanged(nameof(ChosenInstallMissing));
+        OnPropertyChanged(nameof(InstallChoices));
+        OnPropertyChanged(nameof(HasInstallChoice));
+        OnPropertyChanged(nameof(InstallChoiceLine));
+        OnPropertyChanged(nameof(HasInstallNote));
+        OnPropertyChanged(nameof(SelectedInstall));
+
+        OnPropertyChanged(nameof(CanBuildOptimum));
     }
 
     // ---- mods ----
