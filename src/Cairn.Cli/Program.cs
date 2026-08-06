@@ -379,7 +379,12 @@ internal static class Program
         // Same contract as the launcher: fetch what the pack needs rather than telling
         // the user to go and do it.
         var provisioner = new GameProvisioner(http, gameStore, runtimes);
-        var plan = provisioner.Plan(manifest.GameVersion, GameInstall.TryLocate());
+
+        // Told about the install this run will actually use. Plan looks the version up for
+        // itself, and Find deliberately will not return a variant — so without this a pack
+        // pointed at a modified client offered to download the stock game it was told not
+        // to run, having just announced it was running the other one.
+        var plan = provisioner.Plan(manifest.GameVersion, install ?? GameInstall.TryLocate());
 
         if (plan.AnythingToDo)
         {
