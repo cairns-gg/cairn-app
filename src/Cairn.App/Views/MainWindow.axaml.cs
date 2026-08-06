@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         vm.ConfirmImport = ConfirmImportAsync;
         vm.Confirm = ConfirmAsync;
         vm.RunOptimumBuild = RunOptimumBuildAsync;
+        vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
     }
 
@@ -70,6 +71,9 @@ public partial class MainWindow : Window
     private Task<bool> ConfirmVersionChangeAsync(VersionChangeViewModel change) =>
         new VersionChangeWindow { DataContext = change }.ShowDialog<bool>(this);
 
+    private Task<bool> ChoosePinnedVersionAsync(PinVersionViewModel choice) =>
+        new PinVersionWindow { DataContext = choice }.ShowDialog<bool>(this);
+
     private Task<bool> RunOptimumBuildAsync(OptimumBuildViewModel build) =>
         new OptimumBuildWindow { DataContext = build }.ShowDialog<bool>(this);
 
@@ -99,11 +103,6 @@ public partial class MainWindow : Window
     /// Loading on row selection instead would be unreliable, since a ComboBox inside a
     /// list row can swallow the press that would have selected the row.
     /// </summary>
-    private void OnVersionDropDownOpened(object? sender, EventArgs e)
-    {
-        if (sender is ComboBox { DataContext: ModRowViewModel row })
-            _ = row.EnsureReleasesAsync();
-    }
 
     /// <summary>
     /// Double-clicking a row opens that mod on ModDB — the obvious thing to want from a

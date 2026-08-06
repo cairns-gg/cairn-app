@@ -498,6 +498,7 @@ public partial class MainViewModel : ViewModelBase
         // Same read-through arrangement as CopyToClipboard above, and for the same reason.
         Detail.Confirm = c => Confirm?.Invoke(c) ?? Task.FromResult(false);
         Detail.RunOptimumBuild = b => RunOptimumBuild?.Invoke(b) ?? Task.FromResult(false);
+        Detail.ChoosePinnedVersion = c => ChoosePinnedVersion?.Invoke(c) ?? Task.FromResult(false);
 
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
@@ -799,6 +800,13 @@ public partial class MainViewModel : ViewModelBase
     /// twenty-minute compile to be missing.
     /// </summary>
     public Func<OptimumBuildViewModel, Task<bool>>? RunOptimumBuild { get; set; }
+
+    /// <summary>
+    /// Asks which version of a mod to pin, returning whether one was chosen. Supplied by
+    /// the view; absent in headless tests, where nothing is pinned — which is the safe way
+    /// for a question to be missing.
+    /// </summary>
+    public Func<PinVersionViewModel, Task<bool>>? ChoosePinnedVersion { get; set; }
 
     /// <summary>Set by the view; same arrangement as ConfirmVersionChange above.</summary>
     public Func<ShareViewModel, Task<bool>>? ConfirmPublish

@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.PinVersionWindow"
+        x:DataType="vm:PinVersionViewModel"
+        Title="Pin a version"
+        Width="460" SizeToContent="Height"
+        MinHeight="200" MaxHeight="560"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <DockPanel Margin="18" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
+            <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                       Text="{Binding GameVersion, StringFormat='Releases marked for game {0}. Pinning stops this mod moving when you update the others.'}" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    Spacing="8" Margin="0,14,0,0">
+            <Button Name="PinButton" Content="{Binding ConfirmLabel}" Classes="accent" Padding="16,5"
+                    IsEnabled="{Binding HasReleases}"
+                    Click="OnPin" />
+            <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                    Click="OnCancel" IsCancel="True" />
+        </StackPanel>
+
+        <TextBlock Name="EmptyNote" Text="{Binding EmptyNote}"
+                   IsVisible="{Binding !HasReleases}"
+                   FontSize="12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource VsWarningBrush}" />
+
+        <ListBox Name="Releases" MaxHeight="340"
+                 IsVisible="{Binding HasReleases}"
+                 ItemsSource="{Binding Choices}"
+                 SelectedItem="{Binding Selected}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ReleaseChoiceViewModel">
+                    <StackPanel Spacing="1" Margin="0,3">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Version}" FontWeight="SemiBold" />
+                            <!-- What is on disk, called out because "freeze what works" is
+                                 the reason most pins get made. -->
+                            <TextBlock Text="{Binding Note}" FontSize="11" Opacity="0.7"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding Installed}" />
+                        </StackPanel>
+
+                        <!-- Follow, rather than a version. It sat among the versions in the
+                             old dropdown looking like one of them. -->
+                        <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsTrackNewest}"
+                                   Text="Do not pin — offer this mod for update when you check." />
+
+                        <StackPanel Orientation="Horizontal" Spacing="10"
+                                    IsVisible="{Binding !IsTrackNewest}">
+                            <TextBlock Text="{Binding GameVersions}" FontSize="11" Opacity="0.6"
+                                       IsVisible="{Binding HasGameVersions}" />
+                            <TextBlock Text="{Binding When}" FontSize="11" Opacity="0.6"
+                                       IsVisible="{Binding HasWhen}" />
+                        </StackPanel>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>

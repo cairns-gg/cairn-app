@@ -72,6 +72,14 @@ public sealed class ModDbRelease
     [JsonPropertyName("modidstr")] public string? ModIdStr { get; set; }
     [JsonPropertyName("modversion")] public string ModVersion { get; set; } = "";
 
+    /// <summary>
+    /// When ModDB says the release was published, as it formats it ("2026-08-06 16:46:09").
+    /// Kept as text rather than parsed here: the audit found this API willing to put nulls
+    /// and surprises in fields that look reliable, and a date nobody can read is not worth
+    /// failing a resolve over.
+    /// </summary>
+    [JsonPropertyName("created")] public string? Created { get; set; }
+
     /// <summary>Game versions this release is marked compatible with, e.g. ["1.22.0", "1.22.5"].</summary>
     [JsonPropertyName("tags")] public List<string> Tags { get; set; } = [];
 }

@@ -47,7 +47,10 @@ public sealed record ResolvedRelease(
     /// resolved for, and "would this release be as good a match for the version we are
     /// leaving?" is a question the version-change preview has to answer for every mod.
     /// </summary>
-    IReadOnlyList<string>? GameVersions = null)
+    IReadOnlyList<string>? GameVersions = null,
+
+    /// <summary>When it was published, as ModDB formats it. Null when it did not say.</summary>
+    string? Created = null)
 {
     /// <summary>
     /// How well this release matches an arbitrary game version, or null if it does not
@@ -369,7 +372,8 @@ public sealed class ModDbClient(HttpClient http)
         new(string.IsNullOrWhiteSpace(requestedId) ? mod.Name : requestedId,
             r.ModVersion, r.FileName, r.MainFile, r.ReleaseId ?? 0, r.FileId ?? 0, q, mod.Side,
             DeclaredModId: string.IsNullOrWhiteSpace(r.ModIdStr) ? null : r.ModIdStr,
-            GameVersions: r.Tags);
+            GameVersions: r.Tags,
+            Created: r.Created);
 
     private static MatchQuality? Classify(ModDbRelease r, string gameVersion) =>
         Classify(r.Tags, gameVersion);

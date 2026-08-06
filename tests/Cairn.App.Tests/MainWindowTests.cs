@@ -479,24 +479,33 @@ public class MainWindowTests : IDisposable
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
-        // Versions are normally fetched when the mod is selected; prime the cache so the
+        // Releases are normally fetched when the pin is pressed; prime the cache so the
         // test does not depend on the network.
         detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
 
-        var row = detail.Mods.Single(m => m.ModId == "glassview");
-        await row.EnsureReleasesAsync();
+        // The window is the view's; here it simply picks the version and says yes.
+        detail.ChoosePinnedVersion = choice =>
+        {
+            choice.Selected = choice.Choices.Single(c => c.Version == "1.3.0");
+            return Task.FromResult(true);
+        };
 
-        // Choosing a version pins it — no separate Pin button.
-        row.SelectedRelease = "1.3.0";
+        var row = detail.Mods.Single(m => m.ModId == "glassview");
+        await row.TogglePinCommand.ExecuteAsync(null);
 
         var pinned = detail.Mods.Single(m => m.ModId == "glassview");
         Assert.True(pinned.IsPinned);
         Assert.Equal("1.3.0", pinned.PinDisplay);
         Assert.Contains("1.3.0", File.ReadAllText(Path.Combine(_home, "packs", "anego", "pack.json")));
 
-        // And choosing "latest" unpins it again.
-        detail.Mods.Single(m => m.ModId == "glassview").SelectedRelease = PackDetailViewModel.TrackNewest;
+        // Pressing it again unpins, with nothing to choose from — "stop holding this still"
+        // needs no dialogue to describe it.
+        var asked = false;
+        detail.ChoosePinnedVersion = _ => { asked = true; return Task.FromResult(true); };
 
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);
+
+        Assert.False(asked);
         Assert.Equal("latest", detail.Mods.Single(m => m.ModId == "glassview").PinDisplay);
     }
 
@@ -2219,72 +2228,107 @@ public class MainWindowTests : IDisposable
     // ---- version pinning ----
 
     [AvaloniaFact]
-    public async Task Opening_a_rows_dropdown_fetches_that_mods_versions()
+    public async Task The_versions_are_fetched_when_the_pin_is_pressed()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
         detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
 
+        PinVersionViewModel? offered = null;
+        detail.ChoosePinnedVersion = c => { offered = c; return Task.FromResult(false); };
+
         var row = detail.Mods.Single(m => m.ModId == "glassview");
 
-        // Before opening it holds only what the row already knows — fetching every row's
-        // versions to draw the pack would be one ModDB call per mod.
-        Assert.Equal([PackDetailViewModel.TrackNewest], row.ReleaseChoices);
-        Assert.False(row.ReleasesLoaded);
+        // Nothing is asked for until then: fetching every row's versions to draw the pack
+        // would be one ModDB call per mod, for a question nobody asked.
+        Assert.Null(offered);
 
-        await row.EnsureReleasesAsync();
+        await row.TogglePinCommand.ExecuteAsync(null);
 
-        Assert.Equal([PackDetailViewModel.TrackNewest, "1.3.0", "1.2.0"], row.ReleaseChoices);
-        Assert.Equal(PackDetailViewModel.TrackNewest, row.SelectedRelease);
+        Assert.NotNull(offered);
+        Assert.Equal(["latest", "1.3.0", "1.2.0"], offered.Choices.Select(c => c.Version));
     }
 
     [AvaloniaFact]
-    public async Task A_pinned_mod_shows_its_pin_before_and_after_loading()
+    public async Task Cancelling_the_version_window_leaves_the_mod_alone()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
         detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
 
-        var row = detail.Mods.Single(m => m.ModId == "glassview");
-        await row.EnsureReleasesAsync();
-        row.SelectedRelease = "1.2.0";
+        detail.ChoosePinnedVersion = c =>
+        {
+            c.Selected = c.Choices.Single(x => x.Version == "1.2.0");
+            return Task.FromResult(false);      // chosen, then dismissed
+        };
 
-        // Pinning rewrites the manifest and rebuilds the rows, so this is a new row.
-        var rebuilt = detail.Mods.Single(m => m.ModId == "glassview");
-        Assert.True(rebuilt.IsPinned);
+        await detail.Mods.Single(m => m.ModId == "glassview")
+            .TogglePinCommand.ExecuteAsync(null);
 
-        // It must read as pinned straight away, not as "latest" until someone opens it.
-        Assert.Equal("1.2.0", rebuilt.SelectedRelease);
-
-        await rebuilt.EnsureReleasesAsync();
-        Assert.Equal("1.2.0", rebuilt.SelectedRelease);
+        // Picking a row is not pinning it; the window closing with a yes is.
+        Assert.False(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
     }
 
     [AvaloniaFact]
-    public async Task Reopening_a_dropdown_after_a_pin_does_not_go_back_to_the_network()
+    public async Task A_pinned_mod_reads_as_pinned_without_anything_being_opened()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+        detail.CacheReleaseChoices("glassview", ["1.3.0", "1.2.0"]);
+
+        detail.ChoosePinnedVersion = c =>
+        {
+            c.Selected = c.Choices.Single(x => x.Version == "1.2.0");
+            return Task.FromResult(true);
+        };
+
+        await detail.Mods.Single(m => m.ModId == "glassview")
+            .TogglePinCommand.ExecuteAsync(null);
+
+        // The pin lives on the manifest rather than on the row, so the row has to be told.
+        // The old combo box hid this by holding its own selection.
+        var pinned = detail.Mods.Single(m => m.ModId == "glassview");
+        Assert.True(pinned.IsPinned);
+        Assert.Equal("1.2.0", pinned.PinLabel);
+        Assert.Equal(1.0, pinned.PinOpacity);
+    }
+
+    [AvaloniaFact]
+    public async Task Pressing_pin_again_after_a_pin_does_not_go_back_to_the_network()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
 
-        var row = detail.Mods.Single(m => m.ModId == "glassview");
-        await row.EnsureReleasesAsync();
-        row.SelectedRelease = "1.3.0";
+        PinVersionViewModel? offered = null;
+        detail.ChoosePinnedVersion = c =>
+        {
+            offered = c;
+            c.Selected = c.Choices.Single(x => x.Version == "1.3.0");
+            return Task.FromResult(true);
+        };
 
-        // Pinning rebuilds the rows; without the cache that would fire a fresh lookup
-        // every time a dropdown was opened again.
-        var rebuilt = detail.Mods.Single(m => m.ModId == "glassview");
-        await rebuilt.EnsureReleasesAsync();
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);
 
-        Assert.False(rebuilt.LoadingReleases);
-        Assert.Contains("1.3.0", rebuilt.ReleaseChoices);
+        // Pinning rebuilds the rows; without the cache surviving that, every press after
+        // the first would fetch again.
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);  // unpins
+        offered = null;
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);
+
+        Assert.NotNull(offered);
+        Assert.Contains(offered.Choices, c => c.Version == "1.3.0");
+
+        // These tests run offline, so a fetch would have failed and said so.
+        Assert.Null(detail.Error);
     }
 
     [AvaloniaFact]
-    public async Task Filling_one_rows_dropdown_does_not_pin_anything()
+    public async Task Pinning_one_mod_leaves_the_others_alone()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
@@ -2293,13 +2337,16 @@ public class MainWindowTests : IDisposable
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
         detail.CacheReleaseChoices("unchisel", ["1.2.0"]);
 
-        detail.Mods.Single(m => m.ModId == "glassview").SelectedRelease = "1.3.0";
+        detail.ChoosePinnedVersion = c =>
+        {
+            c.Selected = c.Choices.First(x => !x.IsTrackNewest);
+            return Task.FromResult(true);
+        };
 
-        // Populating a list must never be mistaken for the user choosing from it.
-        await detail.Mods.Single(m => m.ModId == "unchisel").EnsureReleasesAsync();
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);
 
-        Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
         Assert.True(detail.Mods.Single(m => m.ModId == "glassview").IsPinned);
+        Assert.False(detail.Mods.Single(m => m.ModId == "unchisel").IsPinned);
     }
 
     // ---- what a pack row calls its mod ----
@@ -2884,14 +2931,17 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task Loading_a_dropdown_leaves_an_unpinned_mod_unpinned()
+    public async Task Opening_the_version_window_leaves_an_unpinned_mod_unpinned()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
         var detail = vm.Detail!;
 
         detail.CacheReleaseChoices("glassview", ["1.3.0"]);
-        await detail.Mods.Single(m => m.ModId == "glassview").EnsureReleasesAsync();
+
+        // Offered a choice and shown the door: asking is not answering.
+        detail.ChoosePinnedVersion = _ => Task.FromResult(false);
+        await detail.Mods.Single(m => m.ModId == "glassview").TogglePinCommand.ExecuteAsync(null);
 
         Assert.All(detail.Mods, m => Assert.False(m.IsPinned));
     }

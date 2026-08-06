@@ -1052,7 +1052,7 @@ public partial class PackDetailViewModel : ViewModelBase
 
         ModRowViewModel Row(PackMod mod, LockedMod? locked) => new(
             mod, locked,
-            loadReleases: LoadReleasesForRowAsync,
+            loadReleases: ChoosePinForRowAsync,
             pin: ApplyPin,
             remove: RemoveRow,
             openPage: OpenModPage,
@@ -2027,7 +2027,8 @@ public partial class PackDetailViewModel : ViewModelBase
     /// Compatible versions per mod, so opening a dropdown twice — including after the
     /// reload that follows pinning — costs nothing and cannot loop back into the network.
     /// </summary>
-    private readonly Dictionary<string, List<string>> _releaseCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<ResolvedRelease>> _releaseCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The choice that means "not pinned". It no longer means "silently move to whatever
@@ -2049,48 +2050,64 @@ public partial class PackDetailViewModel : ViewModelBase
             add: AddHit,
             openPage: OpenHitPage);
 
+    /// <summary>Pre-populates the cache with real releases, tags and dates and all.</summary>
+    public void CacheReleases(string modId, IEnumerable<ResolvedRelease> releases) =>
+        _releaseCache[CacheKey(modId)] = [.. releases];
+
     /// <summary>Pre-populates the cache, e.g. from a test or a warm-up.</summary>
     public void CacheReleaseChoices(string modId, IEnumerable<string> versions) =>
-        _releaseCache[CacheKey(modId)] = [TrackNewest, .. versions];
+        _releaseCache[CacheKey(modId)] =
+        [
+            .. versions.Select(v => new ResolvedRelease(
+                modId, v, $"{modId}_{v}.zip", "", 0, 0, MatchQuality.Exact, null)),
+        ];
+
+    /// <summary>Set by the view; asks which version to pin and returns whether one was chosen.</summary>
+    public Func<PinVersionViewModel, Task<bool>>? ChoosePinnedVersion { get; set; }
 
     private string CacheKey(string modId) => $"{modId}|{Manifest.GameVersion}";
 
     /// <summary>
-    /// Fills one row's version dropdown. Called when that dropdown is opened rather than
-    /// when the pack is shown, so a twenty-mod pack does not make twenty ModDB calls to
-    /// answer a question nobody asked.
+    /// Asks which version of one mod to pin, then pins it.
+    ///
+    /// The releases are fetched when the pin is pressed rather than when the pack is shown:
+    /// a twenty-mod pack would otherwise make twenty ModDB calls to answer a question
+    /// nobody asked. Cached per mod and game version, so pressing pin twice — including
+    /// after the reload that pinning causes — costs nothing.
     /// </summary>
-    private async Task LoadReleasesForRowAsync(ModRowViewModel row)
+    private async Task ChoosePinForRowAsync(ModRowViewModel row)
     {
-        if (_releaseCache.TryGetValue(CacheKey(row.ModId), out var cached))
+        if (ChoosePinnedVersion is null) return;
+
+        if (!_releaseCache.TryGetValue(CacheKey(row.ModId), out var releases))
         {
-            row.ShowChoices(cached);
-            return;
+            row.LoadingReleases = true;
+
+            try
+            {
+                releases = [.. await _moddb.ListCompatibleReleasesAsync(row.ModId, Manifest.GameVersion)];
+                _releaseCache[CacheKey(row.ModId)] = releases;
+            }
+            catch (Exception e) when (e is ModDbException or HttpRequestException
+                                          or System.Text.Json.JsonException)
+            {
+                Error = e.Message;
+                return;
+            }
+            finally
+            {
+                row.LoadingReleases = false;
+            }
         }
 
-        row.LoadingReleases = true;
+        var choice = new PinVersionViewModel(
+            row.ModId, row.Name, row.Mod.Version, row.Locked?.Version, releases, Manifest.GameVersion);
 
-        try
-        {
-            var releases = await _moddb.ListCompatibleReleasesAsync(row.ModId, Manifest.GameVersion);
+        // Cancelled, or nothing to choose from: the mod is left exactly as it was, pin and
+        // all. Removing one is the pin button on the row, not a row in this window.
+        if (!await ChoosePinnedVersion(choice)) return;
 
-            var choices = new List<string> { TrackNewest };
-            choices.AddRange(releases.Select(r => r.ModVersion));
-
-            _releaseCache[CacheKey(row.ModId)] = choices;
-            row.ShowChoices(choices);
-
-            if (releases.Count == 0)
-                Error = $"No release of {row.ModId} is marked for game {Manifest.GameVersion}.";
-        }
-        catch (Exception e)
-        {
-            Error = e.Message;
-        }
-        finally
-        {
-            row.LoadingReleases = false;
-        }
+        ApplyPin(row, choice.Result);
     }
 
     /// <summary>Applies the pin as soon as a version is chosen — no separate button.</summary>
@@ -2103,6 +2120,7 @@ public partial class PackDetailViewModel : ViewModelBase
 
         entry.Version = version;
         Persist();
+        row.PinChanged();
 
         _log(version is null
             ? $"unpinned {modId} — will track newest"

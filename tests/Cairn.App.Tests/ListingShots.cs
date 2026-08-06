@@ -120,7 +120,7 @@ public class ListingShots : IDisposable
     }
 
     [AvaloniaFact]
-    public void Capture_the_listing_screenshots()
+    public async Task Capture_the_listing_screenshots()
     {
         if (Environment.GetEnvironmentVariable("CAIRN_SHOT_DIR") is not { Length: > 0 } outDir)
         {
@@ -217,6 +217,32 @@ public class ListingShots : IDisposable
 
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "performance");
         Settle(4);
+
+        // The version window, on a mod with a few releases behind it.
+        var pinRow = vm.Detail!.Mods.First();
+        // With tags and dates, because showing those is the whole reason this is a window
+        // and not a 120px combo box.
+        vm.Detail.CacheReleases(pinRow.ModId,
+        [
+            Sample.Release(pinRow.ModId, "2.1.0", ["1.22.5", "1.22.6"], DateTime.UtcNow.AddDays(-4)),
+            Sample.Release(pinRow.ModId, "2.0.0", ["1.22.0", "1.22.4"], DateTime.UtcNow.AddDays(-40)),
+            Sample.Release(pinRow.ModId, "1.9.3", ["1.21.0", "1.21.7"], DateTime.UtcNow.AddDays(-260)),
+        ]);
+
+        PinVersionViewModel? pinChoice = null;
+        vm.Detail.ChoosePinnedVersion = c => { pinChoice = c; return Task.FromResult(false); };
+        await pinRow.TogglePinCommand.ExecuteAsync(null);
+
+        if (pinChoice is not null)
+        {
+            var pinWindow = new PinVersionWindow { DataContext = pinChoice };
+            pinWindow.Show();
+            Settle(1);
+            ShotOf(pinWindow, outDir, "10-pinning-a-version");
+            pinWindow.Close();
+        }
+
+
         ShowSettings(window);
         Shot("06-build-an-optimised-client");
 
@@ -301,6 +327,16 @@ public class ListingShots : IDisposable
         OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned);
 
         return GameInstall.TryAt(dir)!;
+    }
+
+    /// <summary>Builds a release the way ModDB describes one, for the shots.</summary>
+    private static class Sample
+    {
+        public static Cairn.Core.ModDb.ResolvedRelease Release(
+            string modId, string version, string[] gameVersions, DateTime created) =>
+            new(modId, version, $"{modId}_{version}.zip", "https://example/x.zip", 1, 2,
+                Cairn.Core.ModDb.MatchQuality.Exact, "client", null, gameVersions,
+                created.ToString("yyyy-MM-dd HH:mm:ss"));
     }
 
     /// <summary>Real lines from a real build, so the log reads as one.</summary>

@@ -130,6 +130,7 @@ app. It writes:
 | `07-what-it-will-cost` | the warning, before anything starts |
 | `08-watching-it-build` | the live log |
 | `09-running-with-optimum` | what the pack says afterwards |
+| `10-pinning-a-version` | choosing which release a mod is held at |
 
 The last four are a sequence and read best in order: what is offered, what it costs, what
 it looks like while it happens, and what the pack says at the end. They are the ones that

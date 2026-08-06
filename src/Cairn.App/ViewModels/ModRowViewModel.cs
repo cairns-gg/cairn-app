@@ -16,7 +16,7 @@ namespace Cairn.App.ViewModels;
 /// </summary>
 public partial class ModRowViewModel : ViewModelBase
 {
-    private readonly Func<ModRowViewModel, Task>? _loadReleases;
+    private readonly Func<ModRowViewModel, Task>? _choosePin;
     private readonly Action<ModRowViewModel, string?>? _pin;
     private readonly Action<ModRowViewModel>? _remove;
     private readonly Action<ModRowViewModel>? _openPage;
@@ -40,18 +40,13 @@ public partial class ModRowViewModel : ViewModelBase
         Editable = editable;
         Mod = mod;
         Locked = locked;
-        _loadReleases = loadReleases;
+        _choosePin = loadReleases;
         _pin = pin;
         _remove = remove;
         _openPage = openPage;
         _armed = armed;
         _update = update;
 
-        // Shown before the list is fetched, so the row reads correctly from the start.
-        _settingProgrammatically = true;
-        SelectedRelease = mod.Version ?? PackDetailViewModel.TrackNewest;
-        ReleaseChoices.Add(SelectedRelease);
-        _settingProgrammatically = false;
     }
 
     public PackMod Mod { get; }
@@ -126,6 +121,32 @@ public partial class ModRowViewModel : ViewModelBase
 
     public bool IsPinned => Mod.Version is not null;
 
+    /// <summary>The version when pinned, and an invitation when not.</summary>
+    public string PinLabel => Mod.Version ?? "Pin…";
+
+    /// <summary>Faded when nothing is pinned, so the state reads without being laboured.</summary>
+    public double PinOpacity => IsPinned ? 1.0 : 0.35;
+
+    /// <summary>
+    /// Re-reads everything derived from the pin.
+    ///
+    /// Needed because the pin lives on the manifest entry rather than on this row, and
+    /// changing it there is invisible here. The old combo box hid this by holding its own
+    /// selection — the row agreed with the manifest because the user had just set both.
+    /// </summary>
+    public void PinChanged()
+    {
+        OnPropertyChanged(nameof(IsPinned));
+        OnPropertyChanged(nameof(PinDisplay));
+        OnPropertyChanged(nameof(PinLabel));
+        OnPropertyChanged(nameof(PinOpacity));
+        OnPropertyChanged(nameof(PinTip));
+    }
+
+    public string PinTip => IsPinned
+        ? $"Pinned to {Mod.Version}. Click to stop pinning and follow this mod again."
+        : "Pin this mod to a version, so it stays put when you update the others.";
+
     /// <summary>
     /// The version actually installed, per the lockfile. Meaningful again now that a
     /// launch cannot silently change it: this is what you are running.
@@ -171,45 +192,32 @@ public partial class ModRowViewModel : ViewModelBase
 
     // ---- versions ----
 
-    /// <summary>
-    /// Holds only the current pin until the dropdown is opened. Fetching every row's
-    /// releases when the pack is merely shown would be one ModDB call per mod, for
-    /// something usually not being asked about.
-    /// </summary>
-    public ObservableCollection<string> ReleaseChoices { get; } = [];
-
-    [ObservableProperty] public partial string? SelectedRelease { get; set; }
+    /// <summary>True while the release list for this row is being fetched.</summary>
     [ObservableProperty] public partial bool LoadingReleases { get; set; }
 
-    public bool ReleasesLoaded { get; private set; }
-
-    /// <summary>Fetches this row's versions unless they are already here.</summary>
-    public Task EnsureReleasesAsync() =>
-        ReleasesLoaded || _loadReleases is null ? Task.CompletedTask : _loadReleases(this);
-
-    /// <summary>Fills the dropdown without that counting as the user picking something.</summary>
-    public void ShowChoices(IReadOnlyList<string> choices)
+    /// <summary>
+    /// Pins this mod, or removes the pin if it has one.
+    ///
+    /// One control with two meanings, because pinned is one bit and a control per state is
+    /// a control too many. Unpinned, it asks which version — through the caller, which owns
+    /// the window and the network; pinned, it simply unpins, since "stop holding this
+    /// still" needs no dialogue to describe it.
+    ///
+    /// Replaced a combo box on every row. Thirty mods meant thirty controls that looked
+    /// editable for something done rarely, and choosing from it pinned immediately with no
+    /// confirm — a version number in 120 pixels being all it could ever say about the
+    /// choice.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanChange))]
+    private async Task TogglePin()
     {
-        _settingProgrammatically = true;
+        if (IsPinned)
+        {
+            _pin?.Invoke(this, null);
+            return;
+        }
 
-        ReleaseChoices.Clear();
-        foreach (var c in choices) ReleaseChoices.Add(c);
-
-        var pinned = Mod.Version;
-        SelectedRelease = pinned is not null && ReleaseChoices.Contains(pinned)
-            ? pinned
-            : PackDetailViewModel.TrackNewest;
-
-        ReleasesLoaded = true;
-        _settingProgrammatically = false;
-    }
-
-    partial void OnSelectedReleaseChanged(string? value)
-    {
-        if (_settingProgrammatically || value is null) return;
-
-        // Choosing a version is the pin; there is no separate confirm step.
-        _pin?.Invoke(this, value == PackDetailViewModel.TrackNewest ? null : value);
+        if (_choosePin is not null) await _choosePin(this);
     }
 
     // ---- actions ----

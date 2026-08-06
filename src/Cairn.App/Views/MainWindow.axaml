@@ -476,16 +476,29 @@
                                                         Content="{Binding UpdateNote}"
                                                         VerticalAlignment="Center" />
 
-                                                <!-- Its versions are fetched when this is opened,
-                                                     not for every row up front. A dependency has
-                                                     no pin of its own: it is whatever the mod
-                                                     that requires it needs. -->
-                                                <ComboBox Grid.Column="3" MinWidth="120"
-                                                          IsVisible="{Binding CanChange}"
-                                                          ItemsSource="{Binding ReleaseChoices}"
-                                                          SelectedItem="{Binding SelectedRelease}"
-                                                          DropDownOpened="OnVersionDropDownOpened"
-                                                          VerticalAlignment="Center" />
+                                                <!--
+                                                    One control, two meanings: unpinned it
+                                                    asks which version, pinned it unpins.
+                                                    Its releases are fetched when it is
+                                                    pressed, not for every row up front. A
+                                                    dependency has no pin of its own — it is
+                                                    whatever the mod that requires it needs.
+                                                -->
+                                                <Button Grid.Column="3" x:Name="PinButton"
+                                                        MinWidth="92" Padding="8,4"
+                                                        IsVisible="{Binding CanChange}"
+                                                        Command="{Binding TogglePinCommand}"
+                                                        ToolTip.Tip="{Binding PinTip}"
+                                                        VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="📌" FontSize="11"
+                                                                   VerticalAlignment="Center"
+                                                                   Opacity="{Binding PinOpacity}" />
+                                                        <TextBlock Text="{Binding PinLabel}"
+                                                                   FontSize="11"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Button>
 
                                                 <Button Grid.Column="4" Content="View" Padding="10,4"
                                                         Command="{Binding OpenPageCommand}"
