@@ -1592,10 +1592,64 @@ public class MainWindowTests : IDisposable
         detail.TargetGameVersion = "1.22.6";
         await detail.CheckVersionCommand.ExecuteAsync(null);
         Assert.NotNull(detail.VersionChange);
+        Assert.Equal("1.22.6", detail.VersionChange.Plan.To);
 
-        // Otherwise Apply would commit a version nobody checked.
         detail.TargetGameVersion = "1.21.7";
+        await detail.CheckVersionCommand.ExecuteAsync(null);
+
+        // The answer on screen is never about a version other than the one showing in the
+        // picker — otherwise Apply commits a version nobody checked. Picking one now starts
+        // its own check, so this is replaced rather than merely cleared.
+        Assert.Equal("1.21.7", detail.VersionChange!.Plan.To);
+    }
+
+    [AvaloniaFact]
+    public async Task Picking_a_version_checks_it_without_being_asked()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+
+        // Started by the picker itself. Left to a separate button, the control sat showing
+        // a version the pack was not on and had not agreed to move to, which reads as a
+        // setting that did not take.
+        await WaitFor(() => detail.VersionChange is not null);
+
+        Assert.Equal("1.22.6", detail.VersionChange!.Plan.To);
+
+        // Still nothing written: the confirmation is what commits, and it has not happened.
+        Assert.Equal("1.22.5", detail.Manifest.GameVersion);
+    }
+
+    [AvaloniaFact]
+    public async Task Declining_a_change_puts_the_picker_back()
+    {
+        var (_, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+
+        detail.TargetGameVersion = "1.22.6";
+        await WaitFor(() => detail.VersionChange is not null);
+
+        detail.CancelVersionChange();
+
+        // Saying no used to leave the other version showing, so the control claimed a
+        // version the pack had just declined to move to.
+        Assert.Equal(detail.Manifest.GameVersion, detail.TargetGameVersion);
+        Assert.False(detail.HasPendingGameVersion);
         Assert.Null(detail.VersionChange);
+    }
+
+    /// <summary>Pumps the dispatcher until a condition holds, or gives up.</summary>
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition(), "condition never became true");
     }
 
     [AvaloniaFact]

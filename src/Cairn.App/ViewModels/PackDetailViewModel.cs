@@ -924,7 +924,7 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Why the button is greyed, or empty when it is not.</summary>
     public string BuildOptimumBlockedNote =>
         CanBuildOptimum && HasPendingGameVersion
-            ? $"Check the change to {TargetGameVersion} first — a build now would be for "
+            ? $"Finish the change to {TargetGameVersion} first — a build now would be for "
               + $"{Manifest.GameVersion}."
             : "";
 
@@ -1280,6 +1280,17 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanCheckVersion));
         CheckVersionCommand.NotifyCanExecuteChanged();
         NotifyPendingVersionChanged();
+
+        if (!HasPendingGameVersion) return;
+
+        // Picking a version starts its check. Nothing is written until the result is
+        // confirmed — that is still the point of the step — but leaving it to a separate
+        // button meant the picker could sit showing a version the pack was not on and had
+        // no intention of moving to, which reads as a setting that did not take.
+        //
+        // Any check already running is for a version nobody is looking at now.
+        CheckVersionCommand.Cancel();
+        CheckVersionCommand.Execute(null);
     }
 
     partial void OnIsCheckingVersionChanged(bool value)
@@ -1322,10 +1333,18 @@ public partial class PackDetailViewModel : ViewModelBase
         TargetGameVersion = chosen;
     }
 
+    /// <summary>
+    /// Which check is current. Picking a third version while the second is still resolving
+    /// leaves two in flight, and the older one must not report its answer or clear the
+    /// busy flag out from under the newer.
+    /// </summary>
+    private int _versionCheckGeneration;
+
     [RelayCommand(CanExecute = nameof(CanCheckVersion))]
     private async Task CheckVersion(CancellationToken ct)
     {
         var target = TargetGameVersion!.Trim();
+        var generation = ++_versionCheckGeneration;
 
         IsCheckingVersion = true;
         VersionChange = null;
@@ -1339,6 +1358,8 @@ public partial class PackDetailViewModel : ViewModelBase
                 progress: new Progress<string>(m => CheckingMod = m),
                 ct: ct);
 
+            if (generation != _versionCheckGeneration) return;
+
             var change = new VersionChangeViewModel(plan);
             VersionChange = change;
             _log($"checked {Manifest.GameVersion} -> {target}: {plan.Summary()}");
@@ -1351,16 +1372,19 @@ public partial class PackDetailViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            // Leaving the pane mid-check is not an error.
+            // Leaving the pane mid-check, or picking another version, is not an error.
         }
         catch (Exception e)
         {
-            Error = e.Message;
+            if (generation == _versionCheckGeneration) Error = e.Message;
         }
         finally
         {
-            IsCheckingVersion = false;
-            CheckingMod = "";
+            if (generation == _versionCheckGeneration)
+            {
+                IsCheckingVersion = false;
+                CheckingMod = "";
+            }
         }
     }
 
@@ -1390,8 +1414,23 @@ public partial class PackDetailViewModel : ViewModelBase
         _log($"pack now targets game {target}; press Play to install it and update mods");
     }
 
+    /// <summary>
+    /// Abandons a checked change and puts the picker back where the pack actually is.
+    ///
+    /// The picker matters as much as the plan. Saying no used to leave the other version
+    /// showing, so the control claimed a version the pack had just declined to move to —
+    /// and every later glance at the pane read as a setting that had not taken.
+    /// </summary>
     [RelayCommand]
-    public void CancelVersionChange() => VersionChange = null;
+    public void CancelVersionChange()
+    {
+        VersionChange = null;
+
+        // Bumped so the check this abandons cannot come back and reopen its dialog.
+        _versionCheckGeneration++;
+
+        if (HasPendingGameVersion) TargetGameVersion = Manifest.GameVersion;
+    }
 
     public bool NotBusy => !IsBusy;
 
