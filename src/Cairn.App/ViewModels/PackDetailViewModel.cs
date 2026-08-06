@@ -894,6 +894,27 @@ public partial class PackDetailViewModel : ViewModelBase
     public string BuildOptimumLabel => $"Build Optimum {OptimumSource.Pinned.Version}…";
 
     /// <summary>
+    /// Whether it can be started right now, as opposed to whether it applies to this pack.
+    ///
+    /// Separate from <see cref="CanBuildOptimum"/> so a pending version change disables the
+    /// button rather than hiding it: the panel vanishing the moment somebody touches the
+    /// version picker reads as a bug, and it would come back looking identical whichever
+    /// way the check went. Disabled with a reason says which version the build would be for
+    /// — the one the pack still targets, not the one now showing in the picker.
+    /// </summary>
+    public bool CanBuildOptimumNow =>
+        CanBuildOptimum && !HasPendingGameVersion && !IsCheckingVersion;
+
+    /// <summary>Why the button is greyed, or empty when it is not.</summary>
+    public string BuildOptimumBlockedNote =>
+        CanBuildOptimum && HasPendingGameVersion
+            ? $"Check the change to {TargetGameVersion} first — a build now would be for "
+              + $"{Manifest.GameVersion}."
+            : "";
+
+    public bool HasBuildOptimumBlockedNote => !string.IsNullOrEmpty(BuildOptimumBlockedNote);
+
+    /// <summary>
     /// Builds Optimum, then points this pack at it.
     ///
     /// The confirmation comes first and states the cost in full, because this is unlike
@@ -901,7 +922,7 @@ public partial class PackDetailViewModel : ViewModelBase
     /// pack is only moved onto the result if it was really built — a cancelled or failed
     /// build leaves the pack exactly as it was.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanBuildOptimumNow))]
     private async Task BuildOptimumAsync()
     {
         if (Confirm is null || RunOptimumBuild is null) return;
@@ -1213,10 +1234,19 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public Func<VersionChangeViewModel, Task<bool>>? ConfirmVersionChange { get; set; }
 
-    public bool CanCheckVersion =>
-        !IsCheckingVersion
-        && !string.IsNullOrWhiteSpace(TargetGameVersion)
+    /// <summary>
+    /// A version has been picked that the pack does not yet target.
+    ///
+    /// The gap between the two is the whole point of the check step: nothing is written
+    /// until it has run, so while this is true the picker says one thing and the pack still
+    /// is another. Anything derived from the game version has to say which of the two it
+    /// means, or act on neither.
+    /// </summary>
+    public bool HasPendingGameVersion =>
+        !string.IsNullOrWhiteSpace(TargetGameVersion)
         && !string.Equals(TargetGameVersion, Manifest.GameVersion, StringComparison.OrdinalIgnoreCase);
+
+    public bool CanCheckVersion => !IsCheckingVersion && HasPendingGameVersion;
 
     partial void OnTargetGameVersionChanged(string? value)
     {
@@ -1224,12 +1254,22 @@ public partial class PackDetailViewModel : ViewModelBase
         VersionChange = null;
         OnPropertyChanged(nameof(CanCheckVersion));
         CheckVersionCommand.NotifyCanExecuteChanged();
+        NotifyPendingVersionChanged();
     }
 
     partial void OnIsCheckingVersionChanged(bool value)
     {
         OnPropertyChanged(nameof(CanCheckVersion));
         CheckVersionCommand.NotifyCanExecuteChanged();
+        NotifyPendingVersionChanged();
+    }
+
+    private void NotifyPendingVersionChanged()
+    {
+        OnPropertyChanged(nameof(HasPendingGameVersion));
+        OnPropertyChanged(nameof(CanBuildOptimumNow));
+        OnPropertyChanged(nameof(BuildOptimumBlockedNote));
+        BuildOptimumCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Fills the picker. Cheap and idempotent; called when the pane is shown.</summary>
@@ -1371,6 +1411,7 @@ public partial class PackDetailViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedInstall));
 
         OnPropertyChanged(nameof(CanBuildOptimum));
+        NotifyPendingVersionChanged();
     }
 
     // ---- mods ----

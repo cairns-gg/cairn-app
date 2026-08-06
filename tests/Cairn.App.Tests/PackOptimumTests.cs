@@ -160,6 +160,65 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void A_pending_version_change_disables_it_until_the_check_has_run()
+    {
+        var (window, _, detail) = Open(Supported);
+
+        Assert.True(detail.CanBuildOptimumNow);
+
+        // Through the picker's own list, because that is the only way it moves on screen:
+        // the combo box is bound two-way, so a version it is not offering is written
+        // straight back as nothing.
+        detail.GameVersionChoices.Add("1.22.6");
+        detail.TargetGameVersion = "1.22.6";
+
+        // Still offered — the pack has not moved, and hiding the panel the moment somebody
+        // touches the picker reads as a bug. Just not startable, because a build now would
+        // be for the version the pack still targets rather than the one on screen.
+        Assert.True(detail.CanBuildOptimum);
+        Assert.False(detail.CanBuildOptimumNow);
+        Assert.False(detail.BuildOptimumCommand.CanExecute(null));
+
+        // And it says which version it would have been for, or a greyed button is a puzzle.
+        Assert.Contains(Supported, detail.BuildOptimumBlockedNote);
+        Assert.Contains("1.22.6", detail.BuildOptimumBlockedNote);
+    }
+
+    [AvaloniaFact]
+    public void Returning_the_picker_to_the_packs_own_version_enables_it_again()
+    {
+        var (_, _, detail) = Open(Supported);
+
+        detail.GameVersionChoices.Add("1.22.6");
+        detail.TargetGameVersion = "1.22.6";
+        Assert.False(detail.CanBuildOptimumNow);
+
+        // Backing out of a version change is not a check, but it does settle the question.
+        detail.TargetGameVersion = Supported;
+
+        Assert.True(detail.CanBuildOptimumNow);
+        Assert.Equal("", detail.BuildOptimumBlockedNote);
+    }
+
+    [AvaloniaFact]
+    public void Applying_the_change_settles_it_the_other_way()
+    {
+        var (_, _, detail) = Open(Supported);
+
+        detail.GameVersionChoices.Add("1.20.0");
+        detail.TargetGameVersion = "1.20.0";
+        Assert.False(detail.CanBuildOptimumNow);
+
+        // Once the pack really is on a version Optimum is not for, the panel goes rather
+        // than sitting there permanently disabled.
+        detail.Manifest.GameVersion = "1.20.0";
+        detail.RefreshGameState();
+
+        Assert.False(detail.CanBuildOptimum);
+        Assert.Equal("", detail.BuildOptimumBlockedNote);
+    }
+
+    [AvaloniaFact]
     public async Task Nothing_starts_without_a_yes_to_the_cost()
     {
         var (_, main, detail) = Open(Supported);

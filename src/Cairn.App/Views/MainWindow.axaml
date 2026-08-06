@@ -655,6 +655,15 @@
                                         Content="{Binding Detail.BuildOptimumLabel}"
                                         Command="{Binding Detail.BuildOptimumCommand}"
                                         HorizontalAlignment="Left" Padding="12,5" />
+
+                                <!-- Which version a build would be for, while the picker
+                                     shows another. Disabled without this is a mystery. -->
+                                <TextBlock x:Name="BuildOptimumBlocked"
+                                           Text="{Binding Detail.BuildOptimumBlockedNote}"
+                                           IsVisible="{Binding Detail.HasBuildOptimumBlockedNote}"
+                                           FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource VsWarningBrush}" />
+
                                 <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
                                            Text="Compiles a faster community build of the game on this machine. Takes a while and needs several GB." />
                             </StackPanel>
