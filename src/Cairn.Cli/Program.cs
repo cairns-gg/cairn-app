@@ -24,6 +24,20 @@ internal static class Program
         // the stock game. The diagnostics report is the text people are told to paste into
         // an issue, so losing characters from it is worse than cosmetic.
         //
+        // Set whether or not the stream is redirected. Redirection is the case that
+        // matters most — piping the diagnostics report to a file is how somebody captures
+        // it to paste — and it was demonstrably losing the characters: the bytes on disk
+        // held four spaces where the arrow had been, with nothing above ASCII in them.
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                Console.OutputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch (Exception e) when (e is IOException or PlatformNotSupportedException)
+        {
+            // An unusual console is not a reason to refuse to run.
+        }
+
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1 (+https://github.com/dizzyd/cairn)");
         var moddb = new ModDbClient(http);
