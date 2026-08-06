@@ -21,7 +21,7 @@ namespace Cairn.App.ViewModels;
 /// </summary>
 public sealed partial class OptimumBuildViewModel : ViewModelBase
 {
-    private readonly OptimumProvisioner _provisioner;
+    private readonly OptimumProvisioner? _provisioner;
     private readonly OptimumSource _source;
     private readonly GameInstall? _vanilla;
     private readonly CancellationTokenSource _cts = new();
@@ -59,10 +59,38 @@ public sealed partial class OptimumBuildViewModel : ViewModelBase
         _flush.Tick += (_, _) => Drain();
     }
 
+    /// <summary>
+    /// A build to look at rather than to run: the window renders exactly as it does
+    /// mid-build, and <see cref="StartAsync"/> does nothing.
+    ///
+    /// Exists because the window is otherwise unphotographable. It starts its build when it
+    /// opens, so a screenshot of it means either a real twenty-minute compile or a picture
+    /// of a failure — and the same is true of a designer preview. Avalonia already takes
+    /// this shape for design-time data; this is the same idea with the log filled in.
+    /// </summary>
+    public OptimumBuildViewModel(
+        OptimumSource source, string phase, string detail, double fraction,
+        IEnumerable<string> log, bool expanded = true)
+    {
+        _source = source;
+        _provisioner = null;
+        _vanilla = null;
+
+        Title = $"Building Optimum {source.Version}";
+        Phase = phase;
+        Detail = detail;
+        Fraction = fraction;
+        LogExpanded = expanded;
+
+        foreach (var line in log) Log.Add(line);
+
+        _flush = new DispatcherTimer();
+    }
+
     public string Title { get; }
 
     /// <summary>Where the whole log lives, named on screen so a failure can be sent on.</summary>
-    public string LogPath => _provisioner.LogPath;
+    public string LogPath => _provisioner?.LogPath ?? "";
 
     [ObservableProperty] private string _phase;
     [ObservableProperty] private string _detail;
@@ -103,6 +131,9 @@ public sealed partial class OptimumBuildViewModel : ViewModelBase
     /// </summary>
     public async Task StartAsync()
     {
+        // Nothing to run: this one was built to be looked at. See the preview constructor.
+        if (_provisioner is null) return;
+
         _flush.Start();
 
         var progress = new Progress<OptimumStep>(step =>

@@ -1,7 +1,13 @@
 # Cairn on the ModDB
 
-Copy for the [Vintage Story ModDB](https://mods.vintagestory.at/) entry, kept here because
-a description pasted into a web form and forgotten is one that quietly stops being true.
+Notes for the [Vintage Story ModDB](https://mods.vintagestory.at/cairn) entry, kept here
+because a description pasted into a web form and forgotten is one that quietly stops being
+true.
+
+The description itself is [`moddb-description.html`](moddb-description.html) — HTML in a
+`.html` file rather than fenced inside this one, because the ModDB stores descriptions as
+HTML and a paste-ready file can be diffed, opened in a browser and copied whole. This file
+is the reasoning around it.
 
 **Type:** External Tool · **Tag:** Utility · **Side:** Client
 
@@ -10,79 +16,69 @@ External Tool and Other — which is the same gap Cairn exists to fill. A launch
 cleanly, though: [VS Mod Pack Launcher](https://mods.vintagestory.at/vsmodpacklauncher) is
 listed under Utility and is the closest precedent.
 
----
-
 ## Summary (required field)
 
 A modpack manager for Vintage Story: complete, reproducible mod sets, each pack with its
 own worlds and its own game version.
 
----
+## Pasting the description
 
-## Description
-
-**Paste this as HTML, not as Markdown.** The ModDB stores descriptions as HTML — the API
-hands back `<p>…</p>` for every mod on the site — so `###` and `**` arrive as literal
-characters. If the editor shows no HTML view, look for a source or `<>` button; failing
-that, paste from a rendered preview, which carries the formatting as rich text.
+Paste it as HTML, not as Markdown: `###` and `**` arrive as literal characters. The
+editor is TinyMCE with the `code` plugin in its toolbar, so use the source-code button —
+pasting rendered HTML into the WYSIWYG view mangles the download box.
 
 Each paragraph is one long line on purpose. Editors that turn newlines into `<br>` shatter
 a wrapped paragraph into a dozen short lines, and unwrapped source cannot be misread that
 way. Headings are bold paragraphs rather than `<h3>`, which is what the listings on the
 site actually use.
 
-```html
-<p>Vintage Story downloads the mods a server tells you about. What it has no concept of is a <strong>pack</strong>: a mod set you put together yourself, pinned to exact versions and shareable as one thing.</p>
+The download block leads, in a bordered box, because the page's own **Download** button
+serves the stub zip rather than the app: a visitor who trusts the obvious button gets a zip
+full of HTML. The box has to be prominent enough that it is read first, since it is the
+only thing steering anyone away from that button — the description does not explain the
+button, on the grounds that a listing is a poor place to apologise for the site it is on.
+`<div>` and inline `style` both survive the site's sanitiser — htmLawed, `elements => '*'`
+minus scripts and forms — and mods across the site already use `font-size` and
+`background-color`.
 
-<p>Put anything in a pack — content, worldgen, tools, quality-of-life. Cairn installs what the pack names and hands the lot to the game, so a pack works as well for a world of your own as for the set everyone on a server agrees to run.</p>
+## Why the download is a link and not a file
 
-<p><strong>Packs</strong></p>
+The ModDB is open source ([anegostudios/vsmoddb](https://github.com/anegostudios/vsmoddb)),
+so this is settled rather than inferred. `lib/upload-limits.php` allows `dll`, `zip` and
+`cs` for a release, one file per release, at **40 MB — where `MB = 1024 * KB`**
+(`lib/core.php`), so 41,943,040 bytes. Cairn's artifacts are 42.5–51.1 MB. Every one of
+them misses, Linux by about half a megabyte and macOS x64 by nine.
 
-<p>A pack records exactly which mod versions you got, with a checksum for each. Hand it to somebody and they get your versions — the same bytes, not roughly the same mods. Mods that other mods depend on come along automatically.</p>
+That is the whole reason the entry carries a stub zip. It is not a choice anyone would make
+otherwise, and [VS Launcher](https://mods.vintagestory.at/vslauncher) ships a
+`READ_ME_HOW_TO_DOWNLOAD.zip` for the same reason. Shrinking the builds is not a way out:
+trimming 1.2% would rescue Linux alone while macOS stays 6–9 MB over.
 
-<p><strong>Nothing moves unless you ask</strong></p>
+Two things follow that are worth knowing before anyone tries again:
 
-<p>Mods break saves, so pressing Play never updates one. <strong>Check for updates</strong> shows what has moved and offers them one at a time, and a mod you pinned to a version is never offered an update.</p>
+- **Nothing inspects a zip's contents** — `lib/fileupload.php` checks size, extension,
+  count and permission, and stops. A zip need not contain a mod.
+- **`mods.uploadLimitOverwrite` is a per-mod override**, applied in `lib/fileupload.php`
+  and set by moderators through `PUT /api/mods/{modid}/releases/upload-limit`, bounded only
+  by the server's PHP `post_max_size`. **Asking Anego Studios to raise Cairn's limit is the
+  unblock**, and it is a feature they built for this rather than a favour. Ask for 64–80 MB,
+  not 48: macOS x64 is already 51.1 MB and these grow with Avalonia and .NET.
 
-<p><strong>Every pack is its own game</strong></p>
+If the limit is raised, the real artifacts go up as releases and most of this section comes
+out, along with the reason the download box has to lead at all. Several files can
+share one `modversion` — 73 mods on the site do it, Murple's server manager shipping
+`_Win64_` and `_Linux64_` zips under 1.1.1 — so one release per platform per version is the
+shape to use, rather than separate mod pages per platform the way Rustique and ModsUpdater
+split theirs.
 
-<p>Each pack has its own worlds, mod configs and settings, so a world built under one mod set cannot be opened by accident under another. You still sign in once — your login follows you between packs.</p>
+## Uploads cannot be automated
 
-<p><strong>It installs the game too</strong></p>
-
-<p>Point one pack at 1.21 and another at 1.22 and Cairn fetches both, launching whichever one a pack asks for. It installs the right .NET for each as well, which is the part that usually goes wrong.</p>
-
-<p><strong>Sharing</strong></p>
-
-<p>This is the part worth having when you play with other people. Send a pack as a single file, or publish it and pass the link around — a published pack's page has an <strong>Open in Cairn</strong> button. Everyone ends up on the same mods at the same versions, which is usually the difference between an evening playing and an evening working out whose install is wrong.</p>
-
-<p>Nobody is agreeing to anything blind: the link shows every mod and the exact version it would install, and waits.</p>
-
-<p><strong>Getting it</strong></p>
-
-<p>One download and nothing to install first. You still need a Vintage Story account to play.</p>
-
-<p><strong>Download:</strong> <a href="https://cairns.gg/download/windows">Windows</a> · <a href="https://cairns.gg/download/macos-arm64">macOS (Apple silicon)</a> · <a href="https://cairns.gg/download/macos-x64">macOS (Intel)</a> · <a href="https://cairns.gg/download/linux">Linux</a></p>
-
-<p>On Windows the first run shows "Windows protected your PC" — the build is not signed yet, so choose <strong>More info</strong> → <strong>Run anyway</strong>. It does not come back.</p>
-
-<p><em>Not to be confused with Cairns, the mod that adds piles of rocks — no relation.</em></p>
-```
-
----
-
-## Notes before submitting
-
-- **The file upload is the awkward part.** The ModDB's flow expects a release with a
-  zipped mod file, and Cairn's builds are 42–51 MB and are not mods. VSMPL solved this by
-  linking out to their own site "due to its file size" and putting only a small downloader
-  zip on the ModDB. Cairn has no such downloader, so either link out and see whether an
-  entry can stand without a release attached, or build one.
-- **No licence and no public source link.** The repo is private and has no LICENSE file,
-  so nothing here claims open source or points at GitHub.
-- **Still wanted by the submission form:** a logo image and screenshots. The pack list
-  with a couple of real packs in it, the mod list showing pins and dependencies, and the
-  version-change preview dialog are the three that show what it actually does.
+Worth recording so it is not re-investigated. Authentication is a session cookie issued by
+redirecting through `account.vintagestory.at`, plus a per-user `actionToken` echoed as `at`
+on every mutating request. There are no API keys, and file upload is not in the
+authenticated API at all — it is `edit-uploadfile.php`, a multipart form POST. Automating a
+release upload means scripting a login against the game account server with real
+credentials in CI, which is not worth it for four uploads a release.
 
 ## Keeping this true
 
@@ -93,7 +89,54 @@ versioned and immutable by design, and one pasted here goes stale the next time 
 is cut. The slugs are `windows`, `linux`, `macos-arm64` and `macos-x64`; `macos-intel` is
 not one of them.
 
+The description carries no version numbers and no file sizes, which is what lets it survive
+a release untouched. Keep it that way: a size or a version in the copy is a line that goes
+stale silently, and nothing on the page will point at it when it does.
+
 The SmartScreen paragraph goes when the Windows build is signed, and the release notes in
 `.github/workflows/release.yml` carry the same sentence for the same reason — both stop
 being true on the same day. See the README's *Registering the scheme* and *Signing and
 notarising the macOS builds*.
+
+## Still outstanding
+
+- **No licence and no public source link.** The repo is private and has no LICENSE file,
+  so nothing in the listing claims open source or points at GitHub.
+- **A logo image.** Nothing here supplies one.
+
+## Screenshots
+
+Captured by a tool rather than by hand, so they can be retaken after a UI change instead of
+going quietly stale:
+
+```
+CAIRN_SHOT_DIR=$PWD/artifacts/screenshots \
+  dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll -method '*listing*'
+```
+
+It builds a library worth photographing — several packs, a full mod set, dependencies
+underneath the mods that pulled them in — and reaches the real ModDB for names and icons,
+because rows reading `carryon` against a blank square look like a mock-up rather than the
+app. It writes:
+
+| | |
+|---|---|
+| `01-a-pack-and-its-mods` | what the thing is |
+| `02-adding-a-mod-from-moddb` | search, in the app |
+| `03-a-pack-that-joins-a-server` | the auto-join case |
+| `04-a-pack-on-an-older-game-version` | packs on different versions, side by side |
+| `05-what-is-on-disk` | Preferences → Storage |
+| `06-build-an-optimised-client` | the offer, on a pack Optimum is for |
+| `07-what-it-will-cost` | the warning, before anything starts |
+| `08-watching-it-build` | the live log |
+| `09-running-with-optimum` | what the pack says afterwards |
+
+The last four are a sequence and read best in order: what is offered, what it costs, what
+it looks like while it happens, and what the pack says at the end. They are the ones that
+sell the feature no other launcher has.
+
+Two things about them are deliberate. The demo home is `/tmp/cairn-demo-xxxx` rather than a
+real temp directory, because the Settings tab prints the pack's paths and sixty characters
+of machine noise across the bottom of a store image helps nobody. And the build window is
+photographed from a view model that shows a build without running one — a real build takes
+twenty minutes, so the alternative was a picture of a failure.
