@@ -50,12 +50,21 @@ public static class Diagnostics
     /// as from the lock, which is the only way to see a file that has gone missing, been
     /// replaced, or disagrees with the version the lock claims for it.
     /// </param>
+    /// <param name="install">
+    /// The install this pack would actually launch, when the caller knows it.
+    ///
+    /// Worth its own line because the list above says what is on the machine and this says
+    /// which one runs — and those stop agreeing the moment somebody points a pack at a
+    /// modified client. "The game is behaving oddly" is unanswerable without it, and it is
+    /// the one fact a person cannot easily look up for themselves.
+    /// </param>
     public static string Report(
         PackManifest? pack = null,
         PackLock? locked = null,
         IEnumerable<string>? log = null,
         GameLibrary? library = null,
-        string? modsDir = null)
+        string? modsDir = null,
+        GameInstall? install = null)
     {
         var text = new StringBuilder();
 
@@ -71,7 +80,7 @@ public static class Diagnostics
 
         AppendGames(text, library);
 
-        if (pack is not null) AppendPack(text, pack, locked, modsDir);
+        if (pack is not null) AppendPack(text, pack, locked, modsDir, install);
 
         AppendLog(text, log);
 
@@ -99,7 +108,7 @@ public static class Diagnostics
         var managed = Safely(() => library.Managed, []);
 
         foreach (var install in managed)
-            text.AppendLine($"  managed  {install.Version,-10} {install.Architecture}, "
+            text.AppendLine($"  managed  {install.Describe(),-22} {install.Architecture}, "
                             + $"needs .NET {install.RequiredFramework}  {Redact(install.Directory)}");
 
         var system = Safely(() => library.System, null);
@@ -115,10 +124,20 @@ public static class Diagnostics
     }
 
     private static void AppendPack(
-        StringBuilder text, PackManifest pack, PackLock? locked, string? modsDir)
+        StringBuilder text, PackManifest pack, PackLock? locked, string? modsDir,
+        GameInstall? install)
     {
         text.AppendLine($"Pack '{pack.Id}'{(pack.Name is null ? "" : $" — {pack.Name}")}");
         text.AppendLine($"  game       {pack.GameVersion}");
+
+        // Which install actually runs, and loudly when it is not the stock game. A pack
+        // pointed at a modified client behaves unlike everyone else's copy of the same
+        // pack, and nothing else in this report would say so.
+        if (install is not null)
+            text.AppendLine($"  runs with  {install.Describe()}  {Redact(install.Directory)}"
+                            + (install.IsVariant ? "   ← NOT THE STOCK GAME" : ""));
+        else
+            text.AppendLine("  runs with  nothing installed for this version");
 
         // Whether there is a server address, never the address. It is the one thing in a
         // manifest somebody may not want quoted in public, and publishing already treats

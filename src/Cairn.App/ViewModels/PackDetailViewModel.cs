@@ -195,7 +195,8 @@ public partial class PackDetailViewModel : ViewModelBase
         // Off the UI thread: this hashes every mod zip in the pack, which for a large one
         // is tens of megabytes and would otherwise freeze the window mid-click.
         var report = await Task.Run(() => Diagnostics.Report(
-            Manifest, _store.LoadLock(Id), Log.ToList(), _library, _store.ModsDir(Id)));
+            Manifest, _store.LoadLock(Id), Log.ToList(), _library, _store.ModsDir(Id),
+            ResolvedInstall));
 
         try
         {

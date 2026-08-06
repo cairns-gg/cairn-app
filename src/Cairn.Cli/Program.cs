@@ -132,9 +132,23 @@ internal static class Program
             locked: id is null ? null : store.LoadLock(id),
             log: null,
             library: library,
-            modsDir: id is null ? null : store.ModsDir(id)));
+            modsDir: id is null ? null : store.ModsDir(id),
+
+            // The same resolution the launcher makes, including a pack pointed at a
+            // modified client — the report is worth less if the two front-ends disagree
+            // about which install it describes.
+            install: id is null ? null : Resolve(store, library, id)));
 
         return 0;
+    }
+
+    /// <summary>The install a pack would launch: its own choice if it has one, else stock.</summary>
+    private static GameInstall? Resolve(PackStore store, GameLibrary library, string id)
+    {
+        if (store.LoadLocalState(id).InstallDirectory is { } dir
+            && GameInstall.TryAt(dir) is { } chosen) return chosen;
+
+        return library.ForVersion(store.Load(id).GameVersion);
     }
 
     private static int Info()
