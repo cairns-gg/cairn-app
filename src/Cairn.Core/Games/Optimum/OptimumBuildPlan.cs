@@ -34,9 +34,25 @@ public sealed record OptimumBuildPlan
     public const long InstalledBytes = 1_000L * 1024 * 1024;
     public const long SdkBytes = 1_000L * 1024 * 1024;
 
+    /// <summary>
+    /// The redistributable the packager makes alongside the client directory — a 604 MB
+    /// tarball on Linux, a 700 MB disk image on macOS.
+    ///
+    /// Counted because it exists at the same time as the folder it was made from, so it is
+    /// part of the peak even though Cairn deletes it moments later. Leaving it out
+    /// understated a real Linux build by most of a gigabyte, on a machine that finished
+    /// with 1.5 GB to spare. Windows' packager is asked for a folder and makes no archive,
+    /// but the allowance is harmless there and a wrong "yes, there is room" is not.
+    /// </summary>
+    public static long RedistributableBytes =>
+        System.Runtime.InteropServices.RuntimeInformation
+            .IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? 0
+            : 700L * 1024 * 1024;
+
     /// <summary>Everything this will occupy at its peak.</summary>
     public long RequiredBytes =>
-        BuildTreeBytes + InstalledBytes + (NeedsSdk ? SdkBytes : 0);
+        BuildTreeBytes + InstalledBytes + RedistributableBytes + (NeedsSdk ? SdkBytes : 0);
 
     /// <summary>
     /// Whether there is room, with headroom.

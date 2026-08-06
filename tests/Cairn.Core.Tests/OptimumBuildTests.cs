@@ -176,6 +176,24 @@ public class OptimumBuildTests : IDisposable
     }
 
     [Fact]
+    public void The_packagers_own_archive_counts_toward_the_peak()
+    {
+        // It exists beside the folder it was made from, so it is part of the peak even
+        // though Cairn deletes it moments later. Left out, a real Linux build overran the
+        // estimate by most of a gigabyte and finished with 1.5 GB to spare.
+        var plan = PlanWith(free: 100L << 30);
+
+        Assert.Equal(
+            OptimumBuildPlan.BuildTreeBytes + OptimumBuildPlan.InstalledBytes
+            + OptimumBuildPlan.RedistributableBytes,
+            plan.RequiredBytes);
+
+        if (!OperatingSystem.IsWindows())
+            Assert.True(OptimumBuildPlan.RedistributableBytes > 0,
+                "Linux and macOS packagers both emit an archive next to the client");
+    }
+
+    [Fact]
     public void A_full_disk_stops_it_before_it_starts()
     {
         // Not merely a failure: it fails twenty minutes in, having taken the machine's free
