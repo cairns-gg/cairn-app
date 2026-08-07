@@ -94,16 +94,23 @@ public static class DotnetRuntimeLocator
     /// determined is accepted only when nothing better exists, so a readable-but-unusual
     /// layout is not fatal.
     ///
-    /// <paramref name="preferredRoot"/> is an override rather than just a first guess: if
-    /// it can host the app it wins outright, even over an architecture-confirmed system
-    /// install. Otherwise a caller-managed private runtime could never take effect on a
-    /// machine that already has .NET.
+    /// <paramref name="preferredRoots"/> are overrides rather than just first guesses: the
+    /// first of them that can host the app wins outright, even over an
+    /// architecture-confirmed system install. Otherwise a caller-managed private runtime
+    /// could never take effect on a machine that already has .NET.
+    ///
+    /// Several of them, in order, because two callers now have an opinion: an install may
+    /// bring its own runtime and Cairn may be managing one. Trying only the first would
+    /// mean a bundled runtime that turned out unusable silently discarded the private one
+    /// rather than falling back to it.
     /// </summary>
     public static DotnetRuntime? Find(
-        ExecutableArch arch, Version required, string? preferredRoot = null)
+        ExecutableArch arch, Version required, params string?[] preferredRoots)
     {
-        if (!string.IsNullOrWhiteSpace(preferredRoot))
+        foreach (var preferredRoot in preferredRoots)
         {
+            if (string.IsNullOrWhiteSpace(preferredRoot)) continue;
+
             var overridePath = SafeFullPath(preferredRoot);
             var preferred = overridePath is null ? null : Inspect(overridePath);
 

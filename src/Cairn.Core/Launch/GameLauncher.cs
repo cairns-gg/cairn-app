@@ -94,10 +94,18 @@ public sealed class GameLauncher(GameInstall install)
         return args;
     }
 
-    /// <summary>Which runtime the game would use, without launching it.</summary>
+    /// <summary>
+    /// Which runtime the game would use, without launching it.
+    ///
+    /// An install's own runtime is offered before Cairn's managed one. A Flatpak ships the
+    /// .NET the game was built against and is the runtime it uses when launched the ordinary
+    /// way, so preferring a private copy Cairn happened to download would run the game on
+    /// something nobody chose for it.
+    /// </summary>
     public RuntimeResolution ResolveRuntime(LaunchOptions? options = null) =>
         new(DotnetRuntimeLocator.Find(
-                install.Architecture, install.RequiredFramework, options?.PreferredDotnetRoot),
+                install.Architecture, install.RequiredFramework,
+                install.DotnetRoot, options?.PreferredDotnetRoot),
             install.Architecture,
             install.RequiredFramework);
 

@@ -81,6 +81,11 @@ public sealed class GameStore
             Architecture = install.Architecture,
             RequiredFramework = install.RequiredFramework,
 
+            // Rebuilding without this drops an install back to whatever .NET the machine
+            // has, which on a host whose only runtime is the one the install brought is
+            // none at all.
+            DotnetRoot = install.DotnetRoot,
+
             // Carried, emphatically. Rebuilding the install without this turns a modified
             // client whose metadata could not be read into one indistinguishable from the
             // stock game — which is the single outcome the variant marker exists to make

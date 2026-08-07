@@ -73,6 +73,18 @@ public sealed class GameInstall
     public required Version RequiredFramework { get; init; }
 
     /// <summary>
+    /// A .NET root this install brings with it, tried ahead of anything on the machine.
+    /// Null for the usual install, which brings none.
+    ///
+    /// A Flatpak is the case that needs it: it bundles the runtime the game is meant to run
+    /// on, and the immutable hosts it is popular on may carry no system .NET at all. Without
+    /// this the only runtime on such a machine is the one Cairn does not look at, and it
+    /// reports the game cannot start while downloading a second copy of what is already
+    /// there.
+    /// </summary>
+    public string? DotnetRoot { get; init; }
+
+    /// <summary>
     /// The data path the game would pick on its own. Computed with the same call the
     /// game makes (GamePaths' static ctor), so it agrees on every platform rather
     /// than us hardcoding per-OS guesses.
@@ -120,6 +132,11 @@ public sealed class GameInstall
 
             foreach (var dir in ScanFor(Path.Combine(home, ".local", "share"), "vintagestory"))
                 yield return dir;
+
+            // Last, so an unpacked tarball still wins on a machine with both. Neither is
+            // more of an accident than the other, but the tarball is the one somebody chose
+            // a directory for, and the first match here is taken without asking.
+            foreach (var dir in FlatpakGame.GameDirectories()) yield return dir;
         }
     }
 
@@ -182,6 +199,7 @@ public sealed class GameInstall
             Architecture = ExecutableImage.ReadArchitecture(exe),
             RequiredFramework = ReadRequiredFramework(dir) ?? FallbackFramework,
             Variant = variant,
+            DotnetRoot = FlatpakGame.BundledRuntime(dir),
         };
     }
 

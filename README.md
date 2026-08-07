@@ -399,6 +399,55 @@ that would not otherwise start but cannot break one that already works. Sources 
 Microsoft's public release metadata (`releases-index.json` → per-channel `releases.json`),
 which publishes a SHA512 per file.
 
+### The game as a Flatpak
+
+On Linux the game is commonly installed from Flathub, and on an immutable distribution —
+Bazzite, Silverblue, SteamOS — that is often the only way it can be. Cairn finds such an
+install and uses the .NET that comes inside it:
+
+```
+$ cairn-cli diagnostics
+Game installs
+  system   1.22.6     X64  /var/lib/flatpak/app/at.vintagestory.VintageStory/current/active/files/extra/vintagestory
+
+$ cairn-cli launch mypack --dry-run
+using runtime .NET 10.0.8 (x64) at .../current/active/files/lib/dotnet
+```
+
+The runtime is the part that matters. Such a machine can have no system .NET at all, so
+without reading the one inside the deploy Cairn concludes the game cannot start — and then
+downloads a private runtime to sit beside the perfectly good one it did not look at.
+
+Three things about this are less obvious than they look:
+
+**It is an ordinary install in an unusual place.** `/app` in the sandbox is `files` in the
+deploy on the host, and the Flatpak unpacks the shipped tarball as extra data rather than
+building it — so the game is at `files/extra/vintagestory` and its .NET at `files/lib/dotnet`,
+and everything in between is exactly what the tarball contains. Nothing special is done to
+read it; the directory is simply added to the list of places `GameInstall.TryAt` is pointed at.
+
+**Nothing goes through `flatpak run`.** The sandbox grants the app almost no filesystem
+access — on a stock install, `xdg-pictures/Vintagestory` and some GTK config — so a pack
+directory in `~/.cairn` is invisible to the game inside it and `--addModPath` would name
+nothing. `flatpak run --filesystem=<dir>` can grant it, but there is no need: the apphost
+and every native library the game bundles resolve against the host, so Cairn launches the
+binary directly with `DOTNET_ROOT` pointed into the deploy, exactly as it does for a
+tarball install. The sandbox is stepped around rather than negotiated with. The cost of
+this choice is a host that lacks the game's shared libraries, where the Flatpak would have
+worked and a direct launch will not.
+
+**Detection reads paths, never `flatpak`.** The obvious approach — `flatpak info
+--show-location` — resolves user and system installs alike, but answers with the
+content-hashed deploy directory, whose name changes on every `flatpak update`. Cairn walks
+`<installation>/app/<id>/current/active` instead: symlinks Flatpak repoints as it updates,
+so a path already recorded keeps working. Installations are the two standard roots plus
+anything declared in `/etc/flatpak/installations.d`, which is how a Steam Deck puts
+Flatpaks on the SD card.
+
+`VINTAGE_STORY` still overrides all of it, and pointing it at a deploy's
+`files/extra/vintagestory` picks the bundled runtime up too — the runtime is found from the
+layout, not from having discovered the directory ourselves.
+
 ### Optimised clients, built on the machine
 
 [Optimum](https://mods.vintagestory.at/optimum) is not a mod. It is a fork of the client,
