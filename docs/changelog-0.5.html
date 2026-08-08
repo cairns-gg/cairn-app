@@ -1,0 +1,95 @@
+<h1>What's new in Cairn 0.5.1</h1>
+
+<p>Everything that changed since the 0.3 series, in one place. Nothing here needs any action from you unless it says so.</p>
+
+<h2>Downloads are about half the size</h2>
+
+<p>Cairn is roughly half what it was &mdash; the Windows download goes from 44.6 MB to 18.5, Linux from 42.5 to 16.9, macOS from 48.8 to 23.5, and the server tool from 32.2 MB to 7.5. It is still one self-contained file that needs no .NET installed on the machine; there is simply less of it.</p>
+
+<h2>Add a mod the game has outrun</h2>
+
+<p>Small mods stop being rebuilt while the game moves on, and plenty of them still work. ModDB says nothing about that, so until now Cairn refused them outright &mdash; <em>"no release marked for game 1.22.6"</em> &mdash; which is no help if you have installed one by hand and played with it for a week.</p>
+
+<p>Now you can say so. <strong>Add</strong> on a mod with no release for your version asks first, in plain terms: it may still work, and it may fail to load or damage worlds this pack has already made. Accept, and it installs.</p>
+
+<p>What Cairn records is not a "yes" but the version it was a yes <em>about</em>. So the acceptance travels with the pack when you share it, sync keeps mentioning it &mdash; naming what the mod <em>is</em> marked for, so you can judge it &mdash; and if you retarget the pack to a different release series it asks again, because nobody has tested that combination. From the command line it is <code>cairn-cli add &lt;pack&gt; &lt;modid&gt; --accept-unmarked</code>.</p>
+
+<h2>Run a faster client, built on your machine</h2>
+
+<p>Cairn can now build and install <a href="https://mods.vintagestory.at/optimum">Optimum</a>, a performance-focused fork of the game client. It is distributed as patches that have to be applied to a decompiled copy of the game, which is well beyond what most people will do by hand &mdash; so Cairn does the whole procedure: fetch, patch, compile, package, install.</p>
+
+<p>It tells you the cost before it starts, because this is unlike anything else Cairn installs: <strong>15&ndash;30 minutes of compiling and 4&ndash;6 GB of disk</strong>, and it needs Git on the machine (plus perl, python3, curl and tar outside Windows). It names whatever is missing, with the command to install each. You can cancel at any point without affecting your packs or your existing game installs.</p>
+
+<p>A built client <strong>never runs unless a pack is told to use it</strong>. It reports the version it was forked from, so it would otherwise be indistinguishable from the real game &mdash; instead it is offered as a choice on a specific pack, and the diagnostics report says loudly when a pack is running one. If you retarget a pack to a different game version, the choice stops applying rather than quietly launching a client that pack's mods were never resolved against; move back and it applies again, so trying another version for a minute does not throw away a twenty-minute build.</p>
+
+<h2>Choosing what a pack launches</h2>
+
+<p>Where there is a real choice of client, packs now show a single button and a sentence saying what will run, instead of a picker on every pack. The <strong>Storage</strong> view accounts for what building a client costs &mdash; the build tree is several gigabytes and used to appear in no total anywhere &mdash; and it is listed separately with its own Remove, because unlike a downloaded version it does not come back on its own.</p>
+
+<p>Relatedly: <strong>Clean up will no longer delete a client you built.</strong> It used to sweep one the moment the last pack using it was retargeted, from a button offering to tidy up.</p>
+
+<h2>macOS: the native client, and windowed mode</h2>
+
+<p>On Apple Silicon, Cairn now installs the <strong>native arm64 client</strong> for game versions that publish one (1.22.3 and later) instead of the Intel build running under Rosetta. Versions you already have stay as they are &mdash; remove and reinstall one to get the native build.</p>
+
+<p><strong>Windowed mode no longer draws the game into a quarter of its own window.</strong> The game asks macOS not to treat it as a Retina app, and that request was being dropped by the way Cairn laid out its install directories. Existing installs are corrected automatically the first time you run this version; you do not need to redownload anything.</p>
+
+<h2>Linux: the game installed from Flathub</h2>
+
+<p>Cairn now finds Vintage Story when it was installed as a <strong>Flatpak</strong>, including on immutable systems like Bazzite and SteamOS where that is often the only way to install it. It also uses the .NET runtime the Flatpak brings with it, so on a machine with no system .NET Cairn no longer reports that the game cannot start while downloading a second copy of a runtime that was already there.</p>
+
+<h2>The right .NET, for whatever is actually launching</h2>
+
+<p>Cairn works out which .NET runtime is needed from the client that will actually start, rather than from the game version in general. Two installs of one version can genuinely need different runtimes &mdash; a client built for your machine against the stock download, say &mdash; and getting this wrong produced the least helpful message in the launcher: <em>"1.22.5 needs .NET 10.0.0, which could not be installed"</em>, moments after being told the version was ready.</p>
+
+<h2>Running a server</h2>
+
+<p>New: <strong><code>cairn-server</code></strong>, a separate download for Linux (x64). Point it at a published pack's address and it follows that pack, installs the dedicated server and the .NET it needs &mdash; on a machine with nothing installed on it &mdash; and runs the server.</p>
+
+<ul>
+
+  <li>It can run in the foreground for diagnosis, or under <strong>systemd</strong>; it writes the service file for you and prints the commands to enable it, as a system service or as your own user.</li>
+
+  <li><code>cairn-server update</code> takes the author's newer revision <strong>when you ask</strong>. A restart never moves the mods under a live world.</li>
+
+  <li><code>cairn-server command "/whitelist add someone"</code> talks to a running server, with no <code>screen</code> session needed.</li>
+
+  <li>Stopping is graceful: the server is asked to save and exit, and given time to do it.</li>
+
+</ul>
+
+<h2>Smaller things</h2>
+
+<ul>
+
+  <li><strong>Update checks say what they are doing</strong> while they run, and the answer is remembered for ten minutes &mdash; pressing the button twice no longer re-asks ModDB about thirty mods to be told the same thing. Editing the pack &mdash; adding, pinning, retargeting, syncing &mdash; makes the answer stale immediately.</li>
+
+  <li><strong>Pinning a mod</strong> now happens in a window where you can see the versions, rather than a dropdown on every row, and the pin marker is drawn rather than borrowed from an emoji font.</li>
+
+  <li><strong>One bad mod entry no longer breaks the whole pack.</strong> Searching for "optimum" and pressing Add used to write an entry with no mod id, after which every sync failed with "Pack manifest is invalid" and the only way out was editing <code>pack.json</code> by hand. Results that are not mods no longer offer Add, and a single unusable entry now fails as itself while the rest of the pack installs.</li>
+
+  <li><strong>A game version is checked as soon as you pick it</strong>, rather than when you next press Play.</li>
+
+  <li><strong>The "not an exact match" warning</strong> now appears only when a change actually causes it, instead of on every mod that was already installed that way.</li>
+
+  <li><strong>The diagnostics report keeps its characters on Windows</strong>, and says which install a pack actually runs with.</li>
+
+  <li><strong>Pressing enter searches again.</strong> Typing a mod name and pressing enter searched; typing a different one over it and pressing enter did nothing, which is the moment it most obviously should.</li>
+
+  <li><strong>A mod with no release for your version</strong> no longer has its "no 1.22.x release" label overlapping the View and Add buttons; it sits on its own line.</li>
+
+</ul>
+
+<h2>Upgrading</h2>
+
+<p>Nothing to do. Packs, worlds and installed game versions carry over untouched.</p>
+
+<ul>
+
+  <li><strong>macOS:</strong> your installed game versions are renamed on first launch so windowed mode scales correctly. Packs that had a specific client chosen keep it.</li>
+
+  <li><strong>Apple Silicon:</strong> existing installs stay as the Intel build until you reinstall them.</li>
+
+  <li><strong>Servers:</strong> <code>cairn-server</code> is a separate download and is not part of the launcher.</li>
+
+</ul>
