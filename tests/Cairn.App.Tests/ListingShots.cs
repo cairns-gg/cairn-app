@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Cairn.App;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
 using Cairn.Core;
@@ -66,6 +67,12 @@ public class ListingShots : IDisposable
         Pack("homestead", "Homestead", "1.22.6", Homestead);
         Pack("vanilla-qol", "Vanilla + QoL", "1.22.6",
             ["olla", "unchisel", "keylock", "packrat", "glassview"]);
+
+        // Published, which the site's two shots need and no listing shot wants: the address
+        // under the pack's name is the whole of what somebody shares, and cairns.gg says so
+        // in as many words. This pack and not Homestead because nothing in 01-11 opens it,
+        // so giving it an address changes none of them.
+        PublishedLink().Save(Path.Combine(_home, "packs", "vanilla-qol", "cairns.json"));
         Pack("building", "Building & Decor", "1.22.6",
             ["chiseltools", "medievalarchitecture", "vsroofing", "purposefulstorage"]);
         Pack("with-friends", "Server Night", "1.22.6",
@@ -161,6 +168,84 @@ public class ListingShots : IDisposable
             }
         }
 
+        // The same frame again, at twice the pixels, for cairns.gg.
+        //
+        // ModDB scales its images down to a thumbnail, so a listing shot can be taken at the
+        // size the window really is. The site prints them at around 700 CSS pixels on
+        // displays with two device pixels for each, where a 1x capture arrives visibly soft.
+        //
+        // UiScale grows a window's declared size along with its content and open windows
+        // follow the setting live, so this is the same window with twice the pixels rather
+        // than a bigger one showing more rows. Taken beside its 1x sibling rather than in a
+        // block of its own, so the two cannot drift apart: whatever was arranged to make the
+        // listing frame worth looking at is still arranged here.
+        // unclamp: for a dialog whose height comes from its content under a MaxHeight cap.
+        //
+        // UiScale scales the content but not the cap, so at 2x the build warning drew twice
+        // the text into the same 420 and cut the last line mid-word — a sentence severed at
+        // "existing insta" reads as a broken screenshot rather than as a window with more in
+        // it. Lifting the cap lets SizeToContent finish the job. Nothing is staged: the
+        // window draws text it already contains, and the cap goes back afterwards.
+        void SiteShot(Window shown, string name, int settle = 1, bool unclamp = false)
+        {
+            // Sizes read before scaling and put back after, because scaling up and down
+            // again does not land a window on the size it started at.
+            //
+            // The main window is restored whether or not it is the one being photographed.
+            // UiScale is global and every open window follows it, so shooting a *dialog* at
+            // 2x silently resizes the main window behind it — which is how the listing
+            // frames ended up 1000 wide instead of 1180, from a helper that never appeared
+            // to touch them.
+            var (width, height) = (shown.Width, shown.Height);
+            var (mainWidth, mainHeight) = (window.Width, window.Height);
+            var cap = shown.MaxHeight;
+
+            if (unclamp) shown.MaxHeight = double.PositiveInfinity;
+
+            UiScale.Current = 2.0;
+            Settle(settle);
+            ShotOf(shown, outDir, "site-" + name);
+
+            UiScale.Current = 1.0;
+            shown.MaxHeight = cap;
+            shown.Width = width;
+            shown.Height = height;
+            window.Width = mainWidth;
+            window.Height = mainHeight;
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        // ---- the two the site uses ----
+        //
+        // Kept apart from the listing shots because they answer a different question. A
+        // store listing is selling the launcher to somebody who has not met it; cairns.gg
+        // has already been reached by somebody holding a link, and what it has to explain
+        // is that a pack has an address, and that publishing shows you what it would send
+        // before it sends it. Which is why both need a pack that has been published, and
+        // none of 01-11 has one.
+        //
+        // First, because every frame after this leaves the window somewhere: a search in
+        // the status bar, the Settings tab selected, a line reading "pinned carryon" that
+        // belongs to another pack. None of that is wrong in a listing shot, where it reads
+        // as an app in use — but on a page introducing the thing it is just noise.
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        Settle(6);
+        SiteShot(window, "01-a-pack-open", settle: 3);
+
+        // Searching ModDB from inside the launcher, on the published pack rather than on
+        // Homestead: the site's other frames are all this pack, and a page whose pictures
+        // wander between packs reads as pictures of different programs.
+        vm.Detail!.SearchText = "storage";
+        vm.Detail.SearchCommand.Execute(null);
+        Settle(4);
+        SiteShot(window, "03-adding-a-mod", settle: 3);
+        vm.Detail.ClearSearchCommand.Execute(null);
+        Settle(1);
+
+        var share = SharingVanillaQol();
+        SiteShot(share, "02-sharing-a-pack");
+        share.Close();
+
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "homestead");
         Settle(6);
         Shot("01-a-pack-and-its-mods");
@@ -206,6 +291,11 @@ public class ListingShots : IDisposable
             frame!.Save(file, new PngBitmapEncoderOptions());
         }
 
+        // No site shot of this one. The demo home has fake installs and no runtimes beside
+        // them, so every row carries a red "no matching .NET runtime — cannot start". That
+        // is fine at thumbnail size on ModDB and honest about what the screen does; on a
+        // page introducing Cairn it is a wall of errors. The site says what this screen is
+        // for in a sentence instead, until the harness can stage runtimes worth showing.
         prefsWindow.Close();
 
         // ---- the optimised client ----
@@ -239,6 +329,7 @@ public class ListingShots : IDisposable
             pinWindow.Show();
             Settle(1);
             ShotOf(pinWindow, outDir, "10-pinning-a-version");
+            SiteShot(pinWindow, "04-pinning-a-version");
             pinWindow.Close();
         }
 
@@ -273,6 +364,7 @@ public class ListingShots : IDisposable
         confirm.Show();
         Settle(1);
         ShotOf(confirm, outDir, "07-what-it-will-cost");
+        SiteShot(confirm, "05-what-it-will-cost", unclamp: true);
         confirm.Close();
 
         // A build to look at rather than one to run; see the preview constructor. A real
@@ -289,6 +381,7 @@ public class ListingShots : IDisposable
         build.Show();
         Settle(1);
         ShotOf(build, outDir, "08-watching-it-build");
+        SiteShot(build, "06-watching-it-build");
         build.Close();
 
         // Afterwards: the pack says what it runs, and offers the way back.
@@ -298,6 +391,47 @@ public class ListingShots : IDisposable
         Settle(1);
         Shot("09-running-with-optimum");
     }
+
+    /// <summary>
+    /// The Share window standing over a published pack, for the site.
+    ///
+    /// Built from a view model rather than driven out of the main window, the same way the
+    /// build window above is: pressing Share for real would reach the network, and what the
+    /// shot wants is the dialog as it is read — before anything is sent.
+    /// </summary>
+    private static ShareWindow SharingVanillaQol()
+    {
+        // The pack's own mods, so the dialog agrees with the window behind it. One pinned,
+        // because the pin is the thing this list says that a count could not.
+        var plan = new PublishPlan("vanilla-qol",
+        [
+            new PublishMod("glassview", "1.3.0", Pinned: false, OnModDb: true),
+            new PublishMod("keylock", "1.1.1", Pinned: false, OnModDb: true),
+            new PublishMod("olla", "1.1.0", Pinned: false, OnModDb: true),
+            new PublishMod("packrat", "1.1.0", Pinned: false, OnModDb: true),
+            new PublishMod("unchisel", "1.2.0", Pinned: true, OnModDb: true),
+        ], Connect: null, LockCovers: true, LockProblem: null);
+
+        var window = new ShareWindow
+        {
+            DataContext = ShareViewModel.From(plan, "Vanilla + QoL", "dizzyd", PublishedLink()),
+        };
+        window.Show();
+
+        return window;
+    }
+
+    /// <summary>
+    /// What a pack published once looks like on disk. Written to the link file rather than
+    /// published for real, so the shot needs no server and no account.
+    /// </summary>
+    private static PackLink PublishedLink() => new()
+    {
+        Role = PackRole.Author,
+        Url = "https://cairns.gg/dizzyd/vanilla-qol",
+        Revision = 1,
+        Published = new PublishRecord { Visibility = "public", Connect = "stripped" },
+    };
 
     /// <summary>Selects the Settings tab, which a TabControl does not realise until then.</summary>
     private static void ShowSettings(Window window)
