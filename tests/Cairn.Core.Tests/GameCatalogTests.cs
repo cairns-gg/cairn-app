@@ -284,6 +284,97 @@ public class GameStoreTests : IDisposable
         Architecture = Cairn.Core.Runtime.ExecutableArch.X64,
         RequiredFramework = new Version(10, 0, 0),
     };
+
+    /// <summary>An install real enough for GameInstall.TryAt, in a directory of its own.</summary>
+    private static string Materialise(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        File.WriteAllBytes(
+            Path.Combine(dir, OperatingSystem.IsWindows() ? "Vintagestory.exe" : "Vintagestory"),
+            new byte[64]);
+        File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
+        return dir;
+    }
+
+    [Fact]
+    public void An_install_directory_is_a_bundle_only_where_that_means_something()
+    {
+        var name = Path.GetFileName(_store.InstallDir("1.22.5"));
+
+        // The game's Info.plist opts out of Retina, and the window server reads that only
+        // from a bundle — so on macOS the directory has to be one, or the game renders into
+        // a quarter of its own window. Nowhere else has the notion.
+        Assert.Equal(OperatingSystem.IsMacOS() ? "1.22.5.app" : "1.22.5", name);
+    }
+
+    [Fact]
+    public void A_bundled_install_is_still_found_by_its_version()
+    {
+        Materialise(_store.InstallDir("1.22.5"));
+
+        Assert.True(_store.IsInstalled("1.22.5"));
+        Assert.NotNull(_store.Find("1.22.5"));
+
+        // Its metadata is unreadable, so what ListInstalled reports is the directory-name
+        // fallback answering — which has to see through the suffix to do it. This is the
+        // name the version picker and the installed list show.
+        Assert.Equal("1.22.5", _store.ListInstalled().Single().Version);
+    }
+
+    [Fact]
+    public void A_variant_behind_two_suffixes_still_reports_the_version_it_is_of()
+    {
+        var dir = Materialise(Path.Combine(_root, GameStore.DirectoryNameFor("1.22.5-optimum")));
+        File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker), "Optimum");
+
+        var install = _store.At(dir);
+
+        Assert.NotNull(install);
+        Assert.Equal("1.22.5", install!.Version);
+        Assert.True(install.IsVariant);
+    }
+
+    [Fact]
+    public void An_install_made_before_installs_were_bundles_is_migrated()
+    {
+        Materialise(Path.Combine(_root, "1.22.5"));
+
+        var moved = _store.MigrateToBundles();
+
+        if (!OperatingSystem.IsMacOS())
+        {
+            Assert.Empty(moved);
+            return;
+        }
+
+        Assert.Single(moved);
+        Assert.True(Directory.Exists(Path.Combine(_root, "1.22.5.app")));
+        Assert.False(Directory.Exists(Path.Combine(_root, "1.22.5")));
+        Assert.NotNull(_store.Find("1.22.5"));
+    }
+
+    [Fact]
+    public void A_pack_that_recorded_the_old_path_follows_it_to_the_bundle()
+    {
+        var before = Path.Combine(_root, "1.22.5-optimum");
+        Materialise(before);
+        _store.MigrateToBundles();
+
+        // What a pack's local state holds is the path as it was when the choice was made.
+        // Losing it here means silently falling back to the stock game.
+        Assert.NotNull(_store.At(before));
+    }
+
+    [Fact]
+    public void Migration_leaves_alone_what_is_not_an_install()
+    {
+        // An interrupted download's staging directory. Renamed into place it would be a
+        // bundle with half a game in it.
+        Directory.CreateDirectory(Path.Combine(_root, "1.22.5.staging"));
+
+        Assert.Empty(_store.MigrateToBundles());
+        Assert.True(Directory.Exists(Path.Combine(_root, "1.22.5.staging")));
+    }
 }
 
 public class GameLibraryTests

@@ -19,6 +19,16 @@ namespace Cairn.App.Tests;
 /// </summary>
 public static class Games
 {
+    /// <summary>
+    /// Where an install of <paramref name="name"/> belongs under a games root.
+    ///
+    /// Asked of GameStore rather than composed by hand: on macOS an install directory is a
+    /// bundle, and a path built here without that suffix is one nothing in Cairn looks in —
+    /// so the test arranges a fixture the code cannot see and then asserts about its absence.
+    /// </summary>
+    public static string DirIn(string gamesRoot, string name) =>
+        new GameStore(gamesRoot).InstallDir(name);
+
     public static GameInstall FakeInstall(string version, string dir, int bytes = 0)
     {
         // GameInstall.TryAt only requires that these two exist, so a directory of empty

@@ -46,6 +46,12 @@ internal static class Program
         var games = new GameStore();
         var runtimes = new RuntimeStore();
 
+        // Said out loud rather than done quietly: it moves a directory the user may have a
+        // path to, and both front-ends do it, so whichever runs first is the one that says.
+        foreach (var moved in games.MigrateToBundles())
+            Console.WriteLine($"moved {moved} — an install has to be a bundle for macOS to "
+                              + "scale its window properly");
+
         try
         {
             return args[0] switch

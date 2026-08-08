@@ -81,6 +81,16 @@ public partial class MainViewModel : ViewModelBase
         _store = new PackStore();
         _packData = new PackData(_store);
         _gameStore = new GameStore();
+
+        // Before anything reads the library: an install renamed underneath a list already
+        // built is one that vanishes from the pane it is shown in.
+        //
+        // One line rather than one per install, because Note is the status bar and each
+        // call overwrites the last — three of them say less than one of them does.
+        if (_gameStore.MigrateToBundles() is { Count: > 0 } bundled)
+            Note($"made {bundled.Count} game install{(bundled.Count == 1 ? "" : "s")} a bundle, "
+                 + "so macOS scales the game's window properly");
+
         _install = GameInstall.TryLocate();
         _library = new GameLibrary(_gameStore, _install);
         _runtimes = new RuntimeStore();

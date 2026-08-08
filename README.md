@@ -317,19 +317,30 @@ Both list the machine's own install alongside Cairn's, because a pack launches f
 whenever the version matches — a list that omitted it would disagree with what actually
 runs. Cairn will not remove one it did not install.
 
-Versions land in `~/.cairn/games/<version>/`, so several can coexist and each pack
-launches the one its `gameVersion` names:
+Versions land in `~/.cairn/games/<version>/` (`<version>.app` on macOS — see below), so
+several can coexist and each pack launches the one its `gameVersion` names:
 
 ```
 using game 1.21.5 at ~/.cairn/games/1.21.5
 ```
 
-Two macOS details this avoids by construction. The install directory is **not** named
-`*.app`: the shipped tarball has a flat layout with `Info.plist` at the top level and no
-`Contents/`, so an `.app` suffix makes `codesign` treat it as a bundle, fail to find
-`_CodeSignature/CodeResources`, and report the game as damaged. And nothing downloaded
-this way is quarantined, because `com.apple.quarantine` is applied by browsers and
-LaunchServices rather than by HTTP clients.
+**On macOS the directory is named `<version>.app`**, and that suffix is load-bearing. The
+shipped tarball has a flat layout — `Info.plist` at the top level, no `Contents/` — which is
+the old-style form of a bundle, and the suffix is the whole of what makes macOS treat it as
+one. The game's `Info.plist` sets `NSHighResolutionCapable` to `false`, and the window
+server reads that only from a bundle. Without it the game is handed a Retina drawable it
+asked not to have, sizes its viewport in points, and draws into the bottom-left **quarter**
+of its own window — invisible in fullscreen, unmissable in windowed mode. A symlink does
+not help: the window server resolves it and answers for the real path. Installs made before
+this are renamed at startup, and a path a pack recorded before the rename is followed to the
+bundle it became.
+
+The cost is that `codesign` now reads these as bundles and objects — *"code has no resources
+but signature indicates they must be present"* — the game's binary being ad-hoc signed with
+no `_CodeSignature`. That is equally true of `/Applications/Vintagestory.app` after an
+ordinary install, since it is the same layout and the same binary, and it only becomes a
+refusal to launch for a **quarantined** copy. Nothing Cairn downloads is one:
+`com.apple.quarantine` is applied by browsers and LaunchServices, not by HTTP clients.
 
 **Windows takes a different route.** It publishes only an installer `.exe` — there is no
 client archive, the sole Windows zip being the *server* — so there is nothing to unpack.

@@ -40,9 +40,9 @@ public class MainWindowTests : IDisposable
         // catalog, which the tests deliberately keep offline — so anything about offering
         // versions silently depended on the machine happening to have Vintage Story on it,
         // and started failing the day this one did not.
-        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"));
-        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"));
-        Games.FakeInstall("1.21.7", Path.Combine(_home, "games", "1.21.7"));
+        Games.FakeInstall("1.22.5", Games.DirIn(Path.Combine(_home, "games"), "1.22.5"));
+        Games.FakeInstall("1.22.6", Games.DirIn(Path.Combine(_home, "games"), "1.22.6"));
+        Games.FakeInstall("1.21.7", Games.DirIn(Path.Combine(_home, "games"), "1.21.7"));
 
         // And one install Cairn did not make. VINTAGE_STORY is the first thing TryLocate
         // consults, so this pins what "the machine's own install" is instead of inheriting
@@ -986,7 +986,7 @@ public class MainWindowTests : IDisposable
         Assert.Equal("Clean up", asked.ConfirmLabel);
 
         // Said no, so nothing moved.
-        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+        Assert.True(Directory.Exists(Games.DirIn(Path.Combine(_home, "games"), "1.22.6")));
     }
 
     [AvaloniaFact]
@@ -1053,7 +1053,7 @@ public class MainWindowTests : IDisposable
         // which something can disappear. Removing it there must be reported, not thrown.
         preferences.Confirm = _ =>
         {
-            Directory.Delete(Path.Combine(_home, "games", "1.22.6"), recursive: true);
+            Directory.Delete(Games.DirIn(Path.Combine(_home, "games"), "1.22.6"), recursive: true);
             return Task.FromResult(true);
         };
 
@@ -1073,8 +1073,8 @@ public class MainWindowTests : IDisposable
         await preferences.CleanUpCommand.ExecuteAsync(null);
 
         // 1.22.5 is the Anego pack's version; 1.22.6 is nobody's.
-        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.5")));
-        Assert.False(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+        Assert.True(Directory.Exists(Games.DirIn(Path.Combine(_home, "games"), "1.22.5")));
+        Assert.False(Directory.Exists(Games.DirIn(Path.Combine(_home, "games"), "1.22.6")));
         Assert.Contains("Removed", preferences.CleanupSummary);
     }
 
@@ -1134,7 +1134,7 @@ public class MainWindowTests : IDisposable
 
         Assert.False(asked);
         Assert.Contains("anego", preferences.CleanupSummary);
-        Assert.True(Directory.Exists(Path.Combine(_home, "games", "1.22.6")));
+        Assert.True(Directory.Exists(Games.DirIn(Path.Combine(_home, "games"), "1.22.6")));
     }
 
     [AvaloniaTheory]
@@ -1199,7 +1199,7 @@ public class MainWindowTests : IDisposable
     public void A_system_install_is_not_listed_twice_when_Cairn_manages_the_same_directory()
     {
         var root = Path.Combine(_home, "shared-games");
-        var dir = Path.Combine(root, "1.21.7");
+        var dir = Games.DirIn(root, "1.21.7");
 
         // The same directory reached two ways: as a managed install, and as "the system one".
         using var games = new Games.Fixture(_home, Games.FakeInstall("1.21.7", dir), [], storeRoot: root);

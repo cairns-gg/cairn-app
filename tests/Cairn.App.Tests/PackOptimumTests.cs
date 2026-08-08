@@ -45,7 +45,7 @@ public class PackOptimumTests : IDisposable
 
     private string Install(string name, string? variant = null)
     {
-        var dir = Path.Combine(_home, "games", name);
+        var dir = Games.DirIn(Path.Combine(_home, "games"), name);
         Directory.CreateDirectory(dir);
 
         File.WriteAllText(Path.Combine(dir, OperatingSystem.IsWindows()
@@ -115,7 +115,7 @@ public class PackOptimumTests : IDisposable
         // A directory that is there but is not an install — a cancelled build, a deletion
         // half done. It reports no version, so it is in no picker; if that also hid the
         // button, nothing on screen could put it right.
-        Directory.CreateDirectory(Path.Combine(_home, "games", $"{Supported}-optimum"));
+        Directory.CreateDirectory(Games.DirIn(Path.Combine(_home, "games"), $"{Supported}-optimum"));
 
         var (_, _, detail) = Open(Supported);
 
@@ -323,7 +323,7 @@ public class PackOptimumTests : IDisposable
         // Ignored rather than erased: going back picks it up again, so trying another
         // version for a minute does not throw away a twenty-minute build.
         Assert.Equal(
-            Path.Combine(_home, "games", $"{Supported}-optimum"),
+            Games.DirIn(Path.Combine(_home, "games"), $"{Supported}-optimum"),
             Store.LoadLocalState("anego").InstallDirectory);
 
         detail.Manifest.GameVersion = Supported;

@@ -43,7 +43,7 @@ public class PackInstallChoiceTests : IDisposable
     /// <summary>Enough of an install for TryAt, optionally marked as a modified build.</summary>
     private string Install(string name, string? variant = null)
     {
-        var dir = Path.Combine(_home, "games", name);
+        var dir = Games.DirIn(Path.Combine(_home, "games"), name);
         Directory.CreateDirectory(dir);
 
         File.WriteAllText(Path.Combine(dir, OperatingSystem.IsWindows()

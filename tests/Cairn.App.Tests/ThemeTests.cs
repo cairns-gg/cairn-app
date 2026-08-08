@@ -46,8 +46,8 @@ public class ThemeTests : IDisposable
 
         // Two versions to move between, so the screenshots show a real picker.
         // Sized so the storage figures and the cleanup prompt read like real ones.
-        Games.FakeInstall("1.22.5", Path.Combine(_home, "games", "1.22.5"), bytes: 614 * 1024 * 1024);
-        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"), bytes: 614 * 1024 * 1024);
+        Games.FakeInstall("1.22.5", Games.DirIn(Path.Combine(_home, "games"), "1.22.5"), bytes: 614 * 1024 * 1024);
+        Games.FakeInstall("1.22.6", Games.DirIn(Path.Combine(_home, "games"), "1.22.6"), bytes: 614 * 1024 * 1024);
 
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
     }

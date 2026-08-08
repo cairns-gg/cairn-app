@@ -3,10 +3,24 @@ namespace Cairn.Core.Games;
 /// <summary>
 /// The game versions Cairn has installed itself, under ~/.cairn/games/&lt;version&gt;.
 ///
-/// Deliberately NOT named "*.app" on macOS: the shipped tarball has a flat layout with
-/// Info.plist at the top level and no Contents/ directory, so giving the directory an
-/// .app suffix makes codesign treat it as a bundle, fail to find _CodeSignature/CodeResources,
-/// and report the install as damaged. A plain directory has no such problem.
+/// Named "&lt;version&gt;.app" on macOS, which the shipped tarball's flat layout — Info.plist
+/// at the top level, no Contents/ directory — is exactly the old-style form of. The suffix
+/// is what makes it a bundle rather than a directory that happens to contain a plist, and
+/// the game needs to be one: its Info.plist sets NSHighResolutionCapable to false, and the
+/// window server reads that only from a bundle. Without it the game gets a Retina drawable
+/// it did not ask for, sizes its viewport in points, and renders into the bottom-left
+/// quarter of its own window. Fullscreen hides this; windowed mode does not.
+///
+/// A symlink will not do — the window server resolves it and answers for the real path —
+/// so the install directory itself carries the suffix, matching what /Applications holds
+/// after an ordinary install.
+///
+/// The cost is that codesign now reads these as bundles and reports "code has no resources
+/// but signature indicates they must be present", the game's binary being ad-hoc signed
+/// with no _CodeSignature. That is true of the official install for the same reason, and it
+/// only becomes a refusal to launch for a *quarantined* copy — which a download Cairn made
+/// itself is not. Verified both ways round: the flat bundle launches by exec and through
+/// LaunchServices.
 /// </summary>
 public sealed class GameStore
 {
@@ -16,12 +30,27 @@ public sealed class GameStore
 
     public string Root => _root;
 
+    /// <summary>What makes a directory a bundle, on the one platform that has the notion.</summary>
+    private const string BundleSuffix = ".app";
+
+    private static bool Bundled => OperatingSystem.IsMacOS();
+
+    /// <summary>The directory name a version gets, bundle suffix and all.</summary>
+    public static string DirectoryNameFor(string version) =>
+        Bundled ? version + BundleSuffix : version;
+
+    /// <summary>The version a directory name is for, whether or not it is a bundle.</summary>
+    private static string NameWithoutBundleSuffix(string name) =>
+        Bundled && name.EndsWith(BundleSuffix, StringComparison.OrdinalIgnoreCase)
+            ? name[..^BundleSuffix.Length]
+            : name;
+
     public string InstallDir(string version)
     {
         if (!IsValidVersion(version))
             throw new ArgumentException($"'{version}' is not a usable version directory name.", nameof(version));
 
-        return Path.Combine(_root, version);
+        return Path.Combine(_root, DirectoryNameFor(version));
     }
 
     /// <summary>Versions become directory names, so they are constrained like pack ids.</summary>
@@ -55,7 +84,11 @@ public sealed class GameStore
     {
         if (GameVersions.IsPlausibleVersion(install.Version)) return install;
 
-        var name = Path.GetFileName(dir);
+        // Without the suffix off first, "1.22.5.app" is not a plausible version and neither
+        // is the "1.22.5" that a variant's "1.22.5-optimum.app" is hiding behind two
+        // suffixes — so the fallback this whole method exists to be would never fire on the
+        // platform where installs are bundles.
+        var name = NameWithoutBundleSuffix(Path.GetFileName(dir));
 
         if (!GameVersions.IsPlausibleVersion(name))
         {
@@ -100,9 +133,22 @@ public sealed class GameStore
     /// Used wherever a directory is looked up by path rather than found by listing — a
     /// pack's recorded choice, most of all — so that the same install does not report one
     /// version when listed and another when addressed.
+    ///
+    /// A recorded path that predates installs being bundles is followed to the bundle it
+    /// became. A pack records its choice as a directory, and <see cref="MigrateToBundles"/>
+    /// renames the directory out from under it — without this, a pack that chose a client
+    /// somebody spent twenty minutes building would quietly fall back to the stock game the
+    /// first time it ran after an update.
     /// </summary>
-    public GameInstall? At(string directory) =>
-        GameInstall.TryAt(directory) is { } install ? Named(install, directory) : null;
+    public GameInstall? At(string directory)
+    {
+        var dir = Bundled && !Directory.Exists(directory)
+                  && Directory.Exists(directory + BundleSuffix)
+            ? directory + BundleSuffix
+            : directory;
+
+        return GameInstall.TryAt(dir) is { } install ? Named(install, dir) : null;
+    }
 
     /// <summary>A managed install whose reported version matches, or null.</summary>
     public GameInstall? Find(string version)
@@ -126,6 +172,65 @@ public sealed class GameStore
     }
 
     public bool IsInstalled(string version) => Find(version) is not null;
+
+    /// <summary>
+    /// Renames installs made before they were bundles, returning what moved.
+    ///
+    /// Cheap enough to run at every start — a directory listing and, on all but the first
+    /// one, nothing. It has to be a rename rather than something done on next install: an
+    /// install that stays as it is keeps rendering into a quarter of its window, and the
+    /// only other cure is re-downloading 600 MB of a client already on the disk.
+    ///
+    /// Never fatal, and never partial in a way that loses an install. A directory it cannot
+    /// rename is left exactly as it was and still runs, one suffix short of scaling
+    /// correctly; a name already taken is left alone rather than merged, because two
+    /// directories claiming one version is a thing to look at, not to resolve by deleting
+    /// one of them.
+    /// </summary>
+    public IReadOnlyList<string> MigrateToBundles()
+    {
+        if (!Bundled || !Directory.Exists(_root)) return [];
+
+        var moved = new List<string>();
+
+        foreach (var dir in SafeDirectories())
+        {
+            var name = Path.GetFileName(dir);
+            if (name.EndsWith(BundleSuffix, StringComparison.OrdinalIgnoreCase)) continue;
+
+            // Only things that are actually installs: the store also holds the staging
+            // directories an interrupted download left behind, and renaming one of those
+            // into place would produce a bundle with half a game in it.
+            if (GameInstall.TryAt(dir) is null) continue;
+
+            var target = dir + BundleSuffix;
+            if (Directory.Exists(target)) continue;
+
+            try
+            {
+                Directory.Move(dir, target);
+                moved.Add(target);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Left where it is, and still launchable.
+            }
+        }
+
+        return moved;
+    }
+
+    private IEnumerable<string> SafeDirectories()
+    {
+        try
+        {
+            return Directory.EnumerateDirectories(_root).OrderBy(d => d, StringComparer.Ordinal).ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 
     public void Remove(string version)
     {

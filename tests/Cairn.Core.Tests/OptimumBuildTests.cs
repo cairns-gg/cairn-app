@@ -361,7 +361,9 @@ public class OptimumBuildTests : IDisposable
 
         Assert.False(provisioner.Plan("1.22.5").AlreadyBuilt);
 
-        var install = Dir("games", OptimumSource.Pinned.InstallName);
+        // Named by the store, not by hand: on macOS an install directory is a bundle, and a
+        // path built here without the suffix is one nothing looks in.
+        var install = Dir("games", GameStore.DirectoryNameFor(OptimumSource.Pinned.InstallName));
         Touch(install, "VintagestoryAPI.dll");
         Touch(install, OperatingSystem.IsWindows() ? "Optimum.exe" : "Optimum");
         OptimumProvisioner.WriteMarker(install, OptimumSource.Pinned);

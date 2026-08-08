@@ -78,10 +78,10 @@ public class ListingShots : IDisposable
         Pack("performance", "Big Base", OptimumSource.Pinned.GameVersion,
             ["carryon", "bettercrates", "chiseltools", "farseer", "terraprety"]);
 
-        Games.FakeInstall("1.22.6", Path.Combine(_home, "games", "1.22.6"), bytes: 614 * 1024 * 1024);
-        Games.FakeInstall("1.21.7", Path.Combine(_home, "games", "1.21.7"), bytes: 598 * 1024 * 1024);
+        Games.FakeInstall("1.22.6", Games.DirIn(Path.Combine(_home, "games"), "1.22.6"), bytes: 614 * 1024 * 1024);
+        Games.FakeInstall("1.21.7", Games.DirIn(Path.Combine(_home, "games"), "1.21.7"), bytes: 598 * 1024 * 1024);
         Games.FakeInstall(OptimumSource.Pinned.GameVersion,
-            Path.Combine(_home, "games", OptimumSource.Pinned.GameVersion), bytes: 610 * 1024 * 1024);
+            Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Pinned.GameVersion), bytes: 610 * 1024 * 1024);
 
         // A machine that has built a client, so Storage shows the row for it. It is the
         // largest thing Cairn writes and the one most worth seeing accounted for.
@@ -330,7 +330,7 @@ public class ListingShots : IDisposable
     /// </summary>
     private GameInstall MarkBuiltClient()
     {
-        var dir = Path.Combine(_home, "games", OptimumSource.Pinned.InstallName);
+        var dir = Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Pinned.InstallName);
 
         Games.FakeInstall(OptimumSource.Pinned.GameVersion, dir, bytes: 640 * 1024 * 1024);
         File.WriteAllBytes(Path.Combine(dir, OperatingSystem.IsWindows()
