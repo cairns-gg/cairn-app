@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cairn.Core.Games;
+using Cairn.Core.Runtime;
 using Xunit;
 
 namespace Cairn.Core.Tests;
@@ -23,6 +24,12 @@ public class GameCatalogTests
           "urls": { "cdn": "https://cdn.example/vs_client_osx-x64_1.22.5.tar.gz" },
           "latest": 1
         },
+        "mac-arm64": {
+          "filename": "vs_client_osx-arm64_1.22.5.tar.gz", "filesize": "607.8 MB",
+          "md5": "e7e4dd2b38f500000000000000000000",
+          "urls": { "cdn": "https://cdn.example/vs_client_osx-arm64_1.22.5.tar.gz" },
+          "latest": 1
+        },
         "linux": {
           "filename": "vs_client_linux-x64_1.22.5.tar.gz", "filesize": "590.2 MB",
           "md5": "ffeb9b11b78400000000000000000000",
@@ -40,6 +47,10 @@ public class GameCatalogTests
         "mac-x64": {
           "filename": "vs_client_osx-x64_1.10.0.tar.gz", "filesize": "300 MB",
           "md5": "aaaa", "urls": { "cdn": "https://cdn.example/old.tar.gz" }
+        },
+        "mac-arm64": {
+          "filename": "vs_client_osx-arm64_1.10.0.tar.gz", "filesize": "300 MB",
+          "md5": "dddd", "urls": {}
         }
       },
       "1.9.14": {
@@ -127,13 +138,65 @@ public class GameCatalogTests
     public void Parsing_a_null_manifest_yields_nothing_rather_than_throwing()
         => Assert.Empty(GameCatalog.Parse(null, "mac-x64"));
 
-    [Fact]
-    public void Platform_key_is_the_x64_mac_build()
+    private static List<GameRelease> ParseMacPreferringNative()
     {
-        // The published clients are x64 on every platform.
-        if (OperatingSystem.IsMacOS()) Assert.Equal("mac-x64", GameCatalog.PlatformKey);
-        if (OperatingSystem.IsLinux()) Assert.Equal("linux", GameCatalog.PlatformKey);
-        if (OperatingSystem.IsWindows()) Assert.Equal("windows", GameCatalog.PlatformKey);
+        var raw = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, JsonElement>>>(
+            Manifest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return GameCatalog.Parse(raw, ["mac-arm64", "mac-x64"]);
+    }
+
+    [Fact]
+    public void The_native_mac_client_wins_where_one_is_published()
+    {
+        var release = ParseMacPreferringNative().Single(r => r.Version == "1.22.5");
+
+        // An x64 client on Apple Silicon runs under Rosetta and has to be hosted by an x64
+        // .NET, which is a second runtime to find on a machine whose own is arm64.
+        Assert.Equal("mac-arm64", release.Platform);
+        Assert.Contains("osx-arm64", release.Artifact.FileName);
+    }
+
+    [Fact]
+    public void A_version_published_before_the_native_client_existed_is_still_offered()
+    {
+        // 1.22 is where mac-arm64 appears; nothing older publishes one. Preferring the
+        // native key without falling back would not merely install the wrong client, it
+        // would drop every older version out of the list of versions installable at all.
+        var release = ParseMacPreferringNative().Single(r => r.Version == "1.21.5");
+
+        Assert.Equal("mac-x64", release.Platform);
+    }
+
+    [Fact]
+    public void A_malformed_native_entry_falls_through_rather_than_losing_the_version()
+    {
+        // 1.10.0 publishes a mac-arm64 entry with no usable url. Preferring a key must mean
+        // preferring an artifact it actually yields.
+        var release = ParseMacPreferringNative().Single(r => r.Version == "1.10.0");
+
+        Assert.Equal("mac-x64", release.Platform);
+    }
+
+    [Fact]
+    public void Platform_keys_prefer_the_client_this_machine_runs_natively()
+    {
+        var keys = GameCatalog.PlatformKeys;
+
+        if (OperatingSystem.IsLinux()) Assert.Equal(["linux"], keys);
+        if (OperatingSystem.IsWindows()) Assert.Equal(["windows"], keys);
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // The x64 client is the fallback on every Mac, never absent: it is the only
+            // artifact a pre-1.22 version has.
+            Assert.Equal("mac-x64", keys[^1]);
+
+            Assert.Equal(
+                ExecutableImage.NativeArchitecture == ExecutableArch.Arm64
+                    ? ["mac-arm64", "mac-x64"]
+                    : ["mac-x64"],
+                keys);
+        }
     }
 }
 

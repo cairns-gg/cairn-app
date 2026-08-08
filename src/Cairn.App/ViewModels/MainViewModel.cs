@@ -482,6 +482,7 @@ public partial class MainViewModel : ViewModelBase
             // The sidebar row shows the same manifest the detail pane is editing.
             onChanged: value.Changed,
             provision: v => ProvisionAsync(v, value.Id),
+            provisionRuntime: i => ProvisionRuntimeAsync(i, value.Id),
             isProvisioning: v => Provisioning && ProvisioningVersion == v,
             requestDelete: RequestDeleteCommand.Execute,
             knownGameVersions: KnownGameVersionsAsync);
@@ -973,7 +974,34 @@ public partial class MainViewModel : ViewModelBase
     /// pressing Play on one of them — so it is logged against the pack that asked, which
     /// is where someone looking for "why did that take 30 seconds" will go.
     /// </summary>
-    public async Task ProvisionAsync(string gameVersion, string? forPackId = null)
+    public Task ProvisionAsync(string gameVersion, string? forPackId = null)
+        => RunProvisionAsync(
+            gameVersion,
+            _provisioner.Plan(gameVersion, _install),
+            (progress, ct) => _provisioner.EnsureAsync(gameVersion, _install, progress, ct),
+            forPackId);
+
+    /// <summary>
+    /// Downloads a runtime for the install a pack is about to launch, when it can find none.
+    ///
+    /// Separate from <see cref="ProvisionAsync"/>, which asks about a game version and so
+    /// answers for the stock install of it. A pack running a client built for this machine
+    /// needs the question asked of that client instead — see
+    /// <see cref="GameProvisioner.PlanFor"/>. Provisioning the version here would report the
+    /// version ready and change nothing, which is exactly what it used to do.
+    /// </summary>
+    public Task ProvisionRuntimeAsync(GameInstall install, string? forPackId = null)
+        => RunProvisionAsync(
+            install.Version,
+            _provisioner.PlanFor(install),
+            (progress, ct) => _provisioner.EnsureRuntimeAsync(install, progress, ct),
+            forPackId);
+
+    private async Task RunProvisionAsync(
+        string gameVersion,
+        ProvisionPlan plan,
+        Func<IProgress<ProvisionStep>, CancellationToken, Task> work,
+        string? forPackId)
     {
         void Say(string line)
         {
@@ -981,7 +1009,6 @@ public partial class MainViewModel : ViewModelBase
             else NoteFor(forPackId, line);
         }
 
-        var plan = _provisioner.Plan(gameVersion, _install);
         if (!plan.AnythingToDo) return;
 
         _provisionCts?.Dispose();
@@ -1004,7 +1031,7 @@ public partial class MainViewModel : ViewModelBase
                 ProvisionFraction = p.Fraction ?? 0;
             });
 
-            await _provisioner.EnsureAsync(gameVersion, _install, progress, _provisionCts.Token);
+            await work(progress, _provisionCts.Token);
 
             ProvisionStatus = $"Vintage Story {gameVersion} is ready";
             Say(ProvisionStatus);

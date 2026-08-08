@@ -100,6 +100,7 @@ public partial class PackDetailViewModel : ViewModelBase
     private readonly Action<string> _log;
     private readonly Action _onChanged;
     private readonly Func<string, Task> _provision;
+    private readonly Func<GameInstall, Task>? _provisionRuntime;
     private readonly Action<object?> _requestDelete;
     private readonly Func<string, bool> _isProvisioning;
     private readonly ModIconCache _icons;
@@ -127,7 +128,8 @@ public partial class PackDetailViewModel : ViewModelBase
         Func<string, Task> provision,
         Func<string, bool> isProvisioning,
         Action<object?> requestDelete,
-        Func<CancellationToken, Task<IReadOnlyList<string>>>? knownGameVersions = null)
+        Func<CancellationToken, Task<IReadOnlyList<string>>>? knownGameVersions = null,
+        Func<GameInstall, Task>? provisionRuntime = null)
     {
         Manifest = manifest;
         _store = store;
@@ -139,6 +141,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _log = note;
         _onChanged = onChanged;
         _provision = provision;
+        _provisionRuntime = provisionRuntime;
         _requestDelete = requestDelete;
         _isProvisioning = isProvisioning;
         _knownGameVersions = knownGameVersions;
@@ -2191,7 +2194,14 @@ public partial class PackDetailViewModel : ViewModelBase
             var runtime = launcher.ResolveRuntime(options);
             if (!runtime.Resolved)
             {
-                await _provision(Manifest.GameVersion);
+                // For this install, not for the pack's version. They are the same question
+                // only while a version has one install: a client built for this machine can
+                // need a .NET of a different architecture than the stock download of the
+                // same version, and provisioning the version answers for the stock one —
+                // reporting the version ready while the client that will actually start
+                // still has nothing to run on.
+                if (_provisionRuntime is not null) await _provisionRuntime(install);
+                else await _provision(Manifest.GameVersion);
 
                 options.PreferredDotnetRoot = _runtimes.RootFor(install);
                 runtime = launcher.ResolveRuntime(options);

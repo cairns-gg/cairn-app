@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace Cairn.Core.Runtime;
 
@@ -13,13 +14,30 @@ public enum ExecutableArch
 /// <summary>
 /// Reads the target architecture straight out of a native executable header.
 ///
-/// Needed because the game ships as an x64 apphost on every platform, while a host
-/// machine may well have an arm64 .NET installed. Pointing the x64 game at an arm64
-/// runtime fails in a way that reads as "the game is broken", so Cairn checks instead
-/// of assuming.
+/// Needed because a machine's .NET and the client it is asked to host need not agree. The
+/// game shipped as an x64 apphost everywhere until 1.22, which added a native mac-arm64
+/// client — so an Apple Silicon machine can now hold an x64 install, an arm64 install, or
+/// both, alongside .NET of either architecture. Pointing an x64 game at an arm64 runtime
+/// fails in a way that reads as "the game is broken", so Cairn checks instead of assuming.
 /// </summary>
 public static class ExecutableImage
 {
+    /// <summary>
+    /// What this machine runs natively, which is not always what this process is.
+    ///
+    /// OSArchitecture rather than ProcessArchitecture: Cairn's own x64 build launched on
+    /// Apple Silicon runs under Rosetta, and every caller here is asking what the machine
+    /// can run — which client to install, which client to build — not what Cairn happens to
+    /// have been compiled for. Answering with the process would install an emulated game on
+    /// a machine that can run a native one.
+    /// </summary>
+    public static ExecutableArch NativeArchitecture => RuntimeInformation.OSArchitecture switch
+    {
+        Architecture.Arm64 => ExecutableArch.Arm64,
+        Architecture.X86 => ExecutableArch.X86,
+        _ => ExecutableArch.X64,
+    };
+
     // Mach-O
     private const uint MachMagic64 = 0xFEEDFACF;
     private const uint MachMagic32 = 0xFEEDFACE;

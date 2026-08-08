@@ -469,8 +469,13 @@ measured in minutes; this is a **15–30 minute compile needing 4–6 GB**, so s
 without saying so would be a trick. It can be cancelled at any point, and cancelling
 leaves packs and existing installs untouched.
 
-Four things about this are deliberate:
+Five things about this are deliberate:
 
+- **The client is built for the machine, not for the stock download.** On Apple Silicon
+  that means a native arm64 client, which is most of the point of building one — and it is
+  decided by the machine's architecture rather than by Cairn's own, so an x64 Cairn under
+  Rosetta does not quietly produce an emulated client. It also means the build can need a
+  .NET the stock install does not; see [Requirements](#requirements).
 - **Optimum's own scripts do the work.** Cairn drives `bootstrap`, `dotnet build` and the
   platform packager rather than reimplementing them. A second implementation of a
   95-patch bootstrap would only ever prove it agrees with itself, and its failure mode is
@@ -522,10 +527,20 @@ before it starts rather than failing partway.
 
 **The game does need .NET.** Vintage Story is framework-dependent: its
 `Vintagestory.runtimeconfig.json` asks for `Microsoft.NETCore.App` 10.0.0 and it bundles
-no runtime. The published clients are **x64 on every platform**
-(`vs_client_osx-x64`, `vs_client_linux-x64`, `vs_install_win-x64`), so they need an **x64**
-.NET 10 — which matters on Apple Silicon, where a default .NET install is arm64 and cannot
-host the game.
+no runtime. *Which* .NET depends on the client. `vs_client_linux-x64` and
+`vs_install_win-x64` are x64 everywhere; macOS published `vs_client_osx-x64` alone until
+1.22, which added a native `vs_client_osx-arm64`. On Apple Silicon Cairn installs the
+native client and falls back to the x64 one only for versions that publish nothing else —
+pre-1.22 releases would otherwise vanish from the list of versions it can install at all.
+
+So an Apple Silicon machine can hold an arm64 install, an x64 one running under Rosetta, or
+both, and each needs a .NET of its own architecture. **That makes "is there a runtime for
+this" a question about an install, not about a version**, and Cairn asks it of the install a
+pack will actually launch. Two installs of the same version routinely disagree: an Optimum
+build made for the machine is arm64 while the stock download beside it may be x64, and a
+Flatpak carries a runtime that serves the install that brought it and nothing else. Asking
+about the version and then launching something else is how a pack refuses to start moments
+after being told its version was ready.
 
 Cairn checks rather than assumes. It reads the architecture out of the game's Mach-O/PE/ELF
 header and the required framework out of its runtimeconfig, then looks for a matching
@@ -989,7 +1004,8 @@ in another tab has to select it first.
 pairing it with xunit v2 compiles and then discovers zero tests. xunit v3 projects are
 self-hosting executables, hence running the dll directly rather than `dotnet test`.
 
-Requires .NET 10. On macOS the game is a framework-dependent **x86_64** apphost, so it
-needs an x64 .NET installed via Microsoft's `.pkg` (which writes
-`/etc/dotnet/install_location_x64`). Cairn itself is architecture-agnostic — it only
-spawns the game, and reads `VintagestoryAPI.dll` metadata without loading it.
+Requires .NET 10. The game is a framework-dependent apphost, so it needs a .NET matching
+*its* architecture: on Apple Silicon that is arm64 for a 1.22-or-later client and x64 —
+installed via Microsoft's `.pkg`, which writes `/etc/dotnet/install_location_x64` — for an
+older one. Cairn itself is architecture-agnostic: it only spawns the game, and reads
+`VintagestoryAPI.dll` metadata without loading it.

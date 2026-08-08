@@ -477,9 +477,38 @@ internal static class Program
         var probe = new LaunchOptions { PreferredDotnetRoot = managedRoot };
 
         var runtime = new GameLauncher(install).ResolveRuntime(probe);
+
         if (!runtime.Resolved)
-            return Fail($"{install.Version} needs .NET {install.RequiredFramework} and none was found. "
-                        + $"Install one with: cairn-cli runtimes install {install.RequiredFramework.Major}");
+        {
+            // Asked for this install rather than for the pack's version, which the plan
+            // above already answered: a variant built for this machine can need a .NET of
+            // a different architecture than the stock download of the same version, so a
+            // version reported ready says nothing about the client about to start.
+            if (args.Contains("--no-install"))
+                return Fail($"{install.Version} needs .NET {install.RequiredFramework} and none was "
+                            + "found. Re-run without --no-install to fetch it, or install one with: "
+                            + $"cairn-cli runtimes install {install.RequiredFramework.Major}");
+
+            Console.WriteLine(provisioner.PlanFor(install).Describe());
+
+            var runtimeProgress = new Progress<ProvisionStep>(p =>
+            {
+                if (p.Fraction is { } f && p.Phase == "downloading")
+                    Console.Write($"\r  {p.Detail} ({f * 100,5:F1}%)      ");
+                else Console.WriteLine($"\r  {p.Detail}          ");
+            });
+
+            await provisioner.EnsureRuntimeAsync(install, runtimeProgress);
+
+            managedRoot = runtimes.RootFor(install);
+            probe = new LaunchOptions { PreferredDotnetRoot = managedRoot };
+            runtime = new GameLauncher(install).ResolveRuntime(probe);
+
+            if (!runtime.Resolved)
+                return Fail($"{install.Version} needs .NET {install.RequiredFramework} and none "
+                            + "could be installed. Try: cairn-cli runtimes install "
+                            + $"{install.RequiredFramework.Major}");
+        }
 
         Console.WriteLine($"using runtime {runtime.Describe()}");
 
@@ -506,9 +535,15 @@ internal static class Program
         if (args.Contains("--dry-run"))
         {
             var psi = launcher.BuildStartInfo(options);
-            foreach (var name in new[] { "DOTNET_ROOT", "DOTNET_ROOT_X64" })
-                if (psi.Environment.TryGetValue(name, out var v))
-                    Console.WriteLine($"  {name}={v}");
+
+            // Every DOTNET_ROOT* that was set rather than the two that used to be the only
+            // ones: the launcher names the variable after the game's architecture, so a
+            // native arm64 client gets DOTNET_ROOT_ARM64 — and a dry run that omits it
+            // fails to show the variable that actually decides which runtime is used.
+            foreach (var (name, value) in psi.Environment
+                         .Where(e => e.Key.StartsWith("DOTNET_ROOT", StringComparison.Ordinal))
+                         .OrderBy(e => e.Key, StringComparer.Ordinal))
+                Console.WriteLine($"  {name}={value}");
 
             Console.WriteLine("dry run - not started");
             return 0;
@@ -553,7 +588,7 @@ internal static class Program
             var releases = await catalog.ListReleasesAsync(includePreReleases: true);
             var release = releases.FirstOrDefault(r => r.Version == wanted);
             if (release is null)
-                return Fail($"no {GameCatalog.PlatformKey} download published for {wanted}");
+                return Fail($"no {GameCatalog.PlatformDescription} download published for {wanted}");
 
             if (!release.CanInstall)
                 return Fail($"{wanted} ships as {release.Artifact.FileName}, which Cairn cannot install");
@@ -596,7 +631,7 @@ internal static class Program
             Console.WriteLine($"  {system.Version,-12} {system.Architecture,-6} (pre-existing: {system.Directory})");
 
         Console.WriteLine();
-        Console.WriteLine($"available for {GameCatalog.PlatformKey}:");
+        Console.WriteLine($"available for {GameCatalog.PlatformDescription}:");
         var all = await catalog.ListReleasesAsync();
         foreach (var r in all.Take(12))
         {

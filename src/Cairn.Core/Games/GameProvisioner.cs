@@ -27,7 +27,14 @@ public sealed record ProvisionPlan(string GameVersion, bool NeedsGame, bool Need
 /// </summary>
 public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeStore runtimes)
 {
-    /// <summary>What would need doing, without doing it. Cheap — no network.</summary>
+    /// <summary>
+    /// What would need doing to make <paramref name="gameVersion"/> launchable, without
+    /// doing it. Cheap — no network.
+    ///
+    /// Answers for the stock install of that version. A pack that runs something else —
+    /// a client built for this machine — must ask <see cref="PlanFor"/> about the install
+    /// it will actually launch; see there for why the two can disagree.
+    /// </summary>
     public ProvisionPlan Plan(string gameVersion, GameInstall? systemInstall = null)
     {
         var install = games.Find(gameVersion)
@@ -37,6 +44,25 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
 
         return new ProvisionPlan(gameVersion, NeedsGame: false, NeedsRuntime: !HasRuntime(install));
     }
+
+    /// <summary>
+    /// What one particular install still needs before it can start.
+    ///
+    /// Exists because "is there a .NET this can run on" is a question about an install, not
+    /// about a version, and two installs of the same version routinely answer it
+    /// differently:
+    ///
+    /// - on Apple Silicon the native client needs an arm64 runtime while the stock x64
+    ///   download needs an x64 one, and a machine commonly has exactly one of the two;
+    /// - an install that brings its own .NET — a Flatpak — answers yes for itself and for
+    ///   nothing else on the machine.
+    ///
+    /// Asking the stock install and then launching a different one is how a pack refuses to
+    /// start having just been told the version was ready. The game is never part of this
+    /// answer: the install is in front of us, so only its runtime can be missing.
+    /// </summary>
+    public ProvisionPlan PlanFor(GameInstall install) =>
+        new(install.Version, NeedsGame: false, NeedsRuntime: !HasRuntime(install));
 
     private bool HasRuntime(GameInstall install)
     {
@@ -66,7 +92,7 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
 
             var release = releases.FirstOrDefault(r => r.Version == gameVersion)
                           ?? throw new GameInstallException(
-                              $"No {GameCatalog.PlatformKey} download is published for {gameVersion}.");
+                              $"No {GameCatalog.PlatformDescription} download is published for {gameVersion}.");
 
             if (!release.CanInstall)
                 throw new GameInstallException(
@@ -84,26 +110,41 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
             install = await installer.InstallAsync(release, relay, ct).ConfigureAwait(false);
         }
 
-        if (!HasRuntime(install))
-        {
-            var major = install.RequiredFramework.Major;
-            progress?.Report(new ProvisionStep("resolving", $"looking up .NET {major}"));
-
-            var rid = DotnetRuntimeInstaller.RidFor(install.Architecture);
-            var runtimeInstaller = new DotnetRuntimeInstaller(http, runtimes);
-            var release = await runtimeInstaller.ResolveAsync(major, rid, ct).ConfigureAwait(false);
-
-            var relay = new Progress<InstallProgressReport>(p => progress?.Report(
-                new ProvisionStep(p.Phase,
-                    p.Phase == "downloading"
-                        ? $".NET {release.Version} — {p.Done / 1024 / 1024} MB"
-                        : p.Phase,
-                    p.Fraction)));
-
-            await runtimeInstaller.InstallAsync(release, relay, ct).ConfigureAwait(false);
-        }
+        await EnsureRuntimeAsync(install, progress, ct).ConfigureAwait(false);
 
         progress?.Report(new ProvisionStep("ready", $"Vintage Story {install.Version}", 1));
         return install;
+    }
+
+    /// <summary>
+    /// Downloads a private .NET for <paramref name="install"/> if it cannot find one.
+    ///
+    /// Takes the install rather than a version because both halves of the answer come from
+    /// it: which .NET major it asks for, and — the part that a version cannot supply — which
+    /// architecture it has to be. Fetching the runtime the stock download needs and handing
+    /// it to a client built for this machine leaves both installed and neither launchable.
+    /// </summary>
+    public async Task EnsureRuntimeAsync(
+        GameInstall install,
+        IProgress<ProvisionStep>? progress = null,
+        CancellationToken ct = default)
+    {
+        if (HasRuntime(install)) return;
+
+        var major = install.RequiredFramework.Major;
+        progress?.Report(new ProvisionStep("resolving", $"looking up .NET {major}"));
+
+        var rid = DotnetRuntimeInstaller.RidFor(install.Architecture);
+        var runtimeInstaller = new DotnetRuntimeInstaller(http, runtimes);
+        var release = await runtimeInstaller.ResolveAsync(major, rid, ct).ConfigureAwait(false);
+
+        var relay = new Progress<InstallProgressReport>(p => progress?.Report(
+            new ProvisionStep(p.Phase,
+                p.Phase == "downloading"
+                    ? $".NET {release.Version} ({rid}) — {p.Done / 1024 / 1024} MB"
+                    : p.Phase,
+                p.Fraction)));
+
+        await runtimeInstaller.InstallAsync(release, relay, ct).ConfigureAwait(false);
     }
 }

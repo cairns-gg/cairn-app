@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Cairn.Core.Runtime;
 
 namespace Cairn.Core.Games;
 
@@ -62,18 +63,36 @@ public sealed class GameCatalog(HttpClient http)
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// Manifest key for this machine. The published clients are x64 on every platform,
-    /// so macOS resolves to mac-x64.
+    /// Manifest keys for this machine, best first.
+    ///
+    /// A list because macOS has two. The published clients were x64 on every platform until
+    /// 1.22, which is why one key was the whole truth when this was written; 1.22 added a
+    /// native <c>mac-arm64</c> build, and on Apple Silicon that is the one to install. An
+    /// x64 client there runs under Rosetta and has to be hosted by an x64 .NET, which is a
+    /// second runtime to find on a machine whose own is arm64.
+    ///
+    /// The x64 key is kept as a fallback rather than replaced. It is still the only mac
+    /// artifact any version before 1.22 publishes, and releases are filtered by these keys
+    /// — so preferring arm64 without falling back would not merely install the wrong
+    /// client, it would drop every pre-1.22 version out of the list of versions that can be
+    /// installed at all.
     /// </summary>
-    public static string PlatformKey
+    public static IReadOnlyList<string> PlatformKeys
     {
         get
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "mac-x64";
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "windows";
-            return "linux";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return ExecutableImage.NativeArchitecture == ExecutableArch.Arm64
+                    ? ["mac-arm64", "mac-x64"]
+                    : ["mac-x64"];
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return ["windows"];
+            return ["linux"];
         }
     }
+
+    /// <summary>This machine's platform, for a message about a version that has none.</summary>
+    public static string PlatformDescription => string.Join(" or ", PlatformKeys);
 
     public async Task<string?> GetLatestStableAsync(CancellationToken ct = default)
     {
@@ -86,10 +105,12 @@ public sealed class GameCatalog(HttpClient http)
     /// Every version offering an artifact for this platform, newest first.
     /// </summary>
     public async Task<List<GameRelease>> ListReleasesAsync(
-        bool includePreReleases = false, string? platformKey = null, CancellationToken ct = default)
+        bool includePreReleases = false,
+        IReadOnlyList<string>? platformKeys = null,
+        CancellationToken ct = default)
     {
         var url = includePreReleases ? StableAndUnstableUrl : StableUrl;
-        var platform = platformKey ?? PlatformKey;
+        var platform = platformKeys ?? PlatformKeys;
 
         var raw = await http
             .GetFromJsonAsync<Dictionary<string, Dictionary<string, JsonElement>>>(url, Json, ct)
@@ -101,30 +122,50 @@ public sealed class GameCatalog(HttpClient http)
     /// <summary>Split out so it can be tested against a captured manifest without network.</summary>
     public static List<GameRelease> Parse(
         Dictionary<string, Dictionary<string, JsonElement>>? raw, string platform)
+        => Parse(raw, [platform]);
+
+    /// <summary>
+    /// The releases published for any of <paramref name="platforms"/>, one per version,
+    /// taking the first key that yields a usable artifact.
+    ///
+    /// Per version rather than per manifest, because the keys a version publishes changed
+    /// mid-life: 1.22 added mac-arm64 and nothing before it has one. Choosing a key once
+    /// for the whole catalogue would either hide every older version or install an emulated
+    /// client for every newer one.
+    ///
+    /// "Yields a usable artifact" rather than "is present" so a malformed or unreachable
+    /// preferred entry falls through to the next key instead of losing the version.
+    /// </summary>
+    public static List<GameRelease> Parse(
+        Dictionary<string, Dictionary<string, JsonElement>>? raw, IReadOnlyList<string> platforms)
     {
         var releases = new List<GameRelease>();
         if (raw is null) return releases;
 
-        foreach (var (version, platforms) in raw)
+        foreach (var (version, published) in raw)
         {
-            if (!platforms.TryGetValue(platform, out var element)) continue;
-            if (element.ValueKind != JsonValueKind.Object) continue;
-
-            CatalogArtifact? artifact;
-            try
+            foreach (var platform in platforms)
             {
-                artifact = element.Deserialize<CatalogArtifact>(Json);
-            }
-            catch (JsonException)
-            {
-                // One malformed entry must not lose the whole catalog.
-                continue;
-            }
+                if (!published.TryGetValue(platform, out var element)) continue;
+                if (element.ValueKind != JsonValueKind.Object) continue;
 
-            if (artifact is null || string.IsNullOrWhiteSpace(artifact.FileName)) continue;
-            if (artifact.DownloadUrl is null) continue;
+                CatalogArtifact? artifact;
+                try
+                {
+                    artifact = element.Deserialize<CatalogArtifact>(Json);
+                }
+                catch (JsonException)
+                {
+                    // One malformed entry must not lose the whole catalog.
+                    continue;
+                }
 
-            releases.Add(new GameRelease(version, platform, artifact));
+                if (artifact is null || string.IsNullOrWhiteSpace(artifact.FileName)) continue;
+                if (artifact.DownloadUrl is null) continue;
+
+                releases.Add(new GameRelease(version, platform, artifact));
+                break;
+            }
         }
 
         // Newest first. Uses the shared comparer rather than a bespoke one: comparing by

@@ -245,7 +245,7 @@ public partial class GamesViewModel : ViewModelBase
                 Available.Add(new AvailableGameViewModel(r, _store.IsInstalled(r.Version)));
 
             CatalogLoaded = true;
-            _log($"catalog: {Available.Count} versions published for {GameCatalog.PlatformKey}");
+            _log($"catalog: {Available.Count} versions published for {GameCatalog.PlatformDescription}");
         }
         catch (Exception e)
         {

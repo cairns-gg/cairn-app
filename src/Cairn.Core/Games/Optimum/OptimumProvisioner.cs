@@ -425,9 +425,13 @@ public sealed class OptimumProvisioner
         if (Directory.Exists(output)) Directory.Delete(output, recursive: true);
         Directory.CreateDirectory(output);
 
+        // The machine's architecture, not this process's: the same question GameCatalog
+        // asks when it picks a client to download, and it has to be answered the same way.
+        // Cairn's own x64 build under Rosetta would otherwise build an x64 client beside
+        // the arm64 stock install, needing a second .NET nothing else on the machine wants.
         var (name, packagerArgs) = PackagerFor(
             source, output, vanilla,
-            arm64: RuntimeInformation.ProcessArchitecture == Architecture.Arm64);
+            arm64: ExecutableImage.NativeArchitecture == ExecutableArch.Arm64);
 
         var (host, args) = ProcessRunner.ScriptHost(Path.Combine(WorkingTree, "scripts", name));
         args.AddRange(packagerArgs);
