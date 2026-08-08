@@ -27,11 +27,11 @@ public sealed class CatalogArtifact
 public sealed record GameRelease(string Version, string Platform, CatalogArtifact Artifact)
 {
     /// <summary>
-    /// macOS and Linux publish a client tarball, which is unpacked into a versioned
-    /// directory. Windows does not — see <see cref="IsWindowsInstaller"/>.
+    /// Something Cairn can unpack into a versioned directory: a tarball everywhere for the
+    /// client, and on Windows a zip for the server. Only the Windows *client* is not one —
+    /// see <see cref="IsWindowsInstaller"/>.
     /// </summary>
-    public bool IsArchive =>
-        Artifact.FileName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase);
+    public bool IsArchive => ArchiveExtractor.IsSupported(Artifact.FileName);
 
     /// <summary>
     /// Windows publishes the client only as an installer executable. It is an Inno Setup
@@ -93,6 +93,28 @@ public sealed class GameCatalog(HttpClient http)
 
     /// <summary>This machine's platform, for a message about a version that has none.</summary>
     public static string PlatformDescription => string.Join(" or ", PlatformKeys);
+
+    /// <summary>
+    /// Manifest keys for a dedicated server on this machine, best first.
+    ///
+    /// A server is published for Linux and Windows and nowhere else — mac-arm64 is the only
+    /// arm64 artifact in the whole manifest, and there has never been a mac server at all.
+    /// macOS gets the client keys back, because a client install ships VintagestoryServer
+    /// beside its own binary and is the only way to run a server there.
+    ///
+    /// The generic "server" key is the fallback rather than a curiosity: it is what every
+    /// version before 1.18.15 published instead of the two platform ones, and a tool that
+    /// filtered on "linuxserver" alone would report those versions as having no download.
+    /// </summary>
+    public static IReadOnlyList<string> ServerPlatformKeys
+    {
+        get
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return ["windowsserver", "server"];
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return PlatformKeys;
+            return ["linuxserver", "server"];
+        }
+    }
 
     public async Task<string?> GetLatestStableAsync(CancellationToken ct = default)
     {

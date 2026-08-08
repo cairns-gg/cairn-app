@@ -50,10 +50,16 @@ for rid in "${RIDS[@]}"; do
   echo "publishing $rid"
   publish src/Cairn.Cli/Cairn.Cli.csproj cairn-cli "$rid"
   publish src/Cairn.App/Cairn.App.csproj cairn "$rid"
+
+  # linux-x64 only, and not for want of portability: the code runs anywhere, but a
+  # dedicated server is published by the game for Linux and Windows alone, "unit" writes
+  # systemd files, and the machines people actually host on are Linux. Building a Windows
+  # binary nobody asked for is a second thing to test and explain for no one.
+  [ "$rid" = linux-x64 ] && publish src/Cairn.Server/Cairn.Server.csproj cairn-server "$rid"
 done
 
 echo
 echo "artifacts:"
 find "$OUT" -maxdepth 2 -type f \( -name 'cairn' -o -name 'cairn.exe' \
-  -o -name 'cairn-cli' -o -name 'cairn-cli.exe' \) \
+  -o -name 'cairn-cli' -o -name 'cairn-cli.exe' -o -name 'cairn-server' \) \
   -exec ls -lh {} \; | awk '{printf "  %-10s %s\n", $5, $NF}'

@@ -271,8 +271,9 @@ refuses such strings in a manifest rather than passing them through — write `"
 
 ```
 src/Cairn.Core/     engine: ModDB client, manifest/lock, sync, launch
-src/Cairn.Cli/      headless front-end (cairn)
-src/Cairn.App/      Avalonia GUI launcher
+src/Cairn.Cli/      headless front-end (cairn-cli), a development tool
+src/Cairn.App/      Avalonia GUI launcher (cairn)
+src/Cairn.Server/   dedicated-server front-end (cairn-server), linux-x64
 tests/               unit, conformance and headless-UI tests
 ```
 
@@ -524,6 +525,81 @@ machine. That is ruled out by construction rather than by care:
 The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
 another full decompile. It is a few gigabytes idle between pin bumps, hence
 `optimum clean`.
+
+## Running a server: cairn-server
+
+`cairn-server` is the headless end of Cairn — one binary to drop into a VM or an LXC, which
+follows a published pack and keeps a server on it:
+
+```
+cairn-server install https://cairns.gg/you/your-pack   follow it, install the server and its .NET
+cairn-server run [<id>]                                sync, then run in the foreground
+cairn-server update [<id>]                             take the author's newer revision
+cairn-server command [<id>] "/whitelist add dizzy"     talk to a running server
+cairn-server unit [<id>] [--user] [--write]            systemd unit for it
+cairn-server list                                      what is on this machine
+```
+
+It is a **separate program from `cairn-cli`**, which is a development tool with two dozen
+commands and is deliberately not shipped. Both are thin: what a sync installs, which install
+can host, which .NET that needs — those are Core's, and are the same rules the launcher
+applies. Released for **linux-x64 only**. The code runs anywhere, but a dedicated server is
+published for Linux and Windows alone, `unit` writes systemd files, and the machines people
+host on are Linux.
+
+**It needs nothing on the box.** Verified on a stock Ubuntu 24.04 with no .NET at all:
+`install` followed the pack, synced its mods, fetched the 51 MB dedicated server — not the
+600 MB client — and a private .NET 10 beside it.
+
+Four things are deliberate:
+
+- **`run` installs what the lock says; `update` is a separate command.** A server follows a
+  pack the way a player's copy does, but the consequence differs: a mod set that moves under
+  a live world is a world that may not load, and nobody is sitting at the console when it
+  happens. So a restart is not an update, and `update` says the running server keeps its
+  mods until it is restarted.
+- **Servers install under `~/.cairn/servers`**, not beside the client versions. A server and
+  a client of the same version are different things wearing the same version number, and a
+  machine can hold both — updating the client you play must not move the server a world is
+  live on. In the other direction, a dedicated server download reports its version exactly
+  as a client does, so `GameStore.Find` refuses one that has no client in it: a pack can
+  never be handed a server to launch.
+- **The console is a Unix socket**, owner-only, at `~/.cairn/run/<pack>.sock`. The server
+  reads commands from stdin — which is why the shipped `server.sh` wraps it in `screen` —
+  and a service started by systemd has no stdin worth the name, so `run` listens on the
+  socket and writes what arrives to the server's stdin. Connect failing *is* the "not
+  running" answer, so a command cannot block or vanish, and it doubles as the guard against
+  two servers sharing one world directory. stdout is never redirected: journald gets the
+  server's own output with nothing in the middle to lose a line.
+- **Stopping is graceful.** `systemctl stop` sends SIGTERM, which `cairn-server` turns into
+  the server's own `/stop` and waits — the unit sets `TimeoutStopSec=300`, because systemd's
+  default is to give up after 90 seconds and `SIGKILL`, and a world being saved when that
+  lands is a world rolled back. Measured on a real stop: 3.5 seconds, world saved.
+  `Restart=on-failure` rather than `always`, so a server told to stop from inside the game
+  stays stopped.
+
+### Where a service runs, and the linger trap
+
+`unit` writes a **template** — `cairn-server@.service` — so a box hosting three worlds has
+three instances of one file rather than three files that drift. It never runs `systemctl`
+itself: reloading a machine's systemd and enabling a service that starts at boot are the
+administrator's decisions, so the commands are printed instead. A **system** unit runs as a
+`cairn` user with `CAIRN_HOME=/var/lib/cairn`; Cairn does not create that account, because
+one it made would outlive any uninstall it was part of, so the `useradd` line is printed
+too. A **user** unit (`--user`) needs no root at all.
+
+If you use a user unit, **enable linger**:
+
+```
+sudo loginctl enable-linger $USER
+```
+
+Without it, the systemd *user manager* is torn down when your last session ends and rebuilt
+at the next login — so the server stops when you log out, starts again when you log in, and
+in between shows up as a service that keeps reappearing with a new PID and re-loading its
+mods. That reads exactly like a crash loop, and `NRestarts=0` is the tell: it is the manager
+restarting, not the service. It is the first thing to check when a `--user` service will not
+stay up.
 
 ## Requirements
 
@@ -779,6 +855,12 @@ git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0
 | macOS (Intel) | `cairn-<v>-macos-x64.zip` | `macos-latest` |
 | Windows | `cairn-<v>-windows-x64.zip` | `ubuntu-latest`, cross-published |
 | Linux | `cairn-<v>-linux-x64.tar.gz` | `ubuntu-latest`, cross-published |
+| Linux (server) | `cairn-<v>-linux-x64-server.tar.gz` | `ubuntu-latest`, cross-published |
+
+The server is a separate artifact rather than a second file in the Linux tarball: somebody
+putting a server in a container wants that binary and not a desktop launcher, and the
+reverse is just as true. It is the only artifact `cairn-server` ships in — see
+[running a server](#running-a-server-cairn-server) for why Linux alone.
 
 Only macOS needs its own runner, because the `.app` bundle needs `codesign` and `plutil`;
 the others are single-file binaries with no platform tooling behind them. The tag becomes

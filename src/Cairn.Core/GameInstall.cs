@@ -97,6 +97,58 @@ public sealed class GameInstall
     private static string ExecutableName =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Vintagestory.exe" : "Vintagestory";
 
+    /// <summary>
+    /// The server binary, which a client install ships alongside its own and a server
+    /// download consists of.
+    /// </summary>
+    private static string ServerExecutableName =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? "VintagestoryServer.exe"
+            : "VintagestoryServer";
+
+    /// <summary>Whether this install can be run as a server. Nearly all of them can.</summary>
+    public bool HasServer => File.Exists(Path.Combine(Directory, ServerExecutableName));
+
+    /// <summary>
+    /// Whether there is a client here to play.
+    ///
+    /// False for a dedicated server download, which ships no client binary at all. Worth
+    /// asking rather than assuming: a server-only install answers "is 1.22.6 installed?"
+    /// exactly as a client does, and handing one to a pack would start a server while every
+    /// message said the game was launching — the same substitution the variant marker
+    /// exists to make impossible, arrived at from the other direction.
+    /// </summary>
+    public bool HasClient => File.Exists(Path.Combine(Directory, ExecutableName))
+                             || IsVariant && File.Exists(Executable);
+
+    /// <summary>
+    /// The same install, pointing at its server binary — or null when it ships none.
+    ///
+    /// A projection rather than a flag, because everything that decides whether something
+    /// can start reads the executable: its architecture, and the runtimeconfig beside it
+    /// naming the .NET it needs. A server download has no client binary at all, and even in
+    /// a client install the two are separate apphosts that could in principle disagree —
+    /// so "which .NET does this need" has to be asked of the one that will actually run,
+    /// exactly as it does between a stock client and a build made for this machine.
+    /// </summary>
+    public GameInstall? AsServer()
+    {
+        var exe = Path.Combine(Directory, ServerExecutableName);
+        if (!File.Exists(exe)) return null;
+
+        return new GameInstall
+        {
+            Directory = Directory,
+            Executable = exe,
+            Version = Version,
+            Architecture = ExecutableImage.ReadArchitecture(exe),
+            RequiredFramework = ReadRequiredFramework(Directory, ServerExecutableName)
+                                ?? RequiredFramework,
+            Variant = Variant,
+            DotnetRoot = DotnetRoot,
+        };
+    }
+
     /// <summary>Candidate install directories, best guess first. VINTAGE_STORY always wins.</summary>
     public static IEnumerable<string> CandidateDirectories()
     {
@@ -189,7 +241,17 @@ public sealed class GameInstall
             ? Path.Combine(dir, ExecutableName)
             : Path.Combine(dir, SafeExecutableName(declaredExe) ?? ExecutableName);
 
-        if (!File.Exists(exe)) return null;
+        // A server download is the client minus the client: same assets, same Lib, no
+        // Vintagestory binary at all. Refusing it here is refusing to see the install, so
+        // nothing downstream — the store, the library, provisioning — knows it exists.
+        // A declared executable is never fallen back from, for the reason given above.
+        if (!File.Exists(exe))
+        {
+            if (declaredExe is not null) return null;
+
+            exe = Path.Combine(dir, ServerExecutableName);
+            if (!File.Exists(exe)) return null;
+        }
 
         return new GameInstall
         {
@@ -197,16 +259,36 @@ public sealed class GameInstall
             Executable = exe,
             Version = ReadVersion(api),
             Architecture = ExecutableImage.ReadArchitecture(exe),
-            RequiredFramework = ReadRequiredFramework(dir) ?? FallbackFramework,
+            RequiredFramework = ReadRequiredFramework(dir, Path.GetFileName(exe)) ?? FallbackFramework,
             Variant = variant,
             DotnetRoot = FlatpakGame.BundledRuntime(dir),
         };
     }
 
-    /// <summary>Parses runtimeOptions.framework.version out of the game's runtimeconfig.</summary>
-    private static Version? ReadRequiredFramework(string dir)
+    /// <summary>
+    /// Parses runtimeOptions.framework.version out of the runtimeconfig belonging to the
+    /// binary that will run.
+    ///
+    /// Named after the executable rather than always "Vintagestory", because the two are
+    /// separate apphosts with separate configs: a server download has only
+    /// VintagestoryServer's, and reading a file that is not there falls back to a guess
+    /// that happens to be right for 1.22 and is wrong for 1.21, which wants .NET 8. The
+    /// guess is not visible when it is wrong — it resolves, downloads and installs the
+    /// wrong runtime, then fails to start on it.
+    ///
+    /// The game's own config is still the fallback, for a variant whose launcher is the
+    /// stock apphost under another name and so brings no config of its own.
+    /// </summary>
+    private static Version? ReadRequiredFramework(string dir, string? executableName = null)
     {
-        var path = Path.Combine(dir, "Vintagestory.runtimeconfig.json");
+        var named = executableName is null
+            ? null
+            : Path.Combine(dir, Path.GetFileNameWithoutExtension(executableName) + ".runtimeconfig.json");
+
+        var path = named is not null && File.Exists(named)
+            ? named
+            : Path.Combine(dir, "Vintagestory.runtimeconfig.json");
+
         if (!File.Exists(path)) return null;
 
         try

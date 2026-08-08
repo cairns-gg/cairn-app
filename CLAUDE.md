@@ -86,13 +86,17 @@ already cached.
 
 ## Architecture
 
-Three projects, one engine:
+Four projects, one engine:
 
 - **`src/Cairn.Core`** — everything. Deliberately references **nothing**, not even the game's
   assemblies, so it builds in a clean CI container with no Vintage Story install.
 - **`src/Cairn.Cli`** (`cairn-cli`) — headless front-end; a `switch` over `args[0]` in `Program.cs`.
+  A development tool, deliberately not shipped in releases.
 - **`src/Cairn.App`** (`cairn`) — Avalonia 12 GUI, CommunityToolkit.Mvvm, `ViewLocator`
   mapping `*ViewModel` → `*View` by name.
+- **`src/Cairn.Server`** (`cairn-server`) — follows a pack and runs a dedicated server under
+  systemd. Shipped for **linux-x64 only**. Server installs live under `~/.cairn/servers`,
+  apart from the client versions in `~/.cairn/games`.
 
 **Rules live in Core, not in a front-end.** Both UIs mutate packs only through `PackStore`,
 and every policy question — may this be published (`PublishRecord.WouldChange`,

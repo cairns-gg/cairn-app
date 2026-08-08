@@ -19,6 +19,30 @@ public static class CairnPaths
     /// <summary>Game versions Cairn installed itself, one directory per version.</summary>
     public static string GamesRoot => Path.Combine(Root, "games");
 
+    /// <summary>
+    /// Dedicated servers Cairn installed, one directory per version.
+    ///
+    /// Kept apart from <see cref="GamesRoot"/> rather than sharing it, though the store
+    /// underneath is the same one. A server download and a client of the same version are
+    /// different things wearing the same version number, and a machine can hold both: the
+    /// one somebody plays on, and the one a world is running out of. Sharing a directory
+    /// would mean updating the client you play moves the server a world is live on, and a
+    /// version installed for one purpose being deleted for the other.
+    /// </summary>
+    public static string ServersRoot => Path.Combine(Root, "servers");
+
+    /// <summary>
+    /// The socket a running server listens on for console commands, one per pack.
+    ///
+    /// Under CAIRN_HOME rather than /run, so that the same path is reached whether the
+    /// server runs from a system unit, a user unit or a terminal — three answers for where
+    /// a socket lives is three ways for "send this command" to find nothing. Short on
+    /// purpose: a Unix socket path is limited to about 100 characters, and a pack id is
+    /// already the only variable part.
+    /// </summary>
+    public static string ConsoleSocket(string packId) =>
+        Path.Combine(Root, "run", packId + ".sock");
+
     /// <summary>.NET runtimes Cairn downloaded, so the game needs no system-wide install.</summary>
     public static string RuntimesRoot => Path.Combine(Root, "runtimes");
 

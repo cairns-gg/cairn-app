@@ -265,6 +265,17 @@ jobs:
           tar -czf "dist/cairn-$version-linux-x64.tar.gz" \
             -C artifacts/linux-x64 cairn
 
+          # cairn-server ships, and separately, for the same reason cairn-cli does not: it
+          # is documented, it is one program with one purpose, and somebody putting a
+          # server in a container wants that file and not a desktop launcher. Named so the
+          # manifest below reads a platform of "linux-x64-server" out of it.
+          #
+          # Linux only. The game publishes a dedicated server for Linux and Windows, and
+          # "unit" writes systemd files — the machines people host on are Linux, and a
+          # Windows binary nobody asked for is a second thing to test and explain.
+          tar -czf "dist/cairn-$version-linux-x64-server.tar.gz" \
+            -C artifacts/linux-x64 cairn-server
+
           (cd artifacts/win-x64 && zip -q "../../dist/cairn-$version-windows-x64.zip" \
             cairn.exe)
 

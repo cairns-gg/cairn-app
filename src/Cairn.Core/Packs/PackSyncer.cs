@@ -34,13 +34,21 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// point: syncing installs what the lockfile already says, so launching cannot change
     /// the mods underneath a save. Updating is something you ask for.
     /// </param>
+    /// <param name="side">
+    /// Which side this copy is being installed for. Changes what gets warned about and
+    /// nothing else: every mod the lock names is installed either way, because the lock is
+    /// the promise that a pack reproduces exactly, and a copy that quietly held fewer mods
+    /// than it says would make that promise false on the machine most likely to be
+    /// compared against.
+    /// </param>
     public async Task<SyncReport> SyncAsync(
         PackManifest manifest,
         string modsDir,
         string lockPath,
         IProgress<SyncStep>? progress = null,
         CancellationToken ct = default,
-        IReadOnlySet<string>? allowUpdates = null)
+        IReadOnlySet<string>? allowUpdates = null,
+        ModSide side = ModSide.Client)
     {
         // Only the pack-level problems stop everything. A missing id or an unusable game
         // version means nothing can be installed at all; one bad mod entry means one mod
@@ -221,9 +229,10 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     $"{release.ModVersion} is not marked for {manifest.GameVersion} exactly, "
                     + "only for another release in that minor series"));
 
-            if (string.Equals(release.Side, "server", StringComparison.OrdinalIgnoreCase))
+            if (ModSides.WrongSide(release.Side, side))
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    "ModDB marks this as server-side; installing it client-side may do nothing"));
+                    $"ModDB marks this as {release.Side}-side; installing it "
+                    + $"{ModSides.Describe(side)} may do nothing"));
 
             // Reduced to a bare filename before it touches the filesystem: this can come
             // from an imported lock, and Path.Combine with "../../evil.zip" would happily

@@ -71,6 +71,39 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
     }
 
     /// <summary>
+    /// Ensures a server for <paramref name="gameVersion"/> can start, downloading whatever
+    /// is missing, and returns it pointed at its server binary.
+    ///
+    /// The dedicated download where one exists — 51 MB against the client's 600, on a box
+    /// that will never draw a frame — but a client install already present is used as it
+    /// stands, because every client ships VintagestoryServer beside its own binary.
+    /// Fetching a second copy of a server that is already on the disk is the mistake the
+    /// Flatpak work existed to stop making.
+    /// </summary>
+    public async Task<GameInstall> EnsureServerAsync(
+        string gameVersion,
+        IProgress<ProvisionStep>? progress = null,
+        CancellationToken ct = default)
+    {
+        var server = games.FindServer(gameVersion);
+
+        if (server is null)
+        {
+            await FetchAsync(gameVersion, GameCatalog.ServerPlatformKeys, progress, ct)
+                .ConfigureAwait(false);
+
+            server = games.FindServer(gameVersion)
+                     ?? throw new GameInstallException(
+                         $"Installed Vintage Story {gameVersion} but it has no server in it.");
+        }
+
+        await EnsureRuntimeAsync(server, progress, ct).ConfigureAwait(false);
+
+        progress?.Report(new ProvisionStep("ready", $"Vintage Story {server.Version} server", 1));
+        return server;
+    }
+
+    /// <summary>
     /// Ensures <paramref name="gameVersion"/> can launch, downloading whatever is missing.
     /// </summary>
     public async Task<GameInstall> EnsureAsync(
@@ -82,38 +115,48 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
         var install = games.Find(gameVersion)
                       ?? (systemInstall?.Version == gameVersion ? systemInstall : null);
 
-        if (install is null)
-        {
-            progress?.Report(new ProvisionStep("resolving", $"looking up Vintage Story {gameVersion}"));
-
-            var catalog = new GameCatalog(http);
-            var releases = await catalog.ListReleasesAsync(includePreReleases: true, ct: ct)
-                .ConfigureAwait(false);
-
-            var release = releases.FirstOrDefault(r => r.Version == gameVersion)
-                          ?? throw new GameInstallException(
-                              $"No {GameCatalog.PlatformDescription} download is published for {gameVersion}.");
-
-            if (!release.CanInstall)
-                throw new GameInstallException(
-                    $"{gameVersion} ships as {release.Artifact.FileName} on this platform, which "
-                    + "Cairn cannot install. Install it manually, then Cairn will detect it.");
-
-            var installer = new GameInstaller(http, games);
-            var relay = new Progress<InstallProgress>(p => progress?.Report(
-                new ProvisionStep(p.Phase.ToString().ToLowerInvariant(),
-                    p.Phase == InstallPhase.Downloading
-                        ? $"Vintage Story {gameVersion} — {p.Done / 1024 / 1024} MB"
-                        : p.Detail,
-                    p.Fraction)));
-
-            install = await installer.InstallAsync(release, relay, ct).ConfigureAwait(false);
-        }
+        install ??= await FetchAsync(gameVersion, GameCatalog.PlatformKeys, progress, ct)
+            .ConfigureAwait(false);
 
         await EnsureRuntimeAsync(install, progress, ct).ConfigureAwait(false);
 
         progress?.Report(new ProvisionStep("ready", $"Vintage Story {install.Version}", 1));
         return install;
+    }
+
+    /// <summary>Downloads and unpacks one version's artifact for the given platform keys.</summary>
+    private async Task<GameInstall> FetchAsync(
+        string gameVersion,
+        IReadOnlyList<string> platformKeys,
+        IProgress<ProvisionStep>? progress,
+        CancellationToken ct)
+    {
+        progress?.Report(new ProvisionStep("resolving", $"looking up Vintage Story {gameVersion}"));
+
+        var catalog = new GameCatalog(http);
+        var releases = await catalog
+            .ListReleasesAsync(includePreReleases: true, platformKeys: platformKeys, ct: ct)
+            .ConfigureAwait(false);
+
+        var release = releases.FirstOrDefault(r => r.Version == gameVersion)
+                      ?? throw new GameInstallException(
+                          $"No {string.Join(" or ", platformKeys)} download is published "
+                          + $"for {gameVersion}.");
+
+        if (!release.CanInstall)
+            throw new GameInstallException(
+                $"{gameVersion} ships as {release.Artifact.FileName} on this platform, which "
+                + "Cairn cannot install. Install it manually, then Cairn will detect it.");
+
+        var installer = new GameInstaller(http, games);
+        var relay = new Progress<InstallProgress>(p => progress?.Report(
+            new ProvisionStep(p.Phase.ToString().ToLowerInvariant(),
+                p.Phase == InstallPhase.Downloading
+                    ? $"Vintage Story {gameVersion} — {p.Done / 1024 / 1024} MB"
+                    : p.Detail,
+                p.Fraction)));
+
+        return await installer.InstallAsync(release, relay, ct).ConfigureAwait(false);
     }
 
     /// <summary>

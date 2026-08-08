@@ -150,14 +150,22 @@ public sealed class GameStore
         return GameInstall.TryAt(dir) is { } install ? Named(install, dir) : null;
     }
 
-    /// <summary>A managed install whose reported version matches, or null.</summary>
+    /// <summary>
+    /// A managed install a pack can launch: that version, stock, with a client in it.
+    ///
+    /// The client check is the same rule as the variant one and exists for the same reason.
+    /// A dedicated server download reports the version it is of exactly as a client does,
+    /// so without this a machine that has one would hand it to every pack asking for that
+    /// version — starting a server while every message said the game was launching. Use
+    /// <see cref="FindServer"/> to ask the other question.
+    /// </summary>
     public GameInstall? Find(string version)
     {
         if (!IsValidVersion(version)) return null;
 
         var dir = InstallDir(version);
         var install = GameInstall.TryAt(dir);
-        if (install is not null && !install.IsVariant) return install;
+        if (install is not null && !install.IsVariant && install.HasClient) return install;
 
         // The directory name is what we asked for, but trust the assembly metadata: fall
         // back to scanning in case a version was installed under a differing folder name.
@@ -168,10 +176,36 @@ public sealed class GameStore
         // would then be handed to every 1.22.5 pack on the machine, silently, the moment
         // the plain install was missing from its expected folder. Running something other
         // than the game is a choice, never a fallback.
-        return ListInstalled().FirstOrDefault(i => i.Version == version && !i.IsVariant);
+        return ListInstalled().FirstOrDefault(
+            i => i.Version == version && !i.IsVariant && i.HasClient);
     }
 
     public bool IsInstalled(string version) => Find(version) is not null;
+
+    /// <summary>
+    /// A managed install that can run a server for this version, pointed at its server
+    /// binary — or null when there is none.
+    ///
+    /// Takes either shape, because both are ordinary on the machines that host a server: a
+    /// dedicated server download is 51 MB against the client's 600 and is all a headless
+    /// box needs, while a machine somebody also plays on already has a client, and every
+    /// client ships VintagestoryServer beside its own binary. Downloading a second copy of
+    /// a server that is already there would be the Flatpak mistake again.
+    ///
+    /// Variants are skipped on the same rule as everywhere else: a modified client is
+    /// something to be chosen, never something arrived at.
+    /// </summary>
+    public GameInstall? FindServer(string version)
+    {
+        if (!IsValidVersion(version)) return null;
+
+        var here = GameInstall.TryAt(InstallDir(version));
+        if (here is { IsVariant: false, HasServer: true }) return here.AsServer();
+
+        return ListInstalled()
+            .FirstOrDefault(i => i.Version == version && !i.IsVariant && i.HasServer)
+            ?.AsServer();
+    }
 
     /// <summary>
     /// Renames installs made before they were bundles, returning what moved.

@@ -286,14 +286,63 @@ public class GameStoreTests : IDisposable
     };
 
     /// <summary>An install real enough for GameInstall.TryAt, in a directory of its own.</summary>
-    private static string Materialise(string dir)
+    private static string Materialise(string dir, bool client = true, bool server = false)
     {
         Directory.CreateDirectory(dir);
-        File.WriteAllBytes(
-            Path.Combine(dir, OperatingSystem.IsWindows() ? "Vintagestory.exe" : "Vintagestory"),
-            new byte[64]);
         File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
+
+        if (client)
+            File.WriteAllBytes(
+                Path.Combine(dir, OperatingSystem.IsWindows() ? "Vintagestory.exe" : "Vintagestory"),
+                new byte[64]);
+
+        if (server)
+            File.WriteAllBytes(
+                Path.Combine(dir, OperatingSystem.IsWindows()
+                    ? "VintagestoryServer.exe" : "VintagestoryServer"),
+                new byte[64]);
+
         return dir;
+    }
+
+    [Fact]
+    public void A_server_download_is_never_handed_to_a_pack_as_the_game()
+    {
+        // It reports the version it is of exactly as a client does. Without the check, a
+        // box that has one would start a server for every pack asking for that version
+        // while every message said the game was launching.
+        Materialise(_store.InstallDir("1.22.5"), client: false, server: true);
+
+        Assert.Null(_store.Find("1.22.5"));
+        Assert.False(_store.IsInstalled("1.22.5"));
+
+        var server = _store.FindServer("1.22.5");
+        Assert.NotNull(server);
+        Assert.EndsWith("VintagestoryServer", Path.GetFileNameWithoutExtension(server!.Executable));
+    }
+
+    [Fact]
+    public void A_client_install_is_the_server_too_rather_than_a_second_download()
+    {
+        // Every client ships VintagestoryServer beside its own binary, so a machine
+        // somebody also plays on needs nothing further to host from.
+        Materialise(_store.InstallDir("1.22.5"), client: true, server: true);
+
+        Assert.NotNull(_store.Find("1.22.5"));
+
+        var server = _store.FindServer("1.22.5");
+        Assert.NotNull(server);
+        Assert.EndsWith("VintagestoryServer", Path.GetFileNameWithoutExtension(server!.Executable));
+        Assert.Equal(_store.Find("1.22.5")!.Directory, server.Directory);
+    }
+
+    [Fact]
+    public void A_client_with_no_server_in_it_cannot_host()
+    {
+        Materialise(_store.InstallDir("1.22.5"));
+
+        Assert.NotNull(_store.Find("1.22.5"));
+        Assert.Null(_store.FindServer("1.22.5"));
     }
 
     [Fact]
