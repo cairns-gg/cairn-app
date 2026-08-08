@@ -450,9 +450,14 @@ jobs:
           | macOS (Intel) | `cairn-*-macos-x64.zip` |
           | Windows | `cairn-*-windows-x64.zip` |
           | Linux | `cairn-*-linux-x64.tar.gz` |
+          | Linux, dedicated server | `cairn-*-linux-x64-server.tar.gz` |
 
-          Each contains the launcher and nothing else — Cairn fetches the game and the
+          The first four are the launcher and nothing else — Cairn fetches the game and the
           .NET runtime itself.
+
+          The last one is **not** the launcher: it is `cairn-server`, which follows a
+          published pack and runs a dedicated server under systemd, for a machine with no
+          screen attached. Take it only if that is what you came for.
           NOTES
 
           # Unconditional, because nothing here signs the Windows build: win-x64 is
