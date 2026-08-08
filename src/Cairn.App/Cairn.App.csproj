@@ -1,4 +1,31 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Trimming, and the switch that makes it survivable.
+
+    Halves the download: the Windows zip goes from 44.6 MB to 18.5 MB, which is the whole
+    reason. TrimMode=partial rather than full because only assemblies marked IsTrimmable are
+    trimmed then — Avalonia and the BCL are, Cairn.Core and Cairn.App are not, so every type
+    reflection reaches for at runtime is still there. Full trimming removes them and the
+    failures land in somebody's packs rather than in a build log.
+
+    JsonSerializerIsReflectionEnabledByDefault is not optional and not a tuning knob.
+    PublishTrimmed sets it to false on its own, which is a feature switch rather than a
+    trimming decision — so with it left alone, System.Text.Json refuses to work at all:
+    "Reflection-based serialization has been disabled for this application", on the first
+    manifest, catalogue response or settings file the program touches. Cairn's entire data
+    layer is reflective JSON, so that is every command. Measured, not guessed: a trimmed
+    build without this failed `games list`, `search` and `import` immediately.
+
+    Verified on Windows (launch, packs, sync, Play, icons, UI scale across a restart,
+    cairn:// import, pinning, the update cache) and on Linux (catalogue, ModDB search,
+    import, a real sync whose lock re-read clean).
+  -->
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>

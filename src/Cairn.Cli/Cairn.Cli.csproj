@@ -4,6 +4,18 @@
     <AssemblyName>cairn-cli</AssemblyName>
     <RootNamespace>Cairn.Cli</RootNamespace>
   </PropertyGroup>
+  <!--
+    See Cairn.App.csproj for why these three travel together. In short: partial trimming
+    keeps Cairn.Core whole, so the types reflective JSON needs survive — and PublishTrimmed
+    disables reflection-based System.Text.Json unless told otherwise, which would fail every
+    command that reads a manifest, a lockfile or a catalogue response.
+  -->
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Cairn.Core/Cairn.Core.csproj" />
   </ItemGroup>
