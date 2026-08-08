@@ -2494,7 +2494,7 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void A_mod_with_no_usable_release_is_shown_but_cannot_be_added()
+    public void A_mod_with_no_usable_release_is_offered_as_a_decision_rather_than_refused()
     {
         var (_, vm) = Show();
         vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
@@ -2504,13 +2504,22 @@ public class MainWindowTests : IDisposable
 
         // Listed rather than hidden — "why can I not find X" is worse than seeing why.
         Assert.True(stale.Incompatible);
-        Assert.False(stale.CanAdd);
         Assert.Equal("no 1.22.x release", stale.NoReleaseNote);
 
-        Assert.False(stale.AddCommand.CanExecute(null));
+        // Addable, which it was not before: a mod nobody has rebuilt often still runs, and
+        // the person who has tried it is the only one who can say so. What used to be a
+        // refusal is now a question — the button says one is coming rather than the click
+        // being the decision.
+        Assert.True(stale.CanAdd);
+        Assert.True(stale.AddCommand.CanExecute(null));
+        Assert.True(stale.NeedsAcceptance);
+        Assert.Equal("Add anyway…", stale.AddLabel);
 
-        // ...and one that is usable still can be.
-        Assert.True(FullHit("olla", "Olla", 34157, "olla").AddCommand.CanExecute(null));
+        // ...and one that is usable is added without being asked anything.
+        var usable = FullHit("olla", "Olla", 34157, "olla");
+        Assert.True(usable.AddCommand.CanExecute(null));
+        Assert.False(usable.NeedsAcceptance);
+        Assert.Equal("Add", usable.AddLabel);
     }
 
     [AvaloniaFact]

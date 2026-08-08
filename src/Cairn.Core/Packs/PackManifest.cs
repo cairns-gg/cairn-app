@@ -8,6 +8,50 @@ public sealed class PackMod
 {
     [JsonPropertyName("modid")] public string ModId { get; set; } = "";
     [JsonPropertyName("version")] public string? Version { get; set; }
+
+    /// <summary>
+    /// The game version this pack targeted when somebody accepted that this mod publishes
+    /// nothing marked for it. Null for the ordinary mod, which needs no such thing.
+    ///
+    /// A mod that has not caught up with the game is otherwise unaddable: the resolve
+    /// refuses it and the sync reports "no release marked for game 1.22.6", which is true
+    /// and unhelpful to somebody who has run it and knows it works. This is where that
+    /// person's testimony lives — in the manifest rather than in local state, because it is
+    /// part of what the pack is, and a pack that syncs only on the machine it was made on
+    /// is not a pack you can share.
+    ///
+    /// It records the version rather than a bare "yes" so it can stop applying. Retarget
+    /// the pack from 1.22 to 1.23 and nobody has tested anything: the acceptance describes
+    /// a combination that no longer exists, and inheriting it would quietly install an
+    /// untested mod for a game nobody ran it against. Same rule as a chosen install, which
+    /// stops applying when the pack's version moves away from it and comes back when it
+    /// moves back.
+    /// </summary>
+    [JsonPropertyName("acceptedFor")] public string? AcceptedFor { get; set; }
+
+    /// <summary>
+    /// Whether the acceptance still describes the pack in front of us.
+    ///
+    /// Same major.minor, not the same version: 1.22.6 to 1.22.7 is a patch the game itself
+    /// treats as interchangeable for mods — <see cref="ModDb.MatchQuality.SameMinor"/> is
+    /// built on exactly that — so re-asking on every patch bump would train people to say
+    /// yes without reading. A minor bump is where the question becomes real again.
+    /// </summary>
+    public bool AcceptsUnmarkedFor(string gameVersion)
+    {
+        if (string.IsNullOrWhiteSpace(AcceptedFor) || string.IsNullOrWhiteSpace(gameVersion))
+            return false;
+
+        try
+        {
+            return GameVersions.IsSameMajorMinor(AcceptedFor, gameVersion);
+        }
+        catch (ArgumentException)
+        {
+            // A hand-edited manifest with something unparseable in it. Not an acceptance.
+            return false;
+        }
+    }
 }
 
 /// <summary>
@@ -154,6 +198,18 @@ public sealed class LockedMod
     /// would just be noise in a file people read.
     /// </summary>
     [JsonPropertyName("requiredBy")] public List<string>? RequiredBy { get; set; }
+
+    /// <summary>
+    /// The game versions ModDB marks this release for, recorded only when they do not
+    /// include the one the pack targets. Null for every ordinary mod.
+    ///
+    /// The lock is "exactly what was installed", and an unmarked release is the case where
+    /// that phrase carries the most weight: it is there because somebody accepted it, and a
+    /// lock that forgot would make the next sync — which installs from the lock without
+    /// resolving anything — report it as a clean, matched mod. It also reads plainly in a
+    /// file people open: "markedFor": ["1.21.4"] beside a pack targeting 1.22.
+    /// </summary>
+    [JsonPropertyName("markedFor")] public List<string>? MarkedFor { get; set; }
 }
 
 /// <summary>

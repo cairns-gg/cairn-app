@@ -252,6 +252,46 @@ by using one instead of the other — including on import, where a hostile `id` 
 restricted to letters, digits, `-` and `_` — an id like `../../etc` is refused rather
 than escaping the store.
 
+### A mod that has not caught up, added on purpose
+
+Small mods stop being updated while the game moves on, and a lot of them still run. ModDB
+says nothing about that, so a resolve refuses them and the sync reports *"no release marked
+for game 1.22.6"* — true, and no use to somebody who has installed it by hand and played
+with it for a week.
+
+That person can say so, once, per mod:
+
+```
+cairn-cli add mypack oreveintracers --accept-unmarked
+```
+
+or **Add anyway…** in the launcher, which asks first and states what is unknown. What gets
+written is not a "yes" but the version it was a yes *about*:
+
+```json
+{ "modid": "oreveintracers", "version": "1.2.0", "acceptedFor": "1.22.6" }
+```
+
+Four things follow from that shape:
+
+- **It lives in the manifest**, so it travels with the pack. An acceptance in local state
+  would make a pack that syncs only on the machine it was made on, which is not a pack you
+  can share.
+- **It stops applying when the pack moves.** Retarget from 1.22 to 1.23 and nobody has
+  tested anything, so the mod fails again — and says why: *"no release marked for game
+  1.23.0; it was accepted for game 1.22.6, and this pack has moved to a different release
+  series since"*. Patch bumps within a series do not re-ask, because the game treats those
+  as interchangeable and a question asked on every patch is a question nobody reads.
+- **Sync says so every time**, not once when it was added: *"1.2.0 is marked for 1.20.12,
+  not 1.22.6 — installed because the pack accepts it, and it may misbehave"*. The versions
+  are named, because how far behind a mod is decides whether you believe it.
+- **The lock records it too** — `"markedFor": ["1.20.12"]` beside the entry. Without that,
+  the next sync installs from the lock without resolving anything and would report an
+  untested mod as a clean, matched one.
+
+It applies only to mods a manifest names. A dependency discovered inside a zip is nobody's
+testimony, so it fails as it always did.
+
 ## Version strings: write bare versions
 
 The game parses versions with `int.TryParse` per segment, so anything unparseable

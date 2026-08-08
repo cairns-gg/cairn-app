@@ -98,7 +98,7 @@ internal static class Program
               cairn-cli diagnostics [<id>]            print what a bug report needs
               cairn-cli list                          list packs
               cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]
-              cairn-cli add <id> <modid> [version]    add a mod to a pack
+              cairn-cli add <id> <modid> [version] [--accept-unmarked]  add a mod to a pack
               cairn-cli remove <id> <modid>           remove a mod from a pack
               cairn-cli delete <id>                   delete a pack and its mods
               cairn-cli export <id> [-o file] [--no-lock]   write a shareable pack file
@@ -254,20 +254,44 @@ internal static class Program
 
     private static int Add(PackStore store, string[] args)
     {
-        if (args.Length < 3) return Fail("usage: cairn-cli add <id> <modid> [version]");
+        if (args.Length < 3)
+            return Fail("usage: cairn-cli add <id> <modid> [version] [--accept-unmarked]");
 
         var id = args[1];
         var manifest = store.Load(id);
         var modId = args[2];
-        var version = args.Length > 3 ? args[3] : null;
+        var version = args.Length > 3 && !args[3].StartsWith('-') ? args[3] : null;
 
         if (manifest.Mods.Any(m => string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase)))
             return Fail($"'{modId}' is already in pack '{id}'");
 
-        manifest.Mods.Add(new PackMod { ModId = modId, Version = version });
+        // A flag rather than a prompt, because this is the acceptance: it says the person
+        // running it has tried the mod on this game version and will live with the result.
+        // Recorded against the version the pack targets now, so retargeting a minor asks
+        // the question again instead of inheriting a promise nobody made about it.
+        var accepted = args.Contains("--accept-unmarked");
+
+        manifest.Mods.Add(new PackMod
+        {
+            ModId = modId,
+            Version = version,
+            AcceptedFor = accepted ? manifest.GameVersion : null,
+        });
 
         store.Save(manifest);
         Console.WriteLine($"added {modId}{(version is null ? "" : " " + version)} to '{id}'");
+
+        if (accepted)
+        {
+            Console.WriteLine($"  accepted for game {manifest.GameVersion} even if it is marked "
+                              + "for no such version — it may misbehave, and sync will keep "
+                              + "saying so");
+
+            if (version is null)
+                Console.WriteLine("  consider naming the version you tested: an unpinned mod "
+                                  + "can move to another release nobody has tried");
+        }
+
         return 0;
     }
 

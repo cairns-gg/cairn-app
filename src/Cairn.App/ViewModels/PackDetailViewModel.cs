@@ -74,10 +74,21 @@ public partial class SearchHitViewModel(
     }
 
     /// <summary>
-    /// Addable only if ModDB gave it a string id — some entries have none — it has a
-    /// release that would actually install, and the pack does not already have it.
+    /// Addable only if ModDB gave it a string id — some entries have none — and the pack
+    /// does not already have it.
+    ///
+    /// A mod with no release for this version is addable too, which it did not used to be.
+    /// Refusing it was right while there was nothing to say about it, but a mod that has
+    /// simply not been rebuilt often still runs, and the person who has tried it is the
+    /// only one who can say so. What that costs is a question rather than a click: see
+    /// <see cref="NeedsAcceptance"/>.
     /// </summary>
-    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && Compatible && !AlreadyInPack;
+    public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && !AlreadyInPack;
+
+    /// <summary>Adding this one is a decision, so the button says so and asks first.</summary>
+    public bool NeedsAcceptance => Incompatible;
+
+    public string AddLabel => NeedsAcceptance ? "Add anyway…" : "Add";
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void Add() => add?.Invoke(this);
@@ -1604,7 +1615,7 @@ public partial class PackDetailViewModel : ViewModelBase
     // "Add selected" meant picking a row, moving to a button, and hoping it still meant
     // what you thought.
 
-    private void AddHit(SearchHitViewModel hit)
+    private async void AddHit(SearchHitViewModel hit)
     {
         // A ModDB page that publishes no mod id is not something a pack can name. Optimum
         // is one — a modified client rather than a mod — and adding it wrote an empty
@@ -1622,7 +1633,38 @@ public partial class PackDetailViewModel : ViewModelBase
             return;
         }
 
-        Manifest.Mods.Add(new PackMod { ModId = hit.ModId });
+        // Asked before anything is written, and stated plainly: what the mod is marked for,
+        // what the pack targets, and that the pack is what breaks if this was optimistic.
+        // A mod nobody has rebuilt often works fine — but "often" is the whole reason this
+        // is a question rather than a silent allowance.
+        if (hit.NeedsAcceptance && Confirm is not null)
+        {
+            var marked = hit.NoReleaseNote.Replace("no ", "").Replace(" release", "");
+
+            var agreed = await Confirm(new ConfirmViewModel(
+                $"Add {hit.Name} anyway?",
+                $"{hit.Name} publishes no release for Vintage Story {Manifest.GameVersion}; "
+                + $"ModDB marks it for {marked}.\n\n"
+                + "It may still work, and plenty of mods do. It may also fail to load, or "
+                + "damage worlds this pack has already created — nobody has said otherwise "
+                + "for this combination.\n\n"
+                + $"Adding it records that you accept that for {Manifest.GameVersion}. Sync "
+                + "will keep saying so, and the acceptance stops applying if the pack moves "
+                + "to a different release series.",
+                "Add anyway"));
+
+            if (!agreed) return;
+        }
+
+        Manifest.Mods.Add(new PackMod
+        {
+            ModId = hit.ModId,
+
+            // Recorded against the version the pack targets now, so retargeting a minor
+            // asks again rather than carrying somebody's answer to a different question.
+            AcceptedFor = hit.NeedsAcceptance ? Manifest.GameVersion : null,
+        });
+
         Persist();
 
         // The row stays on screen, so it has to stop offering to add it again.

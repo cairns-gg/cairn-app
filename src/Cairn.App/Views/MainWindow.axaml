@@ -605,7 +605,12 @@
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
 
-                                                <Button Grid.Column="3" Content="Add" Classes="accent"
+                                                <!-- "Add anyway…" for a mod with no release
+                                                     for this version: the button says a
+                                                     question is coming, rather than the
+                                                     click being the decision. -->
+                                                <Button Grid.Column="3" Content="{Binding AddLabel}"
+                                                        Classes="accent"
                                                         Padding="14,4" MinWidth="64"
                                                         IsVisible="{Binding !AlreadyInPack}"
                                                         Command="{Binding AddCommand}"

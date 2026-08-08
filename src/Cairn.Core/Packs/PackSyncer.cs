@@ -82,7 +82,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // modinfo.json is read; `seen` both dedupes and terminates it, including for two
         // libraries that declare each other.
         var queue = new Queue<PendingMod>(
-            usable.Select(m => new PendingMod(m.ModId, m.Version)));
+            usable.Select(m => new PendingMod(m.ModId, m.Version, AcceptedFor: m.AcceptedFor)));
         var seen = new HashSet<string>(
             usable.Select(m => m.ModId), StringComparer.OrdinalIgnoreCase);
 
@@ -194,9 +194,17 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 // an untrusted URL costs a lookup rather than a different mod version.
                 var wanted = lockApplies ? prior!.Version : want.Version;
 
+                // Only for a mod whose manifest entry carries an acceptance covering this
+                // pack's version. Everything else resolves as it always has, so a mod that
+                // has simply not caught up still fails loudly rather than being installed
+                // on a guess.
+                var accepted = want.AcceptsUnmarkedFor(manifest.GameVersion);
+
                 try
                 {
-                    release = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, wanted, ct).ConfigureAwait(false);
+                    release = await moddb.ResolveAsync(
+                            want.ModId, manifest.GameVersion, wanted, ct, acceptUnmarked: accepted)
+                        .ConfigureAwait(false);
                 }
                 // JsonException as well as the two the client raises deliberately: a mod
                 // whose ModDB entry cannot be read must fail like any other unresolvable
@@ -211,8 +219,16 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
                 if (release is null)
                 {
+                    // Named separately when an acceptance exists but is for another minor:
+                    // "no release marked for 1.23.0" is true and says nothing about the
+                    // note sitting in the manifest that used to make this work.
+                    var stale = !accepted && !string.IsNullOrWhiteSpace(want.AcceptedFor)
+                        ? $"; it was accepted for game {want.AcceptedFor}, and this pack has "
+                          + "moved to a different release series since"
+                        : "";
+
                     Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want,
-                        $"no release marked for game {manifest.GameVersion}")));
+                        $"no release marked for game {manifest.GameVersion}{stale}")));
                     return null;
                 }
             }
@@ -228,6 +244,17 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
                     $"{release.ModVersion} is not marked for {manifest.GameVersion} exactly, "
                     + "only for another release in that minor series"));
+
+            // Every sync, and regardless of whether the lock applied — unlike the
+            // same-minor note above, which is about a choice being made now. This one is
+            // about what the pack is running, and a pack leaning on an untested
+            // combination should say so every time somebody looks, not once when it was
+            // added and never again.
+            if (release.Quality == MatchQuality.Unmarked)
+                Record(new SyncStep(SyncAction.Warned, want.ModId,
+                    $"{release.ModVersion} is marked for "
+                    + $"{DescribeVersions(release.GameVersions)}, not {manifest.GameVersion} — "
+                    + "installed because the pack accepts it, and it may misbehave"));
 
             if (ModSides.WrongSide(release.Side, side))
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
@@ -256,6 +283,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 ReleaseId = release.ReleaseId,
                 FileId = release.FileId,
                 Side = release.Side,
+
+                // Only when it does not match, so the field is absent for every ordinary
+                // mod and means something wherever it appears.
+                MarkedFor = release.Quality == MatchQuality.Unmarked
+                    ? release.GameVersions?.ToList()
+                    : null,
             };
 
             var upToDate = File.Exists(target)
@@ -318,12 +351,40 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// <c>modinfo.json</c>. A dependency carries no version — the declared one is a minimum
     /// rather than a pin, so it is not something to resolve against.
     /// </summary>
-    private sealed record PendingMod(string ModId, string? Version, string? RequiredBy = null);
+    /// <param name="AcceptedFor">
+    /// The game version this mod's manifest entry was accepted for, when it carries one.
+    /// Never set for a dependency: an acceptance is somebody saying they ran a particular
+    /// mod, and nobody said that about something a zip asked for on its way in.
+    /// </param>
+    private sealed record PendingMod(
+        string ModId, string? Version, string? RequiredBy = null, string? AcceptedFor = null)
+    {
+        public bool AcceptsUnmarkedFor(string gameVersion) =>
+            new PackMod { ModId = ModId, AcceptedFor = AcceptedFor }.AcceptsUnmarkedFor(gameVersion);
+    }
 
     /// <summary>
     /// The bare filename, or null if it is not one. Rejects rather than sanitises, so a
     /// name that tries to escape is reported instead of quietly becoming something else.
     /// </summary>
+    /// <summary>
+    /// The game versions a release claims, for a warning somebody has to act on.
+    ///
+    /// Named rather than counted: "marked for 1.21.4" says how far behind the mod is and
+    /// lets you judge whether you believe it, where "not marked for your version" only
+    /// repeats what the warning already said. Truncated because ModDB entries routinely
+    /// list a dozen.
+    /// </summary>
+    private static string DescribeVersions(IReadOnlyList<string>? versions)
+    {
+        if (versions is null || versions.Count == 0) return "no game version";
+
+        var shown = versions.Take(3).ToList();
+        var rest = versions.Count - shown.Count;
+
+        return string.Join(", ", shown) + (rest > 0 ? $" and {rest} more" : "");
+    }
+
     private static string? SafeFileName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
@@ -345,7 +406,13 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// </summary>
     private static ResolvedRelease FromLock(LockedMod locked) =>
         new(locked.ModId, locked.Version, locked.FileName, locked.Url,
-            locked.ReleaseId, locked.FileId, MatchQuality.Exact, locked.Side);
+            locked.ReleaseId, locked.FileId,
+            // Exact unless the lock says otherwise. A release recorded as marked for
+            // something else was installed on somebody's say-so, and installing it again
+            // from the lock is the same act — so it arrives here as what it is, rather
+            // than laundered into a match by having been written down once.
+            locked.MarkedFor is null ? MatchQuality.Exact : MatchQuality.Unmarked,
+            locked.Side, null, locked.MarkedFor);
 
     /// <summary>
     /// What each following mod would move to if updated. Mods pinned to an exact version

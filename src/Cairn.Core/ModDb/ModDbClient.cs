@@ -15,6 +15,19 @@ public enum MatchQuality
     /// so we accept these but rank them below an exact match.
     /// </summary>
     SameMinor,
+
+    /// <summary>
+    /// The release is marked for no version resembling this pack's, and is being installed
+    /// anyway because somebody said so.
+    /// </summary>
+    /// <remarks>
+    /// Never reached by resolving alone: a resolve refuses these, and only a mod carrying an
+    /// acceptance in the manifest asks for them. It exists as a quality rather than a
+    /// bypass flag so that everything downstream — the sync report, the lock, the version
+    /// change preview — can see what it got, instead of an unmarked release arriving
+    /// indistinguishable from a matched one.
+    /// </remarks>
+    Unmarked,
 }
 
 /// <param name="ModId">
@@ -321,12 +334,18 @@ public sealed class ModDbClient(HttpClient http)
     /// Exact game-version matches win; among equals the highest mod version wins.
     /// Returns null when the mod has no release for this game version at all.
     /// </summary>
+    /// <param name="acceptUnmarked">
+    /// Whether to consider releases marked for no version like this pack's. Off unless the
+    /// manifest carries an acceptance for this mod: it is somebody's testimony that they
+    /// ran it, not a thing to infer.
+    /// </param>
     public async Task<ResolvedRelease?> ResolveAsync(
-        string modId, string gameVersion, string? pinnedVersion = null, CancellationToken ct = default)
+        string modId, string gameVersion, string? pinnedVersion = null,
+        CancellationToken ct = default, bool acceptUnmarked = false)
     {
         var mod = await GetModAsync(modId, ct).ConfigureAwait(false);
 
-        var candidates = Candidates(mod, gameVersion);
+        var candidates = Candidates(mod, gameVersion, acceptUnmarked);
 
         if (pinnedVersion is not null)
         {
@@ -350,21 +369,32 @@ public sealed class ModDbClient(HttpClient http)
     }
 
     private static List<(ModDbRelease Release, MatchQuality? Quality)> Candidates(
-        ModDbMod mod, string gameVersion) =>
+        ModDbMod mod, string gameVersion, bool acceptUnmarked = false) =>
         mod.Releases
             // ModDB keeps the row for a release whose file has gone, serving it with an
             // empty mainfile. It is not a thing that can be installed, so it must not win
             // a resolve — picking one would fail the download for a mod that does have a
             // usable release sitting right behind it.
             .Where(r => !string.IsNullOrWhiteSpace(r.MainFile))
-            .Select(r => (Release: r, Quality: Classify(r, gameVersion)))
+            .Select(r => (Release: r,
+                Quality: Classify(r, gameVersion)
+                         ?? (acceptUnmarked ? MatchQuality.Unmarked : null)))
             .Where(x => x.Quality is not null)
             .ToList();
 
+    /// <summary>
+    /// Best first: an exact match, then the same minor, then — only ever when asked for —
+    /// something marked for neither. Newest within each.
+    /// </summary>
     private static IEnumerable<(ModDbRelease Release, MatchQuality? Quality)> Rank(
         List<(ModDbRelease Release, MatchQuality? Quality)> candidates) =>
         candidates
-            .OrderBy(x => x.Quality == MatchQuality.Exact ? 0 : 1)
+            .OrderBy(x => x.Quality switch
+            {
+                MatchQuality.Exact => 0,
+                MatchQuality.SameMinor => 1,
+                _ => 2,
+            })
             .ThenByDescending(x => x.Release.ModVersion, GameVersionComparer.Ascending);
 
     private static ResolvedRelease ToResolved(
