@@ -2532,6 +2532,34 @@ public class MainWindowTests : IDisposable
     // ---- browsing ModDB ----
 
     [AvaloniaFact]
+    public void Enter_still_searches_once_results_are_on_screen()
+    {
+        // The Search button stopped being the default button as soon as results appeared,
+        // so typing a second search and pressing enter did nothing — the one moment the key
+        // is most obviously meant to search again. Asserted on the rendered window rather
+        // than on the view model, because what broke was in the markup.
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        var search = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Content as string == "Search");
+
+        detail.SearchText = "carryon";
+        window.UpdateLayout();
+        Assert.True(search.IsDefault);
+
+        // Now results are showing, and a second search is typed over the first.
+        detail.SearchHits.Add(FullHit("olla", "Olla", 34157, "olla"));
+        detail.ShowingSearch = true;
+        detail.SearchText = "stepup";
+        window.UpdateLayout();
+
+        Assert.True(search.IsDefault);
+        Assert.True(detail.SearchCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
     public void The_no_release_badge_keeps_off_the_buttons()
     {
         // It used to sit on the title row, in a horizontal StackPanel — which does not wrap,

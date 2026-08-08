@@ -361,9 +361,14 @@
                                          PlaceholderText="Search ModDB to add a mod…"
                                          Margin="0,0,6,0" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <!-- Always the default button, not only before the first
+                                         search. It used to stop being one as soon as results
+                                         appeared, so typing a second search and pressing
+                                         enter did nothing at all — the one moment the key is
+                                         most obviously meant to search again. -->
                                     <Button Content="Search"
                                             Command="{Binding Detail.SearchCommand}"
-                                            IsDefault="{Binding Detail.ShowingSearch, Converter={x:Static BoolConverters.Not}}" />
+                                            IsDefault="True" />
                                     <Button Content="Clear"
                                             IsVisible="{Binding Detail.ShowingSearch}"
                                             Command="{Binding Detail.ClearSearchCommand}" />
