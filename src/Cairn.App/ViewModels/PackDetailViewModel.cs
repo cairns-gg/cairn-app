@@ -85,10 +85,8 @@ public partial class SearchHitViewModel(
     /// </summary>
     public bool CanAdd => !string.IsNullOrWhiteSpace(ModId) && !AlreadyInPack;
 
-    /// <summary>Adding this one is a decision, so the button says so and asks first.</summary>
+    /// <summary>Adding this one is a decision, so it asks before writing anything.</summary>
     public bool NeedsAcceptance => Incompatible;
-
-    public string AddLabel => NeedsAcceptance ? "Add anyway…" : "Add";
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private void Add() => add?.Invoke(this);
@@ -1647,10 +1645,7 @@ public partial class PackDetailViewModel : ViewModelBase
                 + $"ModDB marks it for {marked}.\n\n"
                 + "It may still work, and plenty of mods do. It may also fail to load, or "
                 + "damage worlds this pack has already created — nobody has said otherwise "
-                + "for this combination.\n\n"
-                + $"Adding it records that you accept that for {Manifest.GameVersion}. Sync "
-                + "will keep saying so, and the acceptance stops applying if the pack moves "
-                + "to a different release series.",
+                + "for this combination.",
                 "Add anyway"));
 
             if (!agreed) return;

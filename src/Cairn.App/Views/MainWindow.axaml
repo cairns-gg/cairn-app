@@ -584,17 +584,23 @@
                                                                    VerticalAlignment="Center" />
                                                         <TextBlock Text="{Binding Author}" FontSize="11" Opacity="0.5"
                                                                    VerticalAlignment="Center" />
-                                                        <!-- Listed but not addable, so "why can
-                                                             I not find X" never comes up. -->
-                                                        <Border IsVisible="{Binding Incompatible}"
-                                                                Background="{DynamicResource VsWarningFillBrush}"
-                                                                BorderBrush="{DynamicResource VsWarningBrush}"
-                                                                BorderThickness="1" CornerRadius="1"
-                                                                Padding="5,1" VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding NoReleaseNote}" FontSize="10"
-                                                                       Foreground="{DynamicResource VsWarningBrush}" />
-                                                        </Border>
                                                     </StackPanel>
+
+                                                    <!-- On its own line, and left-aligned so it
+                                                         hugs its text. It sat on the title row
+                                                         until a long enough name pushed it under
+                                                         the View and Add buttons: a horizontal
+                                                         StackPanel does not wrap, it overflows
+                                                         into whatever is beside it. -->
+                                                    <Border IsVisible="{Binding Incompatible}"
+                                                            HorizontalAlignment="Left"
+                                                            Background="{DynamicResource VsWarningFillBrush}"
+                                                            BorderBrush="{DynamicResource VsWarningBrush}"
+                                                            BorderThickness="1" CornerRadius="1"
+                                                            Padding="5,1" Margin="0,1">
+                                                        <TextBlock Text="{Binding NoReleaseNote}" FontSize="10"
+                                                                   Foreground="{DynamicResource VsWarningBrush}" />
+                                                    </Border>
                                                     <TextBlock Text="{Binding Summary}" FontSize="11" Opacity="0.7"
                                                                TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Tags}" FontSize="10" Opacity="0.45"
@@ -605,11 +611,12 @@
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
 
-                                                <!-- "Add anyway…" for a mod with no release
-                                                     for this version: the button says a
-                                                     question is coming, rather than the
-                                                     click being the decision. -->
-                                                <Button Grid.Column="3" Content="{Binding AddLabel}"
+                                                <!-- Just "Add", for every row. The badge beside
+                                                     the mod already says there is no release for
+                                                     this version, and the confirmation says the
+                                                     rest — a second warning in the button only
+                                                     made the column wider. -->
+                                                <Button Grid.Column="3" Content="Add"
                                                         Classes="accent"
                                                         Padding="14,4" MinWidth="64"
                                                         IsVisible="{Binding !AlreadyInPack}"

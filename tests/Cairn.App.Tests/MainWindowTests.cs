@@ -2508,18 +2508,15 @@ public class MainWindowTests : IDisposable
 
         // Addable, which it was not before: a mod nobody has rebuilt often still runs, and
         // the person who has tried it is the only one who can say so. What used to be a
-        // refusal is now a question — the button says one is coming rather than the click
-        // being the decision.
+        // refusal is now a question, asked before anything is written.
         Assert.True(stale.CanAdd);
         Assert.True(stale.AddCommand.CanExecute(null));
         Assert.True(stale.NeedsAcceptance);
-        Assert.Equal("Add anyway…", stale.AddLabel);
 
         // ...and one that is usable is added without being asked anything.
         var usable = FullHit("olla", "Olla", 34157, "olla");
         Assert.True(usable.AddCommand.CanExecute(null));
         Assert.False(usable.NeedsAcceptance);
-        Assert.Equal("Add", usable.AddLabel);
     }
 
     [AvaloniaFact]
@@ -2533,6 +2530,43 @@ public class MainWindowTests : IDisposable
     }
 
     // ---- browsing ModDB ----
+
+    [AvaloniaFact]
+    public void The_no_release_badge_keeps_off_the_buttons()
+    {
+        // It used to sit on the title row, in a horizontal StackPanel — which does not wrap,
+        // it overflows — so a long enough name pushed "no 1.22.x release" underneath the
+        // View and Add buttons. Measured rather than looked at, because the binding was
+        // never wrong: only where it landed.
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        detail.SearchHits.Add(FullHit(
+            "ancientmod", "A Mod With A Rather Long Name Indeed", 999, compatible: false));
+        detail.ShowingSearch = true;
+
+        window.UpdateLayout();
+
+        var badge = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "no 1.22.x release");
+
+        var buttons = window.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.Content as string is "Add" or "View")
+            .Where(b => b.Bounds.Width > 0)
+            .ToList();
+
+        Assert.NotEmpty(buttons);
+
+        var badgeRight = badge.TranslatePoint(new Point(badge.Bounds.Width, 0), window)!.Value.X;
+
+        foreach (var button in buttons)
+        {
+            var buttonLeft = button.TranslatePoint(default, window)!.Value.X;
+            Assert.True(badgeRight <= buttonLeft,
+                $"the badge reaches {badgeRight} and '{button.Content}' starts at {buttonLeft}");
+        }
+    }
 
     private static SearchHitViewModel FullHit(string modId, string name, int assetId,
         string? alias = null, string? logo = null, bool compatible = true) =>
