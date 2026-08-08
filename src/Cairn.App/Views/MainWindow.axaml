@@ -298,7 +298,15 @@
                     </Border>
                 </StackPanel>
 
-                <TabControl Margin="0,14,0,0">
+                <!--
+                    Bound to the pane rather than left to itself, so selecting another pack
+                    opens on Mods. The pane is rebuilt per pack and its SelectedTab starts
+                    at 0, so the reset falls out of that; a TabControl left alone keeps
+                    whichever tab the last pack was on, which is how you end up looking at
+                    one pack's Log believing it is another's.
+                -->
+                <TabControl Margin="0,14,0,0"
+                            SelectedIndex="{Binding Detail.SelectedTab, Mode=TwoWay, FallbackValue=0}">
 
                     <!--
                         One list for both the pack and the results you build it from.

@@ -349,6 +349,17 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty] public partial bool ShowingSearch { get; set; }
 
+    /// <summary>
+    /// Which tab this pack's pane is showing. Zero — Mods — for a pack just opened.
+    ///
+    /// Held here rather than by the TabControl so that choosing another pack starts on
+    /// Mods: the pane is rebuilt per pack, so a fresh one is on the first tab by
+    /// construction and nothing has to remember to reset anything. Left to itself the
+    /// control keeps the last pack's tab, which is how you end up reading one pack's Log
+    /// while believing it belongs to another.
+    /// </summary>
+    [ObservableProperty] public partial int SelectedTab { get; set; }
+
     partial void OnShowingSearchChanged(bool value)
     {
         OnPropertyChanged(nameof(ListHeading));

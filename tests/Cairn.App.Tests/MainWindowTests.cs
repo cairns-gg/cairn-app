@@ -2532,6 +2532,34 @@ public class MainWindowTests : IDisposable
     // ---- browsing ModDB ----
 
     [AvaloniaFact]
+    public void Choosing_another_pack_opens_on_Mods()
+    {
+        var (window, vm) = Show();
+        var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        window.UpdateLayout();
+
+        // Somewhere other than the first tab, as somebody reading a log would be.
+        tabs.SelectedIndex = tabs.ItemCount - 1;
+        window.UpdateLayout();
+        Assert.Equal(tabs.ItemCount - 1, tabs.SelectedIndex);
+
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "old-pack");
+        window.UpdateLayout();
+
+        // Not the previous pack's tab: that is how one pack's Log gets read as another's.
+        Assert.Equal(0, tabs.SelectedIndex);
+
+        // And going back is a fresh look at that pack too, rather than a restored one.
+        tabs.SelectedIndex = 1;
+        window.UpdateLayout();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        window.UpdateLayout();
+        Assert.Equal(0, tabs.SelectedIndex);
+    }
+
+    [AvaloniaFact]
     public void Enter_still_searches_once_results_are_on_screen()
     {
         // The Search button stopped being the default button as soon as results appeared,
