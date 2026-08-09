@@ -510,6 +510,7 @@ public partial class MainViewModel : ViewModelBase
         Detail.Confirm = c => Confirm?.Invoke(c) ?? Task.FromResult(false);
         Detail.RunOptimumBuild = b => RunOptimumBuild?.Invoke(b) ?? Task.FromResult(false);
         Detail.ChoosePinnedVersion = c => ChoosePinnedVersion?.Invoke(c) ?? Task.FromResult(false);
+        Detail.ChooseWorlds = c => ChooseWorlds?.Invoke(c) ?? Task.FromResult(false);
 
         // Fills the version picker in the background; the pane is usable before it arrives.
         _ = Detail.LoadGameVersionsAsync();
@@ -623,7 +624,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (choice.Source == ImportSource.Install)
         {
-            ImportFromInstall(choice);
+            await ImportFromInstallAsync(choice);
             return;
         }
 
@@ -648,6 +649,7 @@ public partial class MainViewModel : ViewModelBase
         return new ImportSourceViewModel(
             new InstallImport(_moddb),
             InstalledMods.DefaultModsDir,
+            InstalledWorlds.DefaultSavesDir,
             InstalledMods.DisabledIn(GameInstall.DefaultDataPath),
             playedOn,
 
@@ -659,7 +661,7 @@ public partial class MainViewModel : ViewModelBase
             suggestId: _store.SuggestId);
     }
 
-    private void ImportFromInstall(ImportSourceViewModel choice)
+    private async Task ImportFromInstallAsync(ImportSourceViewModel choice)
     {
         try
         {
@@ -671,11 +673,45 @@ public partial class MainViewModel : ViewModelBase
             Added(manifest);
             NoteFor(id, $"imported {manifest.Mods.Count} mods from your Vintage Story install "
                         + "— press Play to install them into the pack");
+
+            // After the pack exists, because a world is copied into it — and because the
+            // mods are the pack, while the worlds are what you had been playing in it.
+            await CopyWorldsAsync(id, choice.Worlds.Chosen);
         }
         catch (Exception e)
         {
             IsImporting = true;
             ImportError = e.Message;
+        }
+    }
+
+    /// <summary>
+    /// Copies chosen worlds into a pack, saying which and how far along it is.
+    ///
+    /// Copies, never moves: the originals stay in the player's own install, which is what
+    /// keeps plain Vintage Story working and is the rule everywhere else Cairn touches that
+    /// folder. A world is gigabytes, so this reports progress and never silently overwrites
+    /// one the pack already has — see <see cref="InstalledWorlds"/>.
+    /// </summary>
+    private async Task CopyWorldsAsync(string id, IReadOnlyList<InstalledWorld> worlds)
+    {
+        if (worlds.Count == 0) return;
+
+        var data = _packData.DataPathFor(id);
+        _packData.EnsureDataPath(id);
+
+        foreach (var world in worlds)
+        {
+            NoteFor(id, $"copying world '{world.Name}' ({Bytes.Human(world.Size)})…");
+
+            var copied = await InstalledWorlds.CopyIntoAsync(
+                world, data,
+                new Progress<long>(done => Status =
+                    $"copying world '{world.Name}' — {Bytes.Human(done)} of {Bytes.Human(world.Size)}"));
+
+            NoteFor(id, copied.Copied
+                ? $"copied world '{world.Name}' — your own copy is untouched"
+                : $"could not copy world '{world.Name}': {copied.Problem}");
         }
     }
 
@@ -889,6 +925,13 @@ public partial class MainViewModel : ViewModelBase
     /// instead, which is the same three ways in with one of them missing rather than none.
     /// </summary>
     public Func<ImportSourceViewModel, Task<bool>>? ChooseImportSource { get; set; }
+
+    /// <summary>
+    /// Asks which worlds to bring into a pack from the player's own install. Supplied by the
+    /// view; absent in headless tests, where nothing is copied — the safe way for a question
+    /// about somebody's saves to be missing.
+    /// </summary>
+    public Func<WorldPickerViewModel, Task<bool>>? ChooseWorlds { get; set; }
 
     /// <summary>
     /// Shows a build happening and returns whether it produced an install. Supplied by the

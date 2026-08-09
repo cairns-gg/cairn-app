@@ -2116,6 +2116,61 @@ public partial class PackDetailViewModel : ViewModelBase
     /// <summary>Set by the view; asks which version to pin and returns whether one was chosen.</summary>
     public Func<PinVersionViewModel, Task<bool>>? ChoosePinnedVersion { get; set; }
 
+    /// <summary>Set by the view; asks which worlds to bring in, and whether to bring any.</summary>
+    public Func<WorldPickerViewModel, Task<bool>>? ChooseWorlds { get; set; }
+
+    /// <summary>
+    /// Whether the player's own install has any worlds this pack could take. Read each time
+    /// it is asked rather than cached: somebody can play plain Vintage Story between opening
+    /// the launcher and looking at this tab, and a button that was drawn from a stale answer
+    /// is one that lies about what is there.
+    /// </summary>
+    public bool HasWorldsToImport =>
+        InstalledWorlds.Scan(InstalledWorlds.DefaultSavesDir).Count > 0;
+
+    /// <summary>
+    /// Copies a world out of the player's own install into this pack.
+    ///
+    /// A pack has its own data path, so a world in a plain install is not reachable from the
+    /// pack that holds the mods it was made with — and it generally cannot be opened without
+    /// them. Offered here as well as at import because a pack that already exists has no
+    /// other route to it, which included every pack imported before this existed.
+    ///
+    /// Copied, never moved: the original stays put, so plain Vintage Story keeps working and
+    /// Cairn still never writes to that folder.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportWorldsAsync()
+    {
+        if (ChooseWorlds is null) return;
+
+        var picker = new WorldPickerViewModel(InstalledWorlds.DefaultSavesDir);
+
+        if (picker.Worlds.Count == 0)
+        {
+            _log("no worlds in your Vintage Story install to bring in");
+            return;
+        }
+
+        if (!await ChooseWorlds(picker)) return;
+
+        _packData.EnsureDataPath(Id);
+        var data = _packData.DataPathFor(Id);
+
+        foreach (var world in picker.Chosen)
+        {
+            _log($"copying world '{world.Name}' ({Bytes.Human(world.Size)})…");
+
+            var copied = await InstalledWorlds.CopyIntoAsync(world, data);
+
+            _log(copied.Copied
+                ? $"copied world '{world.Name}' — your own copy is untouched"
+                : $"could not copy world '{world.Name}': {copied.Problem}");
+        }
+
+        OnPropertyChanged(nameof(HasWorldsToImport));
+    }
+
     private string CacheKey(string modId) => $"{modId}|{Manifest.GameVersion}";
 
     /// <summary>

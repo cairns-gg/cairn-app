@@ -103,8 +103,17 @@ as a supported way to run. Those packs simply get a data path on their next laun
 
 Worlds already in your own Vintage Story data path stay there. They are your ordinary saves,
 Cairn cannot know which pack — if any — they belong to, and claiming them would take them
-away from plain Vintage Story too. They remain reachable by launching the game normally; to
-put one inside a pack, copy its `.vcdbs` into `packs/<id>/data/Saves`.
+away from plain Vintage Story too. They remain reachable by launching the game normally.
+
+There is one moment when that first objection does not hold: importing an install. The worlds
+in that folder were played with the mods being imported, so the import dialog lists them with
+their sizes, and a pack's Settings tab offers the same at any time afterwards — which is the
+only route for a pack that already exists. **Copied, never moved.** Cairn does not write to
+your data path, which is what makes "your plain Vintage Story goes on working" a fact rather
+than an intention, and a world moved out of it would open nowhere but the pack that took it.
+Nothing is ticked by default: the mods are the pack and arrive with it, while a world is
+gigabytes and the pack works without one. A world the pack already has is refused rather than
+overwritten — that is somebody's months of evenings, not a file to clobber on a checkbox.
 
 `--addModPath` is still *additive* — the game always also searches `<install>/Mods` and
 `<dataPath>/Mods` — but with a per-pack data path that second directory is the pack's own, so
@@ -355,6 +364,12 @@ is the same testimony `--accept-unmarked` records — but only when the folder w
 played on a game version like the pack's. Someone importing a 1.21.4 install into a 1.22.6
 pack has said nothing whatever about 1.22.6, so those mods move to the newest release the
 new game actually has.
+
+The same dialog offers the **worlds** in that install, and a pack's Settings tab offers them
+at any time afterwards — the only route for a pack that already exists. A world made under a
+mod set generally cannot be opened without it, so importing the mods and leaving the worlds
+behind is half a job. They are copied rather than moved, and nothing is ticked by default;
+see "each pack has its own worlds" above for why both of those are deliberate.
 
 Cairn only ever *reads* the folder. Plain Vintage Story goes on working exactly as it did.
 

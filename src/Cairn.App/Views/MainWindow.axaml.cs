@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         vm.ConfirmPackUpdate = ConfirmPackUpdateAsync;
         vm.ConfirmImport = ConfirmImportAsync;
         vm.ChooseImportSource = ChooseImportSourceAsync;
+        vm.ChooseWorlds = ChooseWorldsAsync;
         vm.Confirm = ConfirmAsync;
         vm.RunOptimumBuild = RunOptimumBuildAsync;
         vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
@@ -68,6 +69,10 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ChooseImportSourceAsync(ImportSourceViewModel choice) =>
         new ImportSourceWindow { DataContext = choice }.ShowDialog<bool>(this);
+
+    /// <summary>True only if Copy was pressed. Somebody's saves are not copied on a dismissal.</summary>
+    private Task<bool> ChooseWorldsAsync(WorldPickerViewModel picker) =>
+        new WorldImportWindow { DataContext = picker }.ShowDialog<bool>(this);
 
     private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
         new PreferencesWindow { DataContext = preferences }.ShowDialog(this);

@@ -128,14 +128,22 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// What the pack will target when there is no install to take it from. Never offered as
     /// a choice: see <see cref="GameVersion"/>.
     /// </param>
+    /// <param name="savesDir">
+    /// Where the same install keeps its worlds. Offered alongside the mods because a world
+    /// made under a mod set generally cannot be opened without it — importing the mods and
+    /// leaving the worlds behind is half a job.
+    /// </param>
     public ImportSourceViewModel(
         InstallImport importer,
         string modsDir,
+        string savesDir,
         IReadOnlySet<string> disabled,
         string? playedOn,
         string gameVersion,
         Func<string?, string> suggestId)
     {
+        Worlds = new WorldPickerViewModel(savesDir);
+
         _importer = importer;
         _suggestId = suggestId;
         _disabled = disabled;
@@ -235,6 +243,12 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// properly, with a preview of what each mod would do.
     /// </summary>
     public string GameVersion { get; }
+
+    /// <summary>
+    /// The worlds in the same install, to bring across with the mods. Copied, never moved:
+    /// see <see cref="InstalledWorlds"/>.
+    /// </summary>
+    public WorldPickerViewModel Worlds { get; }
 
     /// <summary>Where the mods are coming from and what they will be built for.</summary>
     public string InstallNote => PlayedOn is null

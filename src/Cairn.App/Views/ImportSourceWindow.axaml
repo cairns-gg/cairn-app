@@ -103,6 +103,43 @@
                     </StackPanel>
                 </StackPanel>
 
+                <!-- The worlds from the same install. Under the mods rather than beside
+                     them: a world only opens against the mod set it was made with, so the
+                     mods are the pack and these come with them. Nothing is ticked — the
+                     pack works without them, which is not true of the mods, and a world is
+                     gigabytes. -->
+                <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,10,0,0"
+                            IsVisible="{Binding Worlds.Any}">
+                    <TextBlock Text="{Binding Worlds.Summary}" FontSize="12" TextWrapping="Wrap" />
+
+                    <Border BorderBrush="{DynamicResource VsBorderBrush}" BorderThickness="1"
+                            CornerRadius="1" Padding="2" MaxHeight="112">
+                        <ScrollViewer Name="WorldList" HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Worlds.Worlds}" Margin="8,6">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:WorldRowViewModel">
+                                        <Grid ColumnDefinitions="*,90" Margin="0,2">
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding Chosen}"
+                                                      FontSize="12">
+                                                <StackPanel Spacing="1">
+                                                    <TextBlock Text="{Binding Name}" FontSize="12"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding LastPlayed}"
+                                                               FontSize="11" Opacity="0.6" />
+                                                </StackPanel>
+                                            </CheckBox>
+                                            <TextBlock Grid.Column="1" Text="{Binding Size}"
+                                                       FontSize="11" Opacity="0.75"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
                 <Panel>
                     <!-- Nothing to show yet. An empty bordered scroll area looks exactly
                          like a text box you are not allowed to type in, which is the last
@@ -137,6 +174,7 @@
                         </ScrollViewer>
                     </Border>
                 </Panel>
+
             </DockPanel>
 
             <!-- From a link -->

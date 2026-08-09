@@ -791,6 +791,19 @@
                                            Text="This pack's saves and mod configs are its own. Created on first launch." />
                             </StackPanel>
 
+                            <!-- A pack's data path is its own, so a world in the player's
+                                 plain install is not reachable from the pack holding the
+                                 mods it was made with. Offered here as well as at import,
+                                 because a pack that already exists has no other way to it. -->
+                            <StackPanel Spacing="6" IsVisible="{Binding Detail.HasWorldsToImport,
+                                                                       FallbackValue=False}">
+                                <TextBlock Text="Bring in a world" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
+                                           Text="Copies a world out of your own Vintage Story install and into this pack, where its mods are. Your copy stays where it is." />
+                                <Button Content="Choose a world…" HorizontalAlignment="Left"
+                                        Command="{Binding Detail.ImportWorldsCommand}" />
+                            </StackPanel>
+
                             <Separator Margin="0,4" />
 
                             <StackPanel Spacing="6"

@@ -26,9 +26,11 @@ namespace Cairn.App.Tests;
 public class ImportSourceWindowTests
 {
     private static ImportSourceViewModel Choice(
-        string? modsDir = null, string? playedOn = "1.22.6", string gameVersion = "1.22.6") =>
+        string? modsDir = null, string? playedOn = "1.22.6", string gameVersion = "1.22.6",
+        string? savesDir = null) =>
         new(new InstallImport(new ModDbClient(new HttpClient(new OfflineHandler()))),
             modsDir ?? Path.Combine(Path.GetTempPath(), "cairn-no-such-install", "Mods"),
+            savesDir ?? Path.Combine(Path.GetTempPath(), "cairn-no-such-install", "Saves"),
             new HashSet<string>(),
             playedOn,
             gameVersion,
