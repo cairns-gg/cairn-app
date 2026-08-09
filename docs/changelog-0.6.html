@@ -1,0 +1,52 @@
+<h1>What's new in Cairn 0.6.0</h1>
+
+<p>Everything that changed since the 0.5 series, in one place. Nothing here needs any action from you unless it says so.</p>
+
+<h2>Mods no longer load twice</h2>
+
+<p>If a mod was already installed in plain Vintage Story and you put the same mod in a pack, the game loaded <strong>both copies</strong> &mdash; the pack's and the one in your own Mods folder. That is the bug behind "why do I have two of Olla", and it applied to every pack.</p>
+
+<p>The cause was three steps apart. A new pack starts from a copy of your own game settings, so your keybinds and graphics carry over; that file records where the game looks for mods, as full paths, written the first time Vintage Story ran; and the setting Cairn uses to point the game at a pack's mods <em>adds</em> to that list rather than replacing it. So every pack quietly searched your personal Mods folder as well as its own.</p>
+
+<p>Packs now load their own mods and nothing else. It is fixed for existing packs too, on their next Play &mdash; and if a pack was loading something it should not have been, the pack's log says which folder it has stopped reading. <strong>Your own Vintage Story is untouched</strong>: the mods in it still load exactly as they always have when you launch the game normally.</p>
+
+<p>If a pack has been getting a mod from your own folder rather than from its own list, that mod will now be missing from it. Add it to the pack and it comes back &mdash; or bring the whole folder in at once, which is the next item.</p>
+
+<h2>Make a pack from the mods you already have</h2>
+
+<p>Most people arrive at Cairn having already played Vintage Story, with a Mods folder holding thirty mods. Until now the launcher offered them an empty pack and a search box.</p>
+
+<p><strong>Import&hellip; &rarr; From your Vintage Story install</strong> reads that folder and builds a pack from it. It lists every mod it finds straight away and then says what will become of each one:</p>
+
+<ul>
+  <li>mods that go in, <strong>at the versions you are running</strong> &mdash; not the newest ones, so the pack is what you have been playing;</li>
+  <li>a mod ModDB no longer publishes, or never did, named and left out, because a pack is a list of mods anyone can install;</li>
+  <li>a mod switched off in Vintage Story, left off, since it is not part of what you play;</li>
+  <li>a mod with no release for your game version, and what will be installed instead.</li>
+</ul>
+
+<p>Nothing is pinned. The versions you are running are what gets installed, and <strong>Update</strong> works on them afterwards exactly as it does for any other pack. The pack is built for the game version your install is, and you are not asked to choose one.</p>
+
+<p>Cairn only ever <em>reads</em> your Mods folder. Nothing is moved, copied or deleted, and plain Vintage Story goes on working as before.</p>
+
+<p>From the command line: <code>cairn-cli import-install "My mods"</code>, with <code>--dry-run</code> to see what it would take without creating anything.</p>
+
+<h2>Import asks where a pack is coming from</h2>
+
+<p>The <strong>Import&hellip;</strong> button used to be one box that took either a link or a pasted pack and worked out which. It now asks, with the three ways in named: your Vintage Story install, a link, or pasted text. Links are shown for approval before anything is taken, exactly as they were.</p>
+
+<h2>Smaller things</h2>
+
+<ul>
+  <li><strong>New packs start from your settings again.</strong> A pack made in 0.5 quietly began with bare defaults instead of your keybinds and graphics, because of the same change that gave each pack its own worlds.</li>
+  <li><strong>Making a pack no longer signs you in as somebody older.</strong> The copied settings brought a copy of your login with them, and being the newest one on the machine it won &mdash; which could put every other pack back on a session you had already replaced.</li>
+</ul>
+
+<h2>Upgrading</h2>
+
+<p>Nothing to do. Packs, worlds and installed game versions carry over untouched.</p>
+
+<ul>
+  <li>The mod-loading fix is applied to each pack the next time you press Play.</li>
+  <li>A pack that was relying on a mod from your own Mods folder will be missing it until you add it to the pack.</li>
+</ul>
