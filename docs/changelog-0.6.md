@@ -1,4 +1,4 @@
-# What's new in Cairn 0.6.0
+# What's new in Cairn 0.6.1
 
 Everything that changed since the 0.5 series, in one place. Nothing here needs any action
 from you unless it says so.
@@ -48,6 +48,22 @@ Vintage Story goes on working as before.
 
 From the command line: `cairn-cli import-install "My mods"`, with `--dry-run` to see what it
 would take without creating anything.
+
+## Bring your worlds across too
+
+A pack keeps its worlds inside itself, which is what stops a save being opened against the
+wrong mod set and ruined. The catch is that a world sitting in your own Vintage Story install
+is not reachable from a pack — including the pack that has the very mods it was made with.
+
+Importing an install now offers your worlds alongside your mods, with their sizes, and **Bring
+in a world** in a pack's Settings tab does the same at any time. That second one is how a pack
+you have already made gets them.
+
+Worlds are **copied, never moved**. Your own stay exactly where they are and plain Vintage
+Story goes on opening them; the pack gets its own copy, which is the one that changes as you
+play it there. Nothing is ticked for you — the mods come with the pack, but a world can be
+several gigabytes and the pack works without it. A world the pack already has is left alone
+rather than written over.
 
 ## Import asks where a pack is coming from
 
