@@ -115,6 +115,7 @@ public partial class PackDetailViewModel : ViewModelBase
     private readonly ModIconCache _icons;
     private readonly PackData _packData;
     private readonly ModInfoCache _modInfo;
+    private readonly RunningGames _runs;
 
     /// <summary>Bumped per pack reload, so icons for rows that are gone are dropped.</summary>
     private int _modIconGeneration;
@@ -131,6 +132,7 @@ public partial class PackDetailViewModel : ViewModelBase
         HttpClient http,
         GameLibrary library,
         RuntimeStore runtimes,
+        RunningGames runs,
         ObservableCollection<string> log,
         Action<string> note,
         Action onChanged,
@@ -146,6 +148,7 @@ public partial class PackDetailViewModel : ViewModelBase
         _http = http;
         _library = library;
         _runtimes = runtimes;
+        _runs = runs;
         Log = log;
         _log = note;
         _onChanged = onChanged;
@@ -165,6 +168,10 @@ public partial class PackDetailViewModel : ViewModelBase
         TargetGameVersion = manifest.GameVersion;
 
         ReloadMods();
+
+        // A pane built for a pack whose game is already up adopts that launch rather than
+        // starting out claiming there is nothing running.
+        RefreshLaunchState();
     }
 
     public PackManifest Manifest { get; }
@@ -258,16 +265,8 @@ public partial class PackDetailViewModel : ViewModelBase
         _log("── end of game log ──");
     }
 
-    /// <summary>The errors and warnings only, which is what a failed launch is asked about.</summary>
-    private void ShowGameProblems(string why)
-    {
-        var problems = GameLogs.Problems();
-        if (problems.Count == 0) return;
-
-        _log($"── {why}: what the game logged ──");
-        foreach (var line in problems) _log(line);
-        _log("── use Game log for the full file ──");
-    }
+    // Reporting the problems from a bad exit lives in RunningGames, which is what is still
+    // there to notice one: the game can outlive this pane by hours.
 
     [RelayCommand]
     private void OpenLogsFolder()
@@ -419,13 +418,52 @@ public partial class PackDetailViewModel : ViewModelBase
     [ObservableProperty] public partial bool IsBusy { get; set; }
 
     /// <summary>
-    /// Set from the moment Play is pressed until the game exits. Syncing and process
+    /// True from the moment Play is pressed until the game exits. Syncing and process
     /// start take several seconds, and without this the window looked inert — and Play
     /// could be pressed again, starting a second copy.
+    ///
+    /// Read from <see cref="RunningGames"/> rather than held here, because this view model
+    /// is rebuilt on every selection change: state of its own was lost the moment another
+    /// pack was clicked, taking the running notification and the Play guard with it.
     /// </summary>
-    [ObservableProperty] public partial bool IsLaunching { get; set; }
+    public bool IsLaunching => _runs.IsLaunching(Id);
 
-    [ObservableProperty] public partial string LaunchStage { get; set; } = "";
+    /// <summary>
+    /// The pane's progress line. A launch's stage comes from the registry so it survives
+    /// this view model; publishing's is held here, because publishing is a modal errand
+    /// that cannot outlive the pane that started it.
+    /// </summary>
+    public string LaunchStage => IsLaunching ? _runs.StageFor(Id) : PublishStage;
+
+    [ObservableProperty] public partial string PublishStage { get; set; } = "";
+
+    partial void OnPublishStageChanged(string value)
+    {
+        OnPropertyChanged(nameof(LaunchStage));
+        OnPropertyChanged(nameof(IsShowingLaunchStage));
+    }
+
+    /// <summary>
+    /// Brings the pane back in line with what the pack is actually doing — on construction,
+    /// and whenever the registry says this pack's launch moved on. Also picks up a bad exit
+    /// that happened while this pack had no pane to raise it on.
+    /// </summary>
+    public void RefreshLaunchState()
+    {
+        OnPropertyChanged(nameof(IsLaunching));
+        OnPropertyChanged(nameof(LaunchStage));
+        OnPropertyChanged(nameof(IsShowingLaunchStage));
+        OnPropertyChanged(nameof(PlayLabel));
+        OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(CanForceQuit));
+        OnPropertyChanged(nameof(ShowPlay));
+        OnPropertyChanged(nameof(IsStarting));
+        PlayCommand.NotifyCanExecuteChanged();
+        ForceQuitCommand.NotifyCanExecuteChanged();
+
+        if (_runs.TakeExitNotice(Id) is { } notice) Error = notice;
+    }
+
     [ObservableProperty] public partial string? Error { get; set; }
     [ObservableProperty] public partial string? ExportedPath { get; set; }
     [ObservableProperty] public partial string ExportedJson { get; set; } = "";
@@ -436,15 +474,6 @@ public partial class PackDetailViewModel : ViewModelBase
     public bool IsShowingLaunchStage => !string.IsNullOrEmpty(LaunchStage);
 
     public string PlayLabel => IsLaunching ? "Working…" : "Play";
-
-    partial void OnLaunchStageChanged(string value) => OnPropertyChanged(nameof(IsShowingLaunchStage));
-
-    partial void OnIsLaunchingChanged(bool value)
-    {
-        OnPropertyChanged(nameof(PlayLabel));
-        OnPropertyChanged(nameof(CanLaunch));
-        PlayCommand.NotifyCanExecuteChanged();
-    }
 
     public bool HasExported => !string.IsNullOrEmpty(ExportedPath);
 
@@ -1941,7 +1970,7 @@ public partial class PackDetailViewModel : ViewModelBase
             var session = await SignInAsync();
             if (session is null) return;
 
-            var progress = new Progress<string>(id => LaunchStage = $"Checking {id}…");
+            var progress = new Progress<string>(id => PublishStage = $"Checking {id}…");
 
             var plan = await PublishPlan.PrepareAsync(
                 Manifest, _store.LoadLock(Id), _moddb, progress);
@@ -1954,7 +1983,7 @@ public partial class PackDetailViewModel : ViewModelBase
             // must not be able to turn sharing into a change to what is installed.
             if (!plan.LockCovers)
             {
-                LaunchStage = "Syncing…";
+                PublishStage = "Syncing…";
                 var sync = await RunSyncAsync(quiet: true);
 
                 // RunSyncAsync clears IsBusy in its own finally, and publishing continues.
@@ -1979,7 +2008,7 @@ public partial class PackDetailViewModel : ViewModelBase
 
             if (ConfirmPublish is null || !await ConfirmPublish(Publish)) return;
 
-            LaunchStage = "Publishing…";
+            PublishStage = "Publishing…";
 
             var document = _store.PublishedDocument(Id, Publish.StripConnect);
             var client = new CairnsClient(_http, session.Server);
@@ -2011,7 +2040,7 @@ public partial class PackDetailViewModel : ViewModelBase
         }
         finally
         {
-            LaunchStage = "";
+            PublishStage = "";
             IsBusy = false;
         }
     }
@@ -2052,7 +2081,7 @@ public partial class PackDetailViewModel : ViewModelBase
         var client = new CairnsClient(_http);
         var flow = await client.StartSignInAsync();
 
-        LaunchStage = $"Enter {flow.UserCode} at {flow.VerificationUri}";
+        PublishStage = $"Enter {flow.UserCode} at {flow.VerificationUri}";
         _log($"sign in at {flow.VerificationUri} with code {flow.UserCode}");
 
         Browser.Open($"{flow.VerificationUri}?code={flow.UserCode}");
@@ -2060,7 +2089,7 @@ public partial class PackDetailViewModel : ViewModelBase
         try
         {
             var session = await client.AwaitSignInAsync(
-                flow, new Progress<string>(s => LaunchStage = $"{flow.UserCode} — {s}"));
+                flow, new Progress<string>(s => PublishStage = $"{flow.UserCode} — {s}"));
 
             session.Save();
             _log($"signed in to {session.Server} as {session.Username}");
@@ -2238,8 +2267,7 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     private async Task Play()
     {
-        IsLaunching = true;
-        LaunchStage = "Checking the game is ready…";
+        _runs.Begin(Id, "Checking the game is ready…");
 
         try
         {
@@ -2247,12 +2275,60 @@ public partial class PackDetailViewModel : ViewModelBase
         }
         finally
         {
-            // Cleared here only if nothing was started; a running game clears it on exit.
-            if (!_gameRunning) { IsLaunching = false; LaunchStage = ""; }
+            // Given up here only if nothing was started; a running game is let go of when
+            // it exits, by whoever is watching it — which is not this pane.
+            if (!_runs.IsRunning(Id)) _runs.Abandon(Id);
         }
     }
 
-    private bool _gameRunning;
+    /// <summary>What the pane's progress line says, kept where a rebuild cannot lose it.</summary>
+    private void Stage(string stage) => _runs.Report(Id, stage);
+
+    /// <summary>Offered only while there is a process to kill, not merely a launch underway.</summary>
+    public bool CanForceQuit => _runs.IsRunning(Id);
+
+    /// <summary>
+    /// Play gives its slot up to Force quit once the game is up, rather than sitting there
+    /// greyed out beside it. A disabled button says "not now"; what is true is that there
+    /// is nothing left to press until the game goes away, and the only action worth
+    /// offering is the one that makes it.
+    /// </summary>
+    public bool ShowPlay => !CanForceQuit;
+
+    /// <summary>
+    /// Still getting there — syncing, provisioning, starting the process. This is what the
+    /// progress bar is for: once the game is up there is nothing in progress to report,
+    /// and an indeterminate bar that never fills for the hours somebody is playing reads
+    /// as the launcher being stuck.
+    /// </summary>
+    public bool IsStarting => IsLaunching && !CanForceQuit;
+
+    /// <summary>
+    /// The way out of a hung game.
+    ///
+    /// Behind a confirmation because it is not a quit — it is a kill, and whatever the game
+    /// had not written to the save yet goes with it. It is still the right thing to offer:
+    /// a game that has stopped drawing leaves the pack unplayable and the save held open,
+    /// and the alternative is Activity Monitor.
+    ///
+    /// Nothing happens with no confirmer wired up: a destructive action that proceeds
+    /// because the dialog is missing is the one failure mode this must not have.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanForceQuit))]
+    private async Task ForceQuit()
+    {
+        if (Confirm is null) return;
+
+        if (!await Confirm(new ConfirmViewModel(
+                "Force Vintage Story to quit?",
+                $"“{Title}” has Vintage Story running. Forcing it to quit ends the game "
+                + "immediately — anything since the last save is lost, and the game gets no "
+                + "chance to write one. Use it when the game has stopped responding.",
+                "Force quit")))
+            return;
+
+        if (_runs.ForceQuit(Id)) _log("forcing Vintage Story to quit");
+    }
 
     private async Task PlayCoreAsync()
     {
@@ -2268,7 +2344,7 @@ public partial class PackDetailViewModel : ViewModelBase
             }
         }
 
-        LaunchStage = "Checking mods…";
+        Stage("Checking mods…");
 
         var report = await RunSyncAsync();
         if (report is null || report.Failed)
@@ -2323,17 +2399,16 @@ public partial class PackDetailViewModel : ViewModelBase
                 }
             }
 
-            LaunchStage = "Starting Vintage Story…";
+            Stage("Starting Vintage Story…");
             _log($"launching: {string.Join(' ', launcher.BuildArguments(options))}");
 
             var proc = launcher.Launch(options);
             _log($"Vintage Story started (pid {proc.Id})");
 
             // The game takes a while to put a window up. Keep saying so, and keep Play
-            // disabled, until it actually exits.
-            _gameRunning = true;
-            LaunchStage = $"Vintage Story is running (pid {proc.Id})";
-            _ = WatchAsync(proc);
+            // disabled, until it actually exits. Handed to the registry, which outlives
+            // this pane and so is still there to notice the exit.
+            _runs.Track(Id, proc);
         }
         catch (Exception e)
         {
@@ -2376,57 +2451,11 @@ public partial class PackDetailViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(NotBusy))]
     private void DeletePack() => _requestDelete(null);
 
-    /// <summary>Re-enables Play when the game exits, and reports a non-zero exit.</summary>
     /// <summary>
     /// Where the pack's worlds, mod configs and settings live. Always its own directory;
     /// it appears on first launch.
     /// </summary>
     public string DataDirectory => _packData.DataPathFor(Id);
-
-    private async Task WatchAsync(System.Diagnostics.Process proc)
-    {
-        try
-        {
-            await proc.WaitForExitAsync();
-        }
-        catch (Exception e) when (e is InvalidOperationException or SystemException)
-        {
-            // Process already gone; fall through and re-enable.
-        }
-
-        var code = TryExitCode(proc);
-
-        // A login made inside the pack, or a session the game rotated while playing,
-        // becomes the one every other pack uses next.
-        _packData.AfterExit(Id);
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            _gameRunning = false;
-            IsLaunching = false;
-            LaunchStage = "";
-
-            if (code is { } c && c != 0)
-            {
-                Error = $"Vintage Story exited with code {c}. See the Log tab.";
-                _log($"Vintage Story exited with code {c}");
-
-                // The moment the game's log matters, so it is put in front of you rather
-                // than left somewhere you would have to know to look.
-                ShowGameProblems($"exit code {c}");
-            }
-            else
-            {
-                _log("Vintage Story exited");
-            }
-        });
-    }
-
-    private static int? TryExitCode(System.Diagnostics.Process proc)
-    {
-        try { return proc.ExitCode; }
-        catch (InvalidOperationException) { return null; }
-    }
 
     /// <summary>
     /// Resolves the pack against ModDB, downloads what is missing, removes what is no
@@ -2453,7 +2482,7 @@ public partial class PackDetailViewModel : ViewModelBase
             var progress = new Progress<SyncStep>(s =>
             {
                 _log(Format(s));
-                if (IsLaunching) LaunchStage = $"Mods: {s.ModId} {s.Detail}";
+                if (IsLaunching) Stage($"Mods: {s.ModId} {s.Detail}");
 
                 // The row stops saying "downloading…" when sync has actually reached it,
                 // rather than when the whole run finishes.

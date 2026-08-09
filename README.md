@@ -71,6 +71,29 @@ Vintagestory --dataPath ~/.cairn/packs/anego/data \
              --connect anego.example.com:42420
 ```
 
+### A running game belongs to the pack, not to the pane
+
+The launcher's pack pane is rebuilt every time you select a different pack, so a launch
+tracked on it was forgotten the moment you clicked away: the pane came back saying nothing
+was running, **Play** was enabled again, and pressing it would have started a second copy
+of the game on the same save. Which pack has a game up is held for the whole session
+(`RunningGames`), alongside each pack's log, which is kept there for the same reason.
+
+So the sidebar marks the pack that is playing, and coming back to it finds the launch
+where you left it. A pack's game closing while you are looking at a different pack still
+writes its session back, still logs against the pack that ran, and still raises the crash
+report — it waits on that pack's pane rather than being lost.
+
+While a game is up, **Play** gives its slot to **Force quit** rather than sitting there
+greyed out beside it, and the progress bar goes — an indeterminate bar that never fills
+for the hours somebody is playing reads as a launcher that is stuck. Force quit is behind
+a confirmation, because it is a kill and not a quit: everything since the last save goes,
+and the game gets no chance to write one. It is there because a game that has stopped
+drawing is still a process holding the pack's save open, and the alternative is Activity
+Monitor. The exit is recorded as
+asked-for, so it reads as a quit rather than as the crash its non-zero exit code would
+otherwise make of it.
+
 ### Each pack has its own worlds, but you only log in once
 
 `Saves/`, `ModConfig/`, `Playerdata/` and `ModsByServer/` all live under the data path, and

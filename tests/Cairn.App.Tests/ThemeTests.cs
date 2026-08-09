@@ -283,11 +283,9 @@ public class ThemeTests : IDisposable
             }
         }
 
-        vm.Detail!.IsLaunching = true;
-        vm.Detail.LaunchStage = "Mods: glassview 1.3.0";
+        vm.Runs.Begin(vm.Detail!.Id, "Mods: glassview 1.3.0");
         Shot("08-launching");
-        vm.Detail.IsLaunching = false;
-        vm.Detail.LaunchStage = "";
+        vm.Runs.Abandon(vm.Detail.Id);
 
         // Settings holds Save / Delete pack / Export.
         var tabs = window.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();

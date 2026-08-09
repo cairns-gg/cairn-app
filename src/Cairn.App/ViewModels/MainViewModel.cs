@@ -40,6 +40,31 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
 
     public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
 
+    private bool _launching;
+    private bool _running;
+
+    /// <summary>
+    /// Says which pack has the game, from the one place that shows every pack at once.
+    /// Without it the only way to tell was to select each pack in turn — and a launcher
+    /// whose answer to "is it already running?" is "go and look" is how a second copy gets
+    /// started on the same save.
+    /// </summary>
+    public bool IsPlaying => _launching;
+
+    public string PlayingLine => _running ? "playing now" : _launching ? "starting…" : "";
+
+    /// <summary>Told by MainViewModel, which holds the registry these two come from.</summary>
+    public void PlayingChanged(bool launching, bool running)
+    {
+        if (_launching == launching && _running == running) return;
+
+        _launching = launching;
+        _running = running;
+
+        OnPropertyChanged(nameof(IsPlaying));
+        OnPropertyChanged(nameof(PlayingLine));
+    }
+
     /// <summary>
     /// The detail pane edits this same manifest instance, and these are computed getters
     /// with nothing to raise a change for them — so a rename or an added mod left the
@@ -81,6 +106,9 @@ public partial class MainViewModel : ViewModelBase
         _store = new PackStore();
         _packData = new PackData(_store);
         _gameStore = new GameStore();
+
+        Runs = new RunningGames(_store, NoteFor);
+        Runs.Changed += OnRunChanged;
 
         // Before anything reads the library: an install renamed underneath a list already
         // built is one that vanishes from the pane it is shown in.
@@ -129,6 +157,13 @@ public partial class MainViewModel : ViewModelBase
 
     private ObservableCollection<string> LogFor(string packId) =>
         _logs.TryGetValue(packId, out var log) ? log : _logs[packId] = [];
+
+    /// <summary>
+    /// Which packs have a game up, held here for the same reason the logs are: the detail
+    /// pane is rebuilt on every selection change, and a launch it owned was forgotten as
+    /// soon as another pack was clicked.
+    /// </summary>
+    public RunningGames Runs { get; }
 
     public GamesViewModel Games { get; }
 
@@ -455,6 +490,21 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>A game install appearing or disappearing changes what every pack can launch.</summary>
     private void OnLibraryChanged() => Detail?.RefreshGameState();
 
+    /// <summary>
+    /// A launch moved on. Only the pane for that pack has anything to redraw — the others
+    /// are not showing it, and the one that is may not be the one that started it.
+    /// </summary>
+    private void OnRunChanged(string packId)
+    {
+        if (Detail is { } detail && string.Equals(detail.Id, packId, StringComparison.OrdinalIgnoreCase))
+            detail.RefreshLaunchState();
+
+        // The sidebar says so too, for the packs that are not the one being looked at.
+        foreach (var row in Packs)
+            if (string.Equals(row.Id, packId, StringComparison.OrdinalIgnoreCase))
+                row.PlayingChanged(Runs.IsLaunching(row.Id), Runs.IsRunning(row.Id));
+    }
+
     partial void OnNewPackErrorChanged(string? value) => OnPropertyChanged(nameof(HasNewPackError));
 
     partial void OnNewPackNameChanged(string value)
@@ -486,7 +536,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         Detail = new PackDetailViewModel(
-            value.Manifest, _store, _moddb, _http, _library, _runtimes,
+            value.Manifest, _store, _moddb, _http, _library, _runtimes, Runs,
             log: LogFor(value.Id),
             note: line => NoteFor(value.Id, line),
             // The sidebar row shows the same manifest the detail pane is editing.
@@ -559,7 +609,13 @@ public partial class MainViewModel : ViewModelBase
         {
             try
             {
-                Packs.Add(new PackListItemViewModel(_store.Load(id)));
+                var row = new PackListItemViewModel(_store.Load(id));
+
+                // The list is rebuilt for a pack created, imported or deleted, none of
+                // which stops a game that is already up.
+                row.PlayingChanged(Runs.IsLaunching(id), Runs.IsRunning(id));
+
+                Packs.Add(row);
             }
             catch (Exception e)
             {

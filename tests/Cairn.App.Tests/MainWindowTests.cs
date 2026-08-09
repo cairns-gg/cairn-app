@@ -105,6 +105,15 @@ public class MainWindowTests : IDisposable
             .Where(t => t.IsEffectivelyVisible && !string.IsNullOrWhiteSpace(t.Text))
             .Select(t => t.Text!);
 
+    /// <summary>
+    /// Whether a button is actually on screen. <see cref="Buttons"/> finds it either way —
+    /// a hidden button is still in the visual tree — which is no answer at all when the
+    /// question is whether the pane is offering it.
+    /// </summary>
+    private static bool Showing(Visual root, string label) =>
+        root.GetVisualDescendants().OfType<Button>()
+            .Any(b => (b.Content as string) == label && b.IsEffectivelyVisible);
+
     private static Dictionary<string, Button> Buttons(Visual root) =>
         root.GetVisualDescendants()
             .OfType<Button>()
@@ -2221,8 +2230,7 @@ public class MainWindowTests : IDisposable
         Assert.False(detail.IsShowingLaunchStage);
 
         // Simulate the in-flight state; the real path also downloads mods.
-        detail.IsLaunching = true;
-        detail.LaunchStage = "Starting Vintage Story…";
+        vm.Runs.Begin(detail.Id, "Starting Vintage Story…");
 
         Assert.False(detail.CanLaunch);
         Assert.False(detail.PlayCommand.CanExecute(null));
@@ -2234,12 +2242,190 @@ public class MainWindowTests : IDisposable
             .First(b => (b.Content as string) == "Working…");
         Assert.False(play.IsEffectivelyEnabled);
 
-        detail.IsLaunching = false;
-        detail.LaunchStage = "";
+        vm.Runs.Abandon(detail.Id);
 
         Assert.True(detail.CanLaunch);
         Assert.Equal("Play", detail.PlayLabel);
         Assert.False(detail.IsShowingLaunchStage);
+    }
+
+    /// <summary>
+    /// The pane is rebuilt per selection, so a launch it held was forgotten the moment
+    /// another pack was clicked: the notification vanished, Play came back, and pressing
+    /// it started a second copy of the game on the same pack.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_running_pack_is_still_running_after_looking_at_another_one()
+    {
+        var (window, vm) = Show();
+
+        var running = vm.Packs.First();
+        vm.SelectedPack = running;
+        vm.Runs.Begin(running.Id, "Vintage Story is running (pid 4242)");
+
+        vm.SelectedPack = vm.Packs.First(p => p.Id != running.Id);
+        Assert.False(vm.Detail!.IsShowingLaunchStage);
+        Assert.True(vm.Detail.CanLaunch);
+
+        vm.SelectedPack = running;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.Detail!.IsLaunching);
+        Assert.Equal("Vintage Story is running (pid 4242)", vm.Detail.LaunchStage);
+        Assert.False(vm.Detail.PlayCommand.CanExecute(null));
+        Assert.Contains(VisibleText(window), t => t == "Vintage Story is running (pid 4242)");
+
+        vm.Runs.Abandon(running.Id);
+    }
+
+    /// <summary>
+    /// The sidebar is the only view of every pack at once, so it is where "which one has
+    /// the game?" is answered without clicking through them.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_sidebar_says_which_pack_is_playing()
+    {
+        var (window, vm) = Show();
+
+        var running = vm.Packs.First();
+        var other = vm.Packs.First(p => p.Id != running.Id);
+
+        Assert.False(running.IsPlaying);
+
+        vm.Runs.Begin(running.Id, "Checking mods…");
+        Assert.True(running.IsPlaying);
+        Assert.Equal("starting…", running.PlayingLine);
+        Assert.False(other.IsPlaying);
+
+        // Only once the process is up does it claim the game is actually being played.
+        vm.Runs.Track(running.Id, System.Diagnostics.Process.GetCurrentProcess());
+        Assert.Equal("playing now", running.PlayingLine);
+        Assert.Contains(VisibleText(window), t => t == "playing now");
+
+        vm.Runs.Abandon(running.Id);
+        Assert.False(running.IsPlaying);
+        Assert.DoesNotContain(VisibleText(window), t => t == "playing now");
+    }
+
+    /// <summary>A process this test can kill without killing the test run.</summary>
+    private static System.Diagnostics.Process Sleeper() =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
+            Arguments = OperatingSystem.IsWindows() ? "/c timeout /t 120 /nobreak" : "-c \"sleep 120\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        })!;
+
+    /// <summary>
+    /// A game that has stopped drawing is still a process holding the save open. Killing it
+    /// is destructive — everything since the last save goes — so it asks first, and a
+    /// refusal leaves the game exactly where it was.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Force_quit_asks_first_and_a_refusal_kills_nothing()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.First();
+
+        var detail = vm.Detail!;
+        var pack = vm.Packs.First(p => p.Id == detail.Id);
+
+        // Nothing to kill until there is a process: a launch still resolving mods has not
+        // started the game yet.
+        vm.Runs.Begin(detail.Id, "Checking mods…");
+        Assert.False(detail.CanForceQuit);
+        Assert.False(Showing(window, "Force quit…"));
+
+        // Still on its way: Play holds its slot, saying it is working, and the bar turns.
+        Assert.True(detail.ShowPlay);
+        Assert.True(detail.IsStarting);
+
+        using var game = Sleeper();
+        vm.Runs.Track(detail.Id, game);
+
+        Assert.True(detail.CanForceQuit);
+        Assert.True(Showing(window, "Force quit…"));
+
+        // Play gives the slot up rather than sitting there greyed out, and there is no
+        // longer anything in progress to draw a bar for.
+        Assert.False(detail.ShowPlay);
+        Assert.False(detail.IsStarting);
+        Assert.False(Showing(window, "Working…"));
+        Assert.False(window.GetVisualDescendants().OfType<ProgressBar>()
+            .Any(b => b.IsIndeterminate && b.IsEffectivelyVisible));
+
+        ConfirmViewModel? asked = null;
+        vm.Confirm = c => { asked = c; return Task.FromResult(false); };
+
+        await detail.ForceQuitCommand.ExecuteAsync(null);
+
+        Assert.NotNull(asked);
+        Assert.Equal("Force Vintage Story to quit?", asked!.Title);
+        Assert.Equal("Force quit", asked.ConfirmLabel);
+        Assert.Contains("since the last save is lost", asked.Message);
+
+        Assert.False(game.HasExited);
+        Assert.True(pack.IsPlaying);
+
+        game.Kill();
+        game.WaitForExit(10_000);
+    }
+
+    /// <summary>
+    /// The kill is an exit like any other as far as the pack is concerned — except that it
+    /// must not be reported as a crash, which is what its non-zero exit code would
+    /// otherwise make of it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Force_quit_ends_the_game_and_does_not_call_it_a_crash()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.First();
+
+        var detail = vm.Detail!;
+        var pack = vm.Packs.First(p => p.Id == detail.Id);
+
+        using var game = Sleeper();
+        vm.Runs.Track(detail.Id, game);
+        Assert.Equal("playing now", pack.PlayingLine);
+
+        vm.Confirm = _ => Task.FromResult(true);
+        await detail.ForceQuitCommand.ExecuteAsync(null);
+
+        await WaitFor(() => !pack.IsPlaying);
+
+        Assert.True(game.HasExited);
+        Assert.False(detail.IsLaunching);
+        Assert.False(detail.CanForceQuit);
+        Assert.True(detail.PlayCommand.CanExecute(null));
+
+        Assert.Contains(detail.Log, l => l == "Vintage Story was forced to quit");
+        Assert.DoesNotContain(detail.Log, l => l.StartsWith("Vintage Story exited with code"));
+        Assert.Null(detail.Error);
+    }
+
+    /// <summary>
+    /// Whichever pane is showing when the launch moves on is the one that redraws — not
+    /// the one that pressed Play, which may well have been rebuilt since.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_launch_that_progresses_while_you_are_elsewhere_is_shown_on_your_return()
+    {
+        var (_, vm) = Show();
+
+        var launching = vm.Packs.First();
+        vm.SelectedPack = launching;
+        vm.Runs.Begin(launching.Id, "Checking mods…");
+
+        vm.SelectedPack = vm.Packs.First(p => p.Id != launching.Id);
+        vm.Runs.Report(launching.Id, "Starting Vintage Story…");
+
+        vm.SelectedPack = launching;
+        Assert.Equal("Starting Vintage Story…", vm.Detail!.LaunchStage);
+
+        vm.Runs.Abandon(launching.Id);
+        Assert.False(vm.Detail.IsShowingLaunchStage);
     }
 
     [AvaloniaFact]

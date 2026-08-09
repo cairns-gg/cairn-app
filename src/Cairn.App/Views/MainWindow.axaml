@@ -63,10 +63,22 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:PackListItemViewModel">
                             <StackPanel Spacing="2" Margin="0,4">
-                                <TextBlock Text="{Binding Display}" FontWeight="SemiBold" />
+                                <!-- The dot sits beside the name rather than under it, so
+                                     a glance down the list finds the pack with the game
+                                     without reading any of the rows. -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <TextBlock Grid.Column="0" Text="{Binding Display}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Ellipse Grid.Column="1" Width="7" Height="7" VerticalAlignment="Center"
+                                             Fill="{DynamicResource VsAccentHoverBrush}"
+                                             IsVisible="{Binding IsPlaying}" />
+                                </Grid>
                                 <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.7" />
                                 <TextBlock Text="{Binding ServerLine}" FontSize="11" Opacity="0.55"
                                            IsVisible="{Binding HasServer}" />
+                                <TextBlock Text="{Binding PlayingLine}" FontSize="11"
+                                           Foreground="{DynamicResource VsAccentHoverBrush}"
+                                           IsVisible="{Binding IsPlaying}" />
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -258,6 +270,17 @@
                              button was an action defined by what it did not do. -->
                         <Button Grid.Column="0"
                                 Content="{Binding Detail.PlayLabel}" Command="{Binding Detail.PlayCommand}"
+                                IsVisible="{Binding Detail.ShowPlay, FallbackValue=True}"
+                                Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96"
+                                HorizontalAlignment="Left" />
+
+                        <!-- Play's own slot, once the game is up: there is nothing to press
+                             until it goes away, and this is what makes it go away. A hung
+                             game leaves the pack unplayable and its save held open, and the
+                             alternative is Activity Monitor. -->
+                        <Button Grid.Column="0"
+                                Content="Force quit…" Command="{Binding Detail.ForceQuitCommand}"
+                                IsVisible="{Binding Detail.CanForceQuit, FallbackValue=False}"
                                 Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96"
                                 HorizontalAlignment="Left" />
 
@@ -289,7 +312,11 @@
                     <Border IsVisible="{Binding Detail.IsShowingLaunchStage, FallbackValue=False}"
                             Classes="sunken" Padding="10,7">
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <!-- Only while it is still getting there. A bar that never
+                                 fills for the hours somebody is playing is a launcher that
+                                 looks stuck. -->
                             <ProgressBar Grid.Column="0" Width="90" Height="6" IsIndeterminate="True"
+                                         IsVisible="{Binding Detail.IsStarting, FallbackValue=False}"
                                          VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="{Binding Detail.LaunchStage}"
                                        FontSize="12" VerticalAlignment="Center"
