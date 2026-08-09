@@ -89,6 +89,11 @@ public class MainWindowTests : IDisposable
         vm.Confirm = null;
         vm.ConfirmVersionChange = null;
         vm.ConfirmImport = null;
+
+        // Import asks where the pack is coming from in a dialog of its own. Without one it
+        // falls back to the pane, which is what these tests drive; the dialog's own choices
+        // are exercised by the tests that supply a chooser.
+        vm.ChooseImportSource = null;
         if (vm.Detail is not null) vm.Detail.ConfirmVersionChange = null;
 
         return (window, vm);
@@ -1825,6 +1830,94 @@ public class MainWindowTests : IDisposable
         Assert.True(buttons.ContainsKey("Import"), "no Import button");
         Assert.NotNull(buttons["Import"].Command);
         Assert.Contains(VisibleText(window), t => t.Contains("Import a pack"));
+    }
+
+    /// <summary>
+    /// Answering "from your Vintage Story install" creates the pack the dialog planned.
+    ///
+    /// The plan itself is Core's, and tested there against a ModDB that can be stood up;
+    /// what is checked here is the join — that an answer of Install creates a pack under the
+    /// name given, selects it, and does not leave the import pane sitting open behind it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Importing_from_an_install_creates_the_pack_it_planned()
+    {
+        var (_, vm) = Show();
+
+        vm.ChooseImportSource = choice =>
+        {
+            Assert.Equal(ImportSource.Install, choice.Source);   // the default it opens on
+            choice.PackName = "My Mods";
+            return Task.FromResult(true);
+        };
+
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        Assert.Contains(vm.Packs, p => p.Id == "my-mods");
+        Assert.Equal("my-mods", vm.SelectedPack!.Id);
+        Assert.False(vm.ShowImport);
+    }
+
+    /// <summary>
+    /// A pack made from the mods you are running is a pack for the game you are running them
+    /// on — not for the newest version Cairn happens to know about, which is what the dialog
+    /// used to open on.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Importing_from_an_install_targets_that_installs_game_version()
+    {
+        var (_, vm) = Show();
+
+        string? targeted = null, install = null;
+
+        vm.ChooseImportSource = choice =>
+        {
+            targeted = choice.GameVersion;
+            install = choice.PlayedOn;
+            return Task.FromResult(false);
+        };
+
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        // Stated as the rule rather than as a version, since which install this machine has
+        // is not something a test gets to decide.
+        Assert.NotNull(targeted);
+        if (install is not null) Assert.Equal(install, targeted);
+    }
+
+    [AvaloniaFact]
+    public async Task Saying_no_to_the_import_dialog_imports_nothing()
+    {
+        var (_, vm) = Show();
+
+        vm.ChooseImportSource = _ => Task.FromResult(false);
+
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, vm.Packs.Count);
+        Assert.False(vm.ShowImport);
+    }
+
+    /// <summary>
+    /// A link answered in the dialog goes through the same approval it always did — the
+    /// dialog collects the URL, it does not authorise it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_link_given_in_the_dialog_still_has_to_be_approved()
+    {
+        var (_, vm) = Show();
+
+        vm.ChooseImportSource = choice =>
+        {
+            choice.FromLink = true;
+            choice.Url = "https://cairns.gg/someone/their-pack";
+            return Task.FromResult(true);
+        };
+
+        // No confirmer, as Show leaves it: the offer cannot be answered, so nothing lands.
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, vm.Packs.Count);
     }
 
     [AvaloniaFact]

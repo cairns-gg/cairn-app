@@ -66,6 +66,7 @@ internal static class Program
                 "delete" => Delete(store, args),
                 "export" => Export(store, args),
                 "import" => await Import(store, http, args),
+                "import-install" => await ImportInstall(store, moddb, args),
                 "games" => await Games(games, http, args),
                 "optimum" => await Optimum(games, runtimes, http, args),
                 "runtimes" => await Runtimes(runtimes, http, args),
@@ -103,6 +104,9 @@ internal static class Program
               cairn-cli delete <id>                   delete a pack and its mods
               cairn-cli export <id> [-o file] [--no-lock]   write a shareable pack file
               cairn-cli import <file|url> [--id x] [--loose] create a pack from one
+              cairn-cli import-install <name> [--id x] [--game <version>] [--from <dir>]
+                                                      [--include-disabled] [--dry-run]
+                                                      make a pack from the mods you already have
               cairn-cli games                         list installed and available game versions
               cairn-cli games install <version>       download and install a game version
               cairn-cli games remove <version>        delete an installed game version
@@ -292,6 +296,71 @@ internal static class Program
                                   + "can move to another release nobody has tried");
         }
 
+        return 0;
+    }
+
+    /// <summary>
+    /// Makes a pack out of the mods somebody already has in plain Vintage Story.
+    ///
+    /// Prints every mod and what became of it, including the ones left out — a pack that
+    /// silently holds eleven of your fourteen mods is worse than one that says which three
+    /// it could not take and why.
+    /// </summary>
+    private static async Task<int> ImportInstall(PackStore store, ModDbClient moddb, string[] args)
+    {
+        if (args.Length < 2)
+            return Fail("usage: cairn-cli import-install <name> [--id <id>] [--game <version>] "
+                        + "[--from <dir>] [--include-disabled] [--dry-run]");
+
+        var name = args[1];
+        var install = GameInstall.TryLocate();
+
+        var playedOn = install?.Version is { } v and not "unknown" ? v : null;
+        var gameVersion = ArgValue(args, "--game") ?? playedOn;
+        if (gameVersion is null)
+            return Fail("could not detect the game version; pass --game <version>");
+
+        var modsDir = ArgValue(args, "--from") ?? InstalledMods.DefaultModsDir;
+        var scan = InstalledMods.Scan(modsDir);
+
+        Console.WriteLine($"reading {modsDir}");
+
+        if (scan.Mods.Count == 0)
+            return Fail($"no mod zips in {modsDir}");
+
+        foreach (var ignored in scan.Ignored)
+            Console.WriteLine($"  ignoring {ignored} — only zipped mods can be imported");
+
+        // Read from the data path the mods were found under, so --from somewhere else does
+        // not have the wrong install's switched-off list applied to it.
+        var disabled = args.Contains("--include-disabled")
+            ? null
+            : InstalledMods.DisabledIn(Path.GetDirectoryName(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(modsDir)))!);
+
+        // Printed as each one is settled rather than in a block at the end: a long import is
+        // one ModDB lookup per mod, and a terminal that says nothing for a minute looks hung.
+        var plan = await new InstallImport(moddb).PlanAsync(
+            scan, gameVersion, disabled, playedOn,
+            new Progress<ImportCandidate>(c =>
+                Console.WriteLine($"  {(c.Included ? "+" : "-")} {c.Mod.Describe}: "
+                                  + $"{c.Verdict.ToString().ToLowerInvariant()} — {c.Note}")));
+
+        var taking = plan.Count(c => c.Included);
+        Console.WriteLine($"{taking} of {scan.Mods.Count} mods can go in a pack for game {gameVersion}");
+
+        if (args.Contains("--dry-run")) return 0;
+        if (taking == 0) return Fail("nothing to import");
+
+        var id = ArgValue(args, "--id") ?? store.SuggestId(name);
+
+        var problem = store.DescribeIdProblem(id);
+        if (problem is not null) return Fail(problem);
+
+        InstallImport.CreatePack(store, id, gameVersion, name, plan);
+
+        Console.WriteLine($"created {store.ManifestPath(id)}  (id {id}, game {gameVersion})");
+        Console.WriteLine($"run `cairn-cli sync {id}` to install them into the pack");
         return 0;
     }
 
@@ -580,7 +649,8 @@ internal static class Program
         }
 
         // Carried in now, so a pack does not ask for a fresh login.
-        packData.BeforeLaunch(id);
+        foreach (var dropped in packData.BeforeLaunch(id))
+            Console.WriteLine($"no longer loading mods from {dropped} — this pack has its own");
 
         var proc = launcher.Launch(options);
         Console.WriteLine($"started pid {proc.Id}");

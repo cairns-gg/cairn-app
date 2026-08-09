@@ -31,6 +31,7 @@ public partial class MainWindow : Window
         vm.ConfirmPublish = ConfirmPublishAsync;
         vm.ConfirmPackUpdate = ConfirmPackUpdateAsync;
         vm.ConfirmImport = ConfirmImportAsync;
+        vm.ChooseImportSource = ChooseImportSourceAsync;
         vm.Confirm = ConfirmAsync;
         vm.RunOptimumBuild = RunOptimumBuildAsync;
         vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
@@ -60,6 +61,13 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmImportAsync(ImportViewModel offer) =>
         new ImportWindow { DataContext = offer }.ShowDialog<bool>(this);
+
+    /// <summary>
+    /// True only if the button was pressed. Dismissing it any other way imports nothing —
+    /// including from an install, where the scan has already run and produced a plan.
+    /// </summary>
+    private Task<bool> ChooseImportSourceAsync(ImportSourceViewModel choice) =>
+        new ImportSourceWindow { DataContext = choice }.ShowDialog<bool>(this);
 
     private Task ShowPreferencesAsync(PreferencesViewModel preferences) =>
         new PreferencesWindow { DataContext = preferences }.ShowDialog(this);

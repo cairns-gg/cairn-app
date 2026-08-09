@@ -110,6 +110,57 @@ put one inside a pack, copy its `.vcdbs` into `packs/<id>/data/Saves`.
 `<dataPath>/Mods` — but with a per-pack data path that second directory is the pack's own, so
 nothing leaks between packs.
 
+### The mods folder a pack used to inherit
+
+That was not the whole story, and the gap produced the most-reported bug there has been:
+install a mod in plain Vintage Story, add the same mod to a pack, and the game loaded **two
+copies of it**.
+
+The game does not work out where to look for mods purely from `--dataPath`. It keeps the
+list in `clientsettings.json`, as absolute paths, written the first time it ran:
+
+```json
+"stringListSettings": {
+  "modPaths": ["Mods", "/Users/you/Library/Application Support/VintagestoryData/Mods"]
+}
+```
+
+A new pack's settings are seeded by copying the player's own, so their keybinds and graphics
+carry over — and that copy brought the second path with it. `--addModPath` adds to that list
+rather than replacing it, so every pack searched the player's personal Mods folder as well
+as its own. The game's own log is unambiguous:
+
+```
+Will search the following paths for mods:
+    ~/.cairn/games/1.22.6.app/Mods
+    ~/Library/Application Support/VintagestoryData/Mods     <- not this pack's
+    ~/.cairn/packs/anego/Mods
+```
+
+`ClientModPaths` rewrites the setting to name only the game's own Mods directory and this
+pack's. It runs when a pack's settings are seeded and again on **every launch**, because
+every pack made before this existed still carries the copied value and a launch is the only
+thing that reaches into one. What it drops is reported — "no longer loading mods from …" —
+since the first launch after the fix has fewer mods in it than the last one did, and that is
+not a thing to discover in-game.
+
+The setting is written even when the file or the key is absent, rather than left to the
+game's default. The default is not the pack's: the log above is from a pack that had never
+been played, launched with `--dataPath` pointing at an empty directory.
+
+`<install>/Mods` stays in the list. It holds VSSurvivalMod, VSEssentials and VSCreativeMod —
+the game itself — and it is not where mods are added by hand; the game ships a
+`do_not_add_mods_here.txt` in it saying so.
+
+Two smaller things fell out of the same investigation. `PackStore.Create` makes the data
+directory, which is how a pack records that it has its own data path — and `EnsureDataPath`
+was keyed off that same directory existing, so packs created through the launcher were never
+seeded at all. And a seeded copy carries the player's login: since the newest session on the
+machine wins by file timestamp, and a file copied a moment ago is the newest by
+construction, making a pack would have signed every other pack back in as whoever the shared
+data path last was. The seed is stripped of session keys, which arrive a moment later from
+Cairn's own record.
+
 ## Usage
 
 The launcher is the primary interface — everything can be done from it, no terminal
@@ -117,6 +168,9 @@ required:
 
 - **Pack list** with New pack / Refresh; the new-pack form takes id, display name, game
   version and an optional server.
+- **Import…** asks where the pack is coming from: the Vintage Story install already on this
+  machine, a link, or pasted text. One dialog with the three named, rather than the box that
+  took a URL or a pack and guessed which — and which had no way at all to offer the first.
 - **Mods** tab — what the pack contains, what is pinned, and what is actually installed.
   Remove a mod, or fetch its compatible releases and pin an exact version.
 - **Add mods** tab — search ModDB and add a result to the pack.
@@ -206,6 +260,7 @@ cairn-cli add <id> <modid> [version]    add a mod to a pack
 cairn-cli remove <id> <modid>           remove a mod from a pack
 cairn-cli delete <id>                   delete a pack and its mods
 cairn-cli search <text>                 search ModDB
+cairn-cli import-install <name>         make a pack from the mods you already have
 cairn-cli sync <id>                     resolve + download
 cairn-cli launch <id>                   sync, then start the game
 ```
@@ -223,8 +278,85 @@ cairn-cli import shared.json --id anego-copy    # when the id collides
 cairn-cli import shared.json --loose            # track newest instead of pinning
 ```
 
-In the launcher: **Import…** in the sidebar (paste the file, or a URL), and **Export…** in
-a pack's Settings tab.
+In the launcher: **Import…** in the sidebar, and **Export…** in a pack's Settings tab.
+
+### Importing the mods you already have
+
+Nearly everybody arriving at Cairn has already played Vintage Story. They have a Mods folder
+with thirty mods in it, and what the launcher used to offer them was an empty pack and a
+search box — which is a poor answer, and became a worse one once packs stopped inheriting
+that folder (above). The two changes only make sense together.
+
+```
+cairn-cli import-install "My mods" --dry-run    # what it would take, and what it would not
+cairn-cli import-install "My mods"              # create the pack
+cairn-cli import-install "My mods" --from /path/to/other/Mods --game 1.22.6
+```
+
+Every zip is read for its own `modinfo.json` — the same reader sync uses — and then looked up
+on ModDB. The second half is worth justifying, because the mods are right there on disk:
+
+- **Your versions, without pinning them.** The manifest names the mod and nothing else, so
+  what stops the next sync taking the newest release is the lockfile — and a lock entry needs
+  a URL, a release id and a file id. The zip carries none of those. Without the lookup the
+  import could honour *your versions* or *unpinned*, not both.
+- **Which mods cannot go in a pack, before the pack exists.** A pack is a list anyone can
+  fetch. A mod that has been taken down since it was installed is indistinguishable, on disk,
+  from one that has not — and finding out on the first Play is finding out too late.
+
+The folder is listed as soon as it has been read, which is instant; each row says
+`checking…` until its own lookup lands. Holding the list back for the lookups made finding
+somebody's own mods look like the slow part of the job.
+
+What comes back is one line per mod, including the ones that will not make it:
+
+```
++ A Culinary Artillery Experimental 2.0.0-dev.21: ready — 2.0.0-dev.21
++ Self-Recording Thermometer 0.5.0: ready — 0.5.0
+- Alloy Calculator Stuzzichino 1.2.19: unknown — ModDB has no mod with id 'alloycalculatorstuzzichino'
+4 of 5 mods can go in a pack for game 1.22.6
+```
+
+A mod ModDB will not serve is skipped and named. Copying its zip into the pack is the other
+answer, and a worse one: a pack whose mods come from a folder on one machine cannot be
+shared, published or reproduced by anyone, which is most of what a pack is for.
+
+**The versions you are running are imported, and nothing is pinned.** A pin means "stay
+here", and nobody choosing this has said that — they have said "start me where I am". So the
+manifest names the mods and the exact releases go into the lockfile, which is what sync
+installs from; the update button works exactly as it does for any other pack. Pinning
+instead would reproduce the folder too, and then freeze it forever.
+
+The lock entries are written with no checksum, because nothing has been downloaded yet.
+That is a state the syncer already handles — it verifies against a locked hash when there is
+one and records the hash it computed when there is not — so the first sync fetches precisely
+those releases and fills the rest in. Taking the hash from the player's own copy would be
+the wrong answer: it would describe bytes ModDB may not serve, which is exactly the mismatch
+the field exists to catch.
+
+In the launcher this is one step and asks one question — what to call the pack. Choosing the
+source reads the folder immediately, because reading it is what choosing it meant; switching
+to another source cancels that, so somebody who came to paste a link does not wait on forty
+ModDB lookups on the way past.
+
+The game version is not among the questions. A pack made from the mods you are running is a
+pack for the game you are running them on, so it is taken from the install and stated rather
+than offered. There was a dropdown here briefly, defaulted from the newest version Cairn knew
+about and sitting next to the button as "Scan for game 1.22.6" — which read as a filter on
+the scan, and asked something with one sensible answer. Moving a pack to another game version
+is a different job, and Settings already does it properly, with a preview of what it would do
+to every mod. The CLI keeps `--game` because it is a scriptable tool and that is what flags
+are for.
+
+Two judgements are worth spelling out. A mod switched off in Vintage Story is left off — it
+is not part of what is being played, and importing it would quietly turn it back on. And a
+release marked for no version like the pack's is imported as **accepted**, since running it
+is the same testimony `--accept-unmarked` records — but only when the folder was being
+played on a game version like the pack's. Someone importing a 1.21.4 install into a 1.22.6
+pack has said nothing whatever about 1.22.6, so those mods move to the newest release the
+new game actually has.
+
+Cairn only ever *reads* the folder. Plain Vintage Story goes on working exactly as it did.
 
 Including the lock is what makes a shared pack *reproducible* rather than merely similar.
 The author's lock travels with the pack and their checksums with it, so the first sync

@@ -1,0 +1,164 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.ImportSourceWindow"
+        x:DataType="vm:ImportSourceViewModel"
+        Title="Import a pack"
+        Width="620" MinWidth="480" MaxHeight="760"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <!--
+        Same shape as the other dialogs: the long thing in the middle scrolls, and what
+        commits it keeps its place at the bottom however long the list gets.
+
+        The height follows the content rather than being fixed, because the three sources
+        are not the same size. A link is one text box; an install is a list of forty mods.
+        A window tall enough for the longest one left the short ones as a field, a button,
+        and a lot of nothing — which reads as something failing to load. MaxHeight is what
+        keeps a big install inside the screen: past it the list scrolls, which is what the
+        scroll area was always for.
+    -->
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,10">
+            <TextBlock Text="Where is it coming from?" FontSize="16" FontWeight="SemiBold" />
+
+            <!-- Named rather than guessed from what gets typed. The first of the three is
+                 the one most people want and the one that used not to exist. -->
+            <RadioButton GroupName="Source" IsChecked="{Binding FromInstall}"
+                         Content="From your Vintage Story install" FontSize="12" />
+            <RadioButton GroupName="Source" IsChecked="{Binding FromLink}"
+                         Content="From a link" FontSize="12" />
+            <RadioButton GroupName="Source" IsChecked="{Binding FromPaste}"
+                         Content="From pasted text or a file" FontSize="12" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
+
+            <Border IsVisible="{Binding HasError}" Padding="10,8" CornerRadius="1"
+                    Background="{DynamicResource VsErrorFillBrush}"
+                    BorderBrush="{DynamicResource VsErrorBrush}" BorderThickness="1">
+                <TextBlock Text="{Binding Error}" TextWrapping="Wrap" FontSize="12" />
+            </Border>
+
+            <!-- Naming the pack: only ever asked when making one from an install. A shared
+                 pack arrives with a name, and is renamed on the dialog that shows it. -->
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
+                  IsVisible="{Binding FromInstall}">
+                <TextBlock Grid.Column="0" Text="Call it" FontSize="12" Opacity="0.7"
+                           VerticalAlignment="Center" MinWidth="70" />
+                <TextBox Grid.Column="1" Name="NameBox" Text="{Binding PackName}" />
+                <TextBlock Grid.Column="2" Text="{Binding Slug}" FontSize="11" Opacity="0.6"
+                           VerticalAlignment="Center" FontFamily="monospace" />
+            </Grid>
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
+                  IsVisible="{Binding !FromInstall}">
+                <TextBlock Grid.Column="0" Text="Import as" FontSize="12" Opacity="0.7"
+                           VerticalAlignment="Center" MinWidth="70" />
+                <TextBox Grid.Column="1" Name="IdBox" Text="{Binding AsId}"
+                         PlaceholderText="(keep the author's name)" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Name="ImportButton" Content="{Binding ImportLabel}" Classes="accent"
+                        Padding="16,5" Click="OnImport" IsEnabled="{Binding CanImport}" />
+                <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                        Click="OnCancel" IsCancel="True" />
+            </StackPanel>
+
+            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                       Text="Nothing downloads yet — this creates the pack, and the mods arrive when you sync it." />
+        </StackPanel>
+
+        <!-- One body per source, only one of them ever visible. -->
+        <Panel>
+
+            <!-- From the install -->
+            <DockPanel IsVisible="{Binding FromInstall}" LastChildFill="True">
+                <!--
+                    No version to pick and no button to press: there is one folder, one game
+                    version — the one those mods are being run on — and the list below is
+                    the whole reason for choosing this source. It reads the folder as soon as
+                    the dialog opens.
+                -->
+                <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Opacity="0.8"
+                               Text="Builds a pack from the mods you already have, at the versions you are running. Your own Vintage Story is left exactly as it is." />
+
+                    <TextBlock Text="{Binding InstallNote}" FontSize="12" TextWrapping="Wrap" />
+
+                    <TextBlock Text="{Binding ModsDir}" FontSize="11" Opacity="0.55"
+                               FontFamily="monospace" TextWrapping="Wrap" />
+
+                    <!-- The summary says what is in the folder as soon as it has been read,
+                         and what can go in a pack once the lookups are done. The count
+                         beside it only exists while they are running. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <TextBlock Text="{Binding Summary}" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Progress}" FontSize="12" Opacity="0.6"
+                                   IsVisible="{Binding Busy}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Panel>
+                    <!-- Nothing to show yet. An empty bordered scroll area looks exactly
+                         like a text box you are not allowed to type in, which is the last
+                         thing to show somebody the moment a dialog opens. -->
+
+                    <Border IsVisible="{Binding HasRows}"
+                            BorderBrush="{DynamicResource VsBorderBrush}" BorderThickness="1"
+                            CornerRadius="1" Padding="2">
+                        <ScrollViewer Name="ModList" HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Mods}" Margin="8,6">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ImportRowViewModel">
+                                        <!-- The ones that will not make it are dimmed, not
+                                             hidden: a count that does not add up is worse
+                                             than a list with three greyed rows in it. -->
+                                        <Grid ColumnDefinitions="*,150" Margin="0,3"
+                                              Opacity="{Binding RowOpacity}">
+                                            <StackPanel Grid.Column="0" Spacing="1">
+                                                <TextBlock Text="{Binding Name}" FontSize="12"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Note}" FontSize="11"
+                                                           Opacity="0.6" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Verdict}"
+                                                       FontSize="11" Opacity="0.75"
+                                                       VerticalAlignment="Top" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </Panel>
+            </DockPanel>
+
+            <!-- From a link -->
+            <StackPanel IsVisible="{Binding FromLink}" Spacing="8">
+                <TextBlock FontSize="12" TextWrapping="Wrap" Opacity="0.8"
+                           Text="Fetches what the link names and shows you what is in it — who published it, and every mod and version it would install — before anything is taken." />
+                <TextBox Name="UrlBox" Text="{Binding Url}"
+                         PlaceholderText="https://cairns.gg/someone/their-pack" />
+            </StackPanel>
+
+            <!-- From pasted text or a file -->
+            <DockPanel IsVisible="{Binding FromPaste}" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Top" FontSize="12" TextWrapping="Wrap" Opacity="0.8"
+                           Margin="0,0,0,8"
+                           Text="Paste an exported pack, or the path to one on this machine. Something in your hand is different from a link, and imports directly." />
+                <!-- A pack is a few hundred lines of JSON. Room to see that something
+                     arrived, and to scroll it; the window is no taller than it needs. -->
+                <TextBox Name="PasteBox" Text="{Binding Text}" AcceptsReturn="True"
+                         MinHeight="220" MaxHeight="360"
+                         TextWrapping="NoWrap" FontFamily="monospace" FontSize="12"
+                         PlaceholderText="Paste the pack JSON here, or a path to a .cairn.json file" />
+            </DockPanel>
+        </Panel>
+    </DockPanel>
+</Window>

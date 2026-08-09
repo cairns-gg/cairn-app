@@ -591,14 +591,92 @@ public partial class MainViewModel : ViewModelBase
         Status = line;
     }
 
+    /// <summary>
+    /// Asks where the pack is coming from, then does that.
+    ///
+    /// A dialog rather than the pane it replaced, because there are three ways in and the
+    /// pane only ever offered two of them — it took a URL or pasted text and guessed which.
+    /// The third is the one nearly every new player needs: they have already played Vintage
+    /// Story, they have a Mods folder, and what the launcher used to offer them was an empty
+    /// pack and a search box.
+    ///
+    /// Each answer is handed to the code that already did it. Scanning an install produces a
+    /// plan and nothing else, so the pack is still created here, where packs are created.
+    /// </summary>
     [RelayCommand]
-    private void BeginImport()
+    private async Task BeginImport()
     {
         ImportText = "";
         ImportAsId = "";
         ImportError = null;
         IsCreating = false;
+
+        if (ChooseImportSource is null)
+        {
+            IsImporting = true;   // no view to open a dialog: the pane still takes a paste
+            return;
+        }
+
+        var choice = NewImportChoice();
+
+        if (!await ChooseImportSource(choice)) return;
+
+        if (choice.Source == ImportSource.Install)
+        {
+            ImportFromInstall(choice);
+            return;
+        }
+
+        // The link and paste answers are the two the pane always handled, and they are
+        // handled by exactly the same code: a URL is fetched and shown for approval, text
+        // in your hand imports directly.
         IsImporting = true;
+        ImportAsId = choice.AsId;
+        ImportText = choice.Payload;
+
+        await ImportPack();
+    }
+
+    /// <summary>
+    /// Everything the import dialog needs to read this machine's own install. The mods it
+    /// lists are read, never touched: plain Vintage Story goes on working exactly as it did.
+    /// </summary>
+    private ImportSourceViewModel NewImportChoice()
+    {
+        var playedOn = _install?.Version is { } v && GameVersions.IsPlausibleVersion(v) ? v : null;
+
+        return new ImportSourceViewModel(
+            new InstallImport(_moddb),
+            InstalledMods.DefaultModsDir,
+            InstalledMods.DisabledIn(GameInstall.DefaultDataPath),
+            playedOn,
+
+            // Only reached when there is no install to take a version from. A pack made from
+            // the mods you are running is a pack for the game you are running them on, so
+            // the dialog asks nothing about it; moving a pack to another game version is its
+            // own step in Settings, with a preview of what it would do to every mod.
+            gameVersion: NewPackGameVersion,
+            suggestId: _store.SuggestId);
+    }
+
+    private void ImportFromInstall(ImportSourceViewModel choice)
+    {
+        try
+        {
+            var id = _store.SuggestId(choice.PackName);
+
+            var manifest = InstallImport.CreatePack(
+                _store, id, choice.GameVersion, choice.PackName.Trim(), choice.Plan);
+
+            Added(manifest);
+            NoteFor(id, $"imported {manifest.Mods.Count} mods from your Vintage Story install "
+                        + "— press Play to install them into the pack");
+        }
+        catch (Exception e)
+        {
+            IsImporting = true;
+            ImportError = e.Message;
+        }
     }
 
     [RelayCommand]
@@ -804,6 +882,13 @@ public partial class MainViewModel : ViewModelBase
     /// absent — headless tests — nothing is added, which is the safe way to be missing.
     /// </summary>
     public Func<ImportViewModel, Task<bool>>? ConfirmImport { get; set; }
+
+    /// <summary>
+    /// Asks where a pack is coming from, and returns whether the answer was to go ahead.
+    /// Supplied by the view; when absent — headless tests — the pane behind it is opened
+    /// instead, which is the same three ways in with one of them missing rather than none.
+    /// </summary>
+    public Func<ImportSourceViewModel, Task<bool>>? ChooseImportSource { get; set; }
 
     /// <summary>
     /// Shows a build happening and returns whether it produced an install. Supplied by the
