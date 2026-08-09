@@ -53,32 +53,61 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     public void EnsureDataPath(string id)
     {
         var data = store.DataDir(id);
-        if (Directory.Exists(data)) return;
+        var target = SettingsIn(data);
 
         Directory.CreateDirectory(data);
 
         // Seeded once from whatever the player already uses, so a new pack starts with
         // their keybinds and graphics settings rather than bare defaults.
+        //
+        // Keyed off the settings file, not the directory. PackStore.Create makes the
+        // directory itself — that is how a pack records that it has its own data path — so
+        // the older guard here saw it and returned, and a pack created through the launcher
+        // was never seeded at all.
+        if (File.Exists(target)) return;
+
         var seed = SettingsIn(SharedDataPath);
-        var target = SettingsIn(data);
 
         try
         {
-            if (File.Exists(seed) && !File.Exists(target)) File.Copy(seed, target);
+            if (File.Exists(seed)) File.Copy(seed, target);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // Starting from defaults is a worse first launch, not a failed one.
         }
+
+        // The seed is for keybinds and graphics, not for who is signed in. The login
+        // arrives on the next line of BeforeLaunch, from the one record that knows which
+        // session is current — see ClientSession.Forget.
+        ClientSession.Forget(target);
+
+        // The seed names the player's own Mods folder, in absolute form. Left as copied,
+        // every pack would load it alongside its own — see ClientModPaths. Done here and
+        // not reported: this pack has never been launched, so nothing has been loaded from
+        // there to stop loading. Writes the setting even when there was no seed to copy,
+        // which is what keeps the game from choosing the list itself.
+        ClientModPaths.Confine(target, data);
     }
 
     /// <summary>
     /// Makes sure the pack has a data path and puts the current login into it, so a pack
     /// never asks you to sign in again.
     /// </summary>
-    public void BeforeLaunch(string id)
+    /// <returns>
+    /// Mod directories dropped from the pack's settings because they belong to something
+    /// else, so the caller can say a launch stopped loading them. Empty on every launch but
+    /// the first after this became a rule, which is why it is a return value rather than a
+    /// warning somebody has to dismiss.
+    /// </returns>
+    public IReadOnlyList<string> BeforeLaunch(string id)
     {
         EnsureDataPath(id);
+
+        // Again here, not only on seeding: a pack made before this existed still carries
+        // the player's own Mods folder in its settings, and the launch is the only thing
+        // that reaches into it.
+        var dropped = ClientModPaths.Confine(SettingsIn(store.DataDir(id)), store.DataDir(id));
 
         // Take the newest login on the machine first. The command line does not wait for
         // the game to exit, so signing in inside one pack would otherwise never reach the
@@ -86,6 +115,8 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
         CaptureLatest();
 
         ClientSession.Load(SessionPath).MergeInto(SettingsIn(store.DataDir(id)));
+
+        return dropped;
     }
 
     /// <summary>

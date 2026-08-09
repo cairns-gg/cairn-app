@@ -2229,7 +2229,13 @@ public partial class PackDetailViewModel : ViewModelBase
 
             // Prefer a runtime Cairn manages: for an older game version it may be the
             // only .NET of the right major on the machine.
-            _packData.BeforeLaunch(Id);
+            //
+            // Said out loud when it happens: a pack seeded before mod paths were confined
+            // has been loading the player's own Mods folder on top of its own, and "this
+            // launch has fewer mods in it than the last one" is not something to discover
+            // in-game.
+            foreach (var dropped in _packData.BeforeLaunch(Id))
+                _log($"no longer loading mods from {dropped} — this pack has its own");
 
             var options = new LaunchOptions
             {

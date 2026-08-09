@@ -54,7 +54,7 @@ public sealed class ClientSession
     /// </summary>
     public static ClientSession ReadFrom(string clientSettingsPath)
     {
-        var root = TryLoad(clientSettingsPath);
+        var root = ClientSettingsFile.TryLoad(clientSettingsPath);
         if (root?[Bucket] is not JsonObject strings) return new ClientSession();
 
         var values = new Dictionary<string, string>();
@@ -73,7 +73,7 @@ public sealed class ClientSession
     {
         if (IsEmpty) return;
 
-        var root = TryLoad(clientSettingsPath) ?? new JsonObject();
+        var root = ClientSettingsFile.TryLoad(clientSettingsPath) ?? new JsonObject();
 
         if (root[Bucket] is not JsonObject strings)
         {
@@ -83,7 +83,30 @@ public sealed class ClientSession
 
         foreach (var (key, value) in Values) strings[key] = value;
 
-        Write(clientSettingsPath, root);
+        ClientSettingsFile.Write(clientSettingsPath, root);
+    }
+
+    /// <summary>
+    /// Takes the session keys back out of a settings file, leaving everything else.
+    ///
+    /// For a settings file seeded by copying the player's own: the copy is meant to carry
+    /// their keybinds and graphics, and a login is neither. Left in, it would also be
+    /// elected: <see cref="CaptureLatest"/> takes the newest session on the machine by file
+    /// timestamp, and a file copied a moment ago is the newest by construction — so making
+    /// a pack would sign every other pack back in as whoever the shared data path last was.
+    ///
+    /// The real login arrives immediately afterwards through <see cref="MergeInto"/>, from
+    /// Cairn's own record, which is the one place that knows which session is current.
+    /// </summary>
+    public static void Forget(string clientSettingsPath)
+    {
+        var root = ClientSettingsFile.TryLoad(clientSettingsPath);
+        if (root?[Bucket] is not JsonObject strings) return;
+
+        var removed = false;
+        foreach (var key in Keys) removed |= strings.Remove(key);
+
+        if (removed) ClientSettingsFile.Write(clientSettingsPath, root);
     }
 
     /// <summary>Cairn's own record of the session, kept beside the packs.</summary>
@@ -124,31 +147,4 @@ public sealed class ClientSession
         }
     }
 
-    private static JsonObject? TryLoad(string path)
-    {
-        try
-        {
-            return File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject : null;
-        }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    private static void Write(string path, JsonObject root)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
-            var staging = path + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, root.ToJsonString(Json));
-            File.Move(staging, path, overwrite: true);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // The game will simply ask you to log in.
-        }
-    }
 }
