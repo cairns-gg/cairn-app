@@ -122,10 +122,13 @@ public class InstalledWorldsTests : IDisposable
 
         using var cts = new CancellationTokenSource();
 
+        // Cancelled from inside the progress callback, so it has to be a sink that runs
+        // where it is called: a posted one cancels at some point after the copy has already
+        // finished, and the test then asserts about a copy nobody cancelled.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             InstalledWorlds.CopyIntoAsync(
                 world, PackData,
-                new Progress<long>(_ => cts.Cancel()),
+                new Reports<long>(_ => cts.Cancel()),
                 cts.Token));
 
         // Nothing the game could try to open, and no leftover staging file either.
@@ -140,9 +143,14 @@ public class InstalledWorldsTests : IDisposable
         var world = Assert.Single(InstalledWorlds.Scan(Saves));
 
         var seen = new List<long>();
-        await InstalledWorlds.CopyIntoAsync(world, PackData, new Progress<long>(seen.Add));
+        await InstalledWorlds.CopyIntoAsync(world, PackData, new Reports<long>(seen.Add));
 
         Assert.NotEmpty(seen);
+
+        // The last thing it says is that it copied all of it. Posted progress made this the
+        // flakiest assertion in the suite: the copy finished, the await returned, and the
+        // final report was still sitting on the thread pool — so this read whatever the
+        // last delivered figure happened to be, and failed as "expected 5 MB, got 3".
         Assert.Equal(world.Size, seen[^1]);
     }
 }

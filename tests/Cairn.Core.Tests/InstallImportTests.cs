@@ -334,7 +334,7 @@ public class InstallImportTests : IDisposable
 
         var plan = await new InstallImport(new ModDbClient(http)).PlanAsync(
             InstalledMods.Scan(InstallMods), "1.22.6", null, "1.22.6",
-            new Progress<ImportCandidate>(c => told.Add(c.Mod.FileName)));
+            new Reports<ImportCandidate>(c => told.Add(c.Mod.FileName)));
 
         // Every one of them, once, and none left to the end.
         Assert.Equal(plan.Count, told.Count);

@@ -28,14 +28,14 @@ public class ProcessRunnerTests
         var (file, args) = Shell("echo one && echo two");
 
         var result = await ProcessRunner.RunAsync(file, args, Dir,
-            new Progress<string>(l => { lock (lines) lines.Add(l); }));
+            new Reports<string>(l => { lock (lines) lines.Add(l); }));
 
         Assert.True(result.Succeeded);
 
-        // Progress<T> posts asynchronously, so give the callbacks a moment to land before
-        // asserting on them — the alternative is a test that passes on a fast machine.
-        await Task.Delay(200);
-
+        // No sleep waiting for callbacks to land. Reports<T> runs where it is called, so by
+        // the time the run has been awaited every line it produced has been added — a sleep
+        // is the same race with a longer fuse, and it costs the suite a fifth of a second
+        // for every test that copies it. The lock stays: the reader is a background thread.
         lock (lines)
         {
             Assert.Contains(lines, l => l.Contains("one"));
@@ -50,9 +50,7 @@ public class ProcessRunnerTests
         var (file, args) = Shell("echo hello");
 
         await ProcessRunner.RunAsync(file, args, Dir,
-            new Progress<string>(l => { lock (lines) lines.Add(l); }));
-
-        await Task.Delay(200);
+            new Reports<string>(l => { lock (lines) lines.Add(l); }));
 
         // A log that shows output but not what produced it is unreadable across the five
         // commands a build runs.

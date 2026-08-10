@@ -181,7 +181,7 @@ public class BrokenPackTests : IDisposable
 
         var report = await new PackSyncer(new ModDbClient(http), http).SyncAsync(
             manifest, ModsDir, LockPath,
-            progress: new Progress<SyncStep>(s => log.Add($"{s.Action} {s.ModId} {s.Detail}")));
+            progress: new Reports<SyncStep>(s => log.Add($"{s.Action} {s.ModId} {s.Detail}")));
 
         var text = Diagnostics.Report(manifest, report.Lock, log, modsDir: ModsDir);
 
