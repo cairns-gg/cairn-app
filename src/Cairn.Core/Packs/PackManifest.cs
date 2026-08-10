@@ -83,6 +83,22 @@ public sealed class PackManifest
 
     [JsonPropertyName("mods")] public List<PackMod> Mods { get; set; } = [];
 
+    /// <summary>
+    /// Hotkeys the pack ships, as code → combination: <c>{ "scribepinhud": "Ctrl+P" }</c>.
+    ///
+    /// Twenty mods bring twenty sets of defaults and several land on the same key. The
+    /// author sorts that out once; without somewhere to put the answer, every person who
+    /// installs the pack sorts out the same collisions again. This is that somewhere, and
+    /// it is in the manifest — the shared document — because the whole value is that it
+    /// reaches the people who did not do the work.
+    ///
+    /// Names rather than the numeric codes the game stores: <c>53</c> is Backspace, and a
+    /// manifest nobody can read by eye is one nobody can review before importing.
+    /// Null rather than empty when there are none, so the file of a pack that never set one
+    /// looks exactly as it did before this existed.
+    /// </summary>
+    [JsonPropertyName("keybinds")] public Dictionary<string, string>? Keybinds { get; set; }
+
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,

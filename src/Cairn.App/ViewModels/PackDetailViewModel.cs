@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Cairn.Core;
 using Cairn.Core.Games;
+using Cairn.Core.Hotkeys;
 using Cairn.Core.Games.Optimum;
 using Cairn.Core.Launch;
 using Cairn.Core.Runtime;
@@ -358,6 +359,25 @@ public partial class PackDetailViewModel : ViewModelBase
     /// while believing it belongs to another.
     /// </summary>
     [ObservableProperty] public partial int SelectedTab { get; set; }
+
+    /// <summary>
+    /// Where the Hotkeys tab sits, so opening it can start the scan. Reading seventy mod
+    /// archives on every pack selection would be a second of disk nobody asked for, and
+    /// most visits to a pack are to press Play.
+    ///
+    /// An index because that is what a TabControl selects by; held here with a test that
+    /// the tab at this position is the one this names.
+    /// </summary>
+    public const int HotkeysTab = 2;
+
+    partial void OnSelectedTabChanged(int value)
+    {
+        // Leaving the tab abandons a capture in progress, rather than swallowing the next
+        // keypress somewhere else entirely.
+        if (value != HotkeysTab) { CancelHotkeyCapture(); return; }
+
+        _ = LoadHotkeysAsync();
+    }
 
     partial void OnShowingSearchChanged(bool value)
     {
@@ -1121,6 +1141,12 @@ public partial class PackDetailViewModel : ViewModelBase
         // pinning, syncing — which makes it the one place the Share button has to be
         // recomputed from.
         ReloadShare();
+
+        // And the one place the hotkeys can be, for somebody who is looking at them while
+        // the mods move underneath. Cheap when nothing has changed: the stamp is a
+        // directory listing, and the scan only runs when the files are not the ones the
+        // rows were read from.
+        if (SelectedTab == HotkeysTab) _ = LoadHotkeysAsync();
 
         // Not awaited: the pack list must draw immediately, with names and icons
         // following as ModDB answers.
@@ -2365,8 +2391,17 @@ public partial class PackDetailViewModel : ViewModelBase
             // has been loading the player's own Mods folder on top of its own, and "this
             // launch has fewer mods in it than the last one" is not something to discover
             // in-game.
-            foreach (var dropped in _packData.BeforeLaunch(Id))
+            var bound = new List<string>();
+
+            foreach (var dropped in _packData.BeforeLaunch(Id, bound))
                 _log($"no longer loading mods from {dropped} — this pack has its own");
+
+            // A keyboard that changes behaviour without saying so is alarming in a way a
+            // mod path is not. Only ever bindings the player had none of — see
+            // ClientHotkeys — so this says what arrived, not what was taken.
+            if (bound.Count > 0)
+                _log($"bound {bound.Count} hotkey{(bound.Count == 1 ? "" : "s")} from the pack: "
+                     + string.Join(", ", bound));
 
             var options = new LaunchOptions
             {
@@ -2456,6 +2491,395 @@ public partial class PackDetailViewModel : ViewModelBase
     /// it appears on first launch.
     /// </summary>
     public string DataDirectory => _packData.DataPathFor(Id);
+
+    // ---- hotkeys ----
+
+    /// <summary>
+    /// Every hotkey the pack's mods register, plus the game's own, with what the pack binds
+    /// them to.
+    ///
+    /// The author reconciles the collisions once here and everybody who installs the pack
+    /// gets the result on first launch. See <see cref="Cairn.Core.Hotkeys.HotkeyCatalog"/>
+    /// for where the list comes from, and <see cref="Cairn.Core.Launch.ClientHotkeys"/> for
+    /// what a launch does with it.
+    /// </summary>
+    public ObservableCollection<HotkeyRowViewModel> Hotkeys { get; } = [];
+
+    /// <summary>
+    /// Every row the pack has, filtered or not.
+    ///
+    /// <see cref="Hotkeys"/> is what the list shows and can be a fraction of this. Anything
+    /// that answers a question about the pack — what clashes, what to save — asks this one:
+    /// a filtered save would have quietly dropped the bindings somebody could not see.
+    /// </summary>
+    private readonly List<HotkeyRowViewModel> _allHotkeys = [];
+
+    [ObservableProperty] public partial bool LoadingHotkeys { get; set; }
+
+    /// <summary>Set once the tab has been opened, so seventy zips are not read on every selection.</summary>
+    private bool _hotkeysLoaded;
+
+    /// <summary>
+    /// What the pack's files looked like when the rows were built — see
+    /// <see cref="HotkeyCatalog.Stamp"/> — so a list read before a mod arrived is not still
+    /// on screen after it did.
+    ///
+    /// Kept because the first thing anybody does with a new pack is add a mod to it, and
+    /// the rows were read once per pack selection and never again: open the tab on an empty
+    /// pack, add Packrat, come back, and its hotkey was not there. It was never read.
+    /// </summary>
+    private string? _hotkeysFrom;
+
+    /// <summary>True while the rows are being built from the pack, rather than edited.</summary>
+    private bool _adoptingHotkeys;
+
+    [ObservableProperty] public partial string HotkeySummary { get; set; } = "";
+
+    /// <summary>
+    /// Narrows the list by name, id, mod or key. Forty hotkeys is a scroll; the one you are
+    /// looking for is usually one you can already name.
+    /// </summary>
+    [ObservableProperty] public partial string HotkeySearch { get; set; } = "";
+
+    /// <summary>
+    /// Hides everything that is not part of a collision, which is the state somebody is in
+    /// when they opened this tab to fix one.
+    /// </summary>
+    [ObservableProperty] public partial bool OnlyClashes { get; set; }
+
+    partial void OnHotkeySearchChanged(string value) => RefreshHotkeyFilter();
+
+    partial void OnOnlyClashesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(NoHotkeysFoundLine));
+        RefreshHotkeyFilter();
+    }
+
+    /// <summary>
+    /// The row waiting for a keypress, which belongs to the window — this is who gets it.
+    ///
+    /// Read from the rows rather than held in a field, so it stays true however a row came
+    /// to be waiting. Arming one stops any other (see <see cref="OnHotkeyArming"/>), so
+    /// there is only ever the one to find.
+    /// </summary>
+    public HotkeyRowViewModel? CapturingRow => _allHotkeys.FirstOrDefault(r => r.Capturing);
+
+    /// <summary>
+    /// One capture at a time. Asking a second row for a key means you changed your mind
+    /// about the first, not that both should be listening — and both listening is worse
+    /// than it sounds, because the key lands on whichever comes first in the list.
+    /// </summary>
+    private void OnHotkeyArming(HotkeyRowViewModel row)
+    {
+        foreach (var other in _allHotkeys)
+            if (!ReferenceEquals(other, row)) other.Capturing = false;
+    }
+
+    /// <summary>
+    /// Reads the pack's mod zips on a background thread. Seventy archives is a second or so
+    /// of disk and IL, which is fine to wait for and not fine to do on the UI thread.
+    /// </summary>
+    public async Task LoadHotkeysAsync(bool force = false)
+    {
+        var mods = _store.ModsDir(Id);
+        var game = HotkeyCatalog.GameAssemblyIn(ResolvedInstall?.Directory);
+
+        // The game's own assembly is part of the question: a pack whose version was not
+        // installed when the tab was first opened has no vanilla rows, and the collisions
+        // that matter most are with vanilla.
+        var stamp = $"{HotkeyCatalog.Stamp(mods)}||{game}";
+
+        if (_hotkeysLoaded && !force && stamp == _hotkeysFrom) return;
+
+        _hotkeysLoaded = true;
+        _hotkeysFrom = stamp;
+        LoadingHotkeys = true;
+
+        try
+        {
+            var result = await Task.Run(() => HotkeyCatalog.Read(mods, game));
+
+            _allHotkeys.Clear();
+
+            var declared = Manifest.Keybinds ?? [];
+
+            _adoptingHotkeys = true;
+
+            try
+            {
+                foreach (var entry in result.Entries)
+                {
+                    declared.TryGetValue(entry.Code, out var text);
+
+                    _allHotkeys.Add(new HotkeyRowViewModel(
+                        entry, KeyBinding.Parse(text),
+                        changed: OnHotkeyEdited, arming: OnHotkeyArming));
+                }
+            }
+            finally
+            {
+                _adoptingHotkeys = false;
+            }
+
+            RefreshHotkeyClashes();
+            HotkeySummary = Summarise(result);
+        }
+        catch (Exception e)
+        {
+            // Retryable, because the flag is what stops a second attempt. A scan that fell
+            // over on one unlucky file left the tab permanently blank otherwise: no rows,
+            // no way back short of selecting another pack and returning.
+            _hotkeysLoaded = false;
+            HotkeySummary = $"Could not read the pack's mods: {e.Message}";
+        }
+        finally
+        {
+            LoadingHotkeys = false;
+        }
+    }
+
+    /// <summary>
+    /// What the scan found, and what it did not.
+    ///
+    /// Three numbers and they mean different things. A hotkey with no readable default is
+    /// still here and still bindable — it just shows a dash — so it belongs in the count of
+    /// what is listed, not in the count of what is missing. Adding the two together, which
+    /// this line used to do, told somebody that rows they could see were rows they could
+    /// not, and the point of reporting a shortfall at all is that it is true.
+    /// </summary>
+    private static string Summarise(HotkeyCatalog.Result result)
+    {
+        var line = $"{result.Entries.Count} hotkeys in this pack";
+
+        if (result.Keyless > 0)
+            line += $" — {result.Keyless} of them do not say which key they ship on";
+
+        if (result.Unreadable > 0)
+            line += $"{(result.Keyless > 0 ? ", and" : " —")} {result.Unreadable} more are set up "
+                    + "in code and cannot be read from the files";
+
+        return line;
+    }
+
+    /// <summary>
+    /// Writes the pack the moment a binding moves.
+    ///
+    /// There was a Save button here, and it was the only thing in this pane with one:
+    /// adding a mod, removing one and pinning a version all write on the click. Rebinding
+    /// a key is the same kind of act — the click is the decision, there is no draft worth
+    /// keeping — and the second step did exactly what a second step does. Edits sat unsaved,
+    /// selecting another pack threw them away without a word, and the pack did not offer
+    /// itself for publishing because as far as the disk was concerned nothing had happened.
+    /// </summary>
+    private void OnHotkeyEdited()
+    {
+        // Building the rows sets each one's binding, which is not somebody editing it. It
+        // would also write a half-built set: a row reports its new value from inside its
+        // own constructor, before the list it is being added to contains it, so the pack
+        // would be saved missing whichever binding was arriving.
+        if (_adoptingHotkeys) return;
+
+        RefreshHotkeyClashes();
+
+        // Over what the pack already declares, not instead of it. The rows are every hotkey
+        // this scan could find, which is not every hotkey the manifest can name: the game's
+        // own are missing until its version is installed, a mod that builds its registration
+        // at runtime never produces one, and a pack whose Mods folder is mid-sync is short a
+        // few. Rebuilding the dictionary from the rows deleted all of those the moment
+        // somebody touched an unrelated key — silently, from the shared document, and most
+        // reliably on a machine that had not downloaded the game yet.
+        var bindings = new Dictionary<string, string>(
+            Manifest.Keybinds ?? [], StringComparer.Ordinal);
+
+        foreach (var row in _allHotkeys)
+        {
+            // A row with no binding is the pack declining to say anything about that
+            // hotkey, which is a removal — Reset has to be able to take an entry out.
+            if (row.Binding is null) bindings.Remove(row.Code);
+            else bindings[row.Code] = row.Binding.ToString();
+        }
+
+        // Null rather than an empty object, so a pack that has never set one looks exactly
+        // as it did before this existed — and reads as unchanged against what was published.
+        Manifest.Keybinds = bindings.Count == 0 ? null : bindings;
+
+        try
+        {
+            _store.Save(Manifest);
+            Error = null;
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+            return;
+        }
+
+        // Not the full Persist: the mod list has not moved, and rebuilding it would send
+        // this pack's rows back to ModDB for their names on every keystroke. What does have
+        // to be recomputed is the Share button — hotkeys are part of the shared document,
+        // so changing one is something to publish.
+        ReloadShare();
+    }
+
+    /// <summary>
+    /// Marks every row that fires on the same press as another.
+    ///
+    /// Over every row, not the visible ones: a hotkey hidden by a search still occupies its
+    /// key, and a conflict list that depended on what was on screen would report a pack as
+    /// clean because somebody typed in a box.
+    ///
+    /// Asked of the rows as they currently stand, because the answer changes as soon as
+    /// somebody rebinds one — a list built from the mods' own defaults would keep reporting
+    /// the clash the author has just fixed.
+    ///
+    /// The rule itself is <see cref="HotkeyClashes"/>, in Core. What lives here is only the
+    /// marking up: which row gets a warning, and what the warning says. Held here once and
+    /// it drifted — the copy in Core went on answering from the mods' defaults — which is
+    /// the whole argument for a rule having one home.
+    /// </summary>
+    private void RefreshHotkeyClashes()
+    {
+        foreach (var row in _allHotkeys)
+        {
+            row.Clashes = false;
+            row.ClashesWith = "";
+            row.SharesHeldKey = false;
+        }
+
+        // Codes are unique across the rows — HotkeyCatalog deduplicates on them — so this
+        // is how a clash's codes come back as the rows that hold them.
+        var byCode = new Dictionary<string, HotkeyRowViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _allHotkeys) byCode.TryAdd(row.Code, row);
+
+        var clashing = 0;
+
+        var found = HotkeyClashes.Find(
+            _allHotkeys.Select(r => new BoundHotkey(r.Code, r.Effective, r.IsGame)));
+
+        foreach (var clash in found)
+        {
+            var rows = clash.Codes
+                .Select(code => byCode.TryGetValue(code, out var row) ? row : null)
+                .OfType<HotkeyRowViewModel>()
+                .ToList();
+
+            foreach (var row in rows)
+            {
+                row.ClashesWith = string.Join(
+                    ", ", rows.Where(other => other != row).Select(other => other.Display));
+
+                // A held key is named on the row and left out of the count. Shift and Ctrl
+                // are held rather than pressed and sharing them is the design; counting
+                // them would bury the five mods on P under eight rows about Shift.
+                if (clash.Shared) { row.SharesHeldKey = true; continue; }
+
+                row.Clashes = true;
+                clashing++;
+            }
+        }
+
+        HotkeyClashCount = clashing;
+        RefreshHotkeyFilter();
+    }
+
+    /// <summary>
+    /// Rebuilds the visible list from the full one.
+    ///
+    /// A search matches the label, the hotkey's id, the mod it came from and the key it is
+    /// on — all four, because "what is on P?" and "what did CarryOn add?" are the same
+    /// question asked from different ends.
+    /// </summary>
+    private void RefreshHotkeyFilter()
+    {
+        var term = HotkeySearch.Trim();
+
+        // A term that names a key is a question about that key. "P" as a substring appears
+        // in half the mod ids in a pack, which is no use at all to somebody asking what
+        // else is bound to P — and that is the question this tab exists to answer.
+        var asKey = KeyBinding.Parse(term);
+
+        Hotkeys.Clear();
+
+        foreach (var row in _allHotkeys)
+        {
+            // A row that no longer collides leaves the list. Under this filter the list is
+            // the work remaining, and it should get shorter as the work gets done —
+            // resolving a pair takes both of its rows away, which is the point.
+            if (OnlyClashes && !row.Clashes) continue;
+            if (term.Length > 0 && !Matches(row, term, asKey)) continue;
+
+            Hotkeys.Add(row);
+        }
+
+        OnPropertyChanged(nameof(HotkeyListLine));
+        OnPropertyChanged(nameof(ShowNoHotkeysFound));
+
+        static bool Matches(HotkeyRowViewModel row, string term, KeyBinding? asKey) =>
+            asKey is not null
+                ? row.Effective is { } bound && bound.Clashes(asKey)
+                : row.Display.Contains(term, StringComparison.OrdinalIgnoreCase)
+                  || row.Code.Contains(term, StringComparison.OrdinalIgnoreCase)
+                  || row.Source.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Says what is being hidden, so a short list is never mistaken for a small pack.</summary>
+    public string HotkeyListLine =>
+        _allHotkeys.Count == 0 || Hotkeys.Count == _allHotkeys.Count
+            ? ""
+            : $"showing {Hotkeys.Count} of {_allHotkeys.Count}";
+
+    public bool ShowNoHotkeysFound => _allHotkeys.Count > 0 && Hotkeys.Count == 0;
+
+    /// <summary>Why the list is empty, which is a different answer for each filter.</summary>
+    public string NoHotkeysFoundLine => OnlyClashes && HotkeyClashCount == 0
+        ? "Nothing collides. Every hotkey in this pack is on a key of its own."
+        : "No hotkey matches that.";
+
+    [ObservableProperty] public partial int HotkeyClashCount { get; set; }
+
+    partial void OnHotkeyClashCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasHotkeyClashes));
+        OnPropertyChanged(nameof(OnlyClashesLabel));
+        OnPropertyChanged(nameof(NoHotkeysFoundLine));
+    }
+
+    public bool HasHotkeyClashes => HotkeyClashCount > 0;
+
+    /// <summary>
+    /// The conflicts filter says how many there are, so there is no banner saying the same
+    /// thing above a list that is about to show them. One place, and it is the control you
+    /// would reach for next.
+    /// </summary>
+    public string OnlyClashesLabel => HotkeyClashCount == 0
+        ? "Only conflicts"
+        : $"Only conflicts ({HotkeyClashCount})";
+
+    /// <summary>
+    /// Takes a keypress for whichever row is waiting, and returns whether it wanted one.
+    /// Called by the window: the keyboard belongs to the view.
+    /// </summary>
+    public bool CaptureHotkey(int keyCode, bool ctrl, bool alt, bool shift)
+    {
+        if (CapturingRow is not { } row) return false;
+
+        row.Capturing = false;
+
+        // Escape leaves the binding alone. It is the one key somebody presses meaning
+        // "not this", and binding it would be the last thing they intended.
+        if (keyCode == EscapeKey) return true;
+
+        row.Binding = new KeyBinding(keyCode, ctrl, alt, shift);
+        return true;
+    }
+
+    private static readonly int EscapeKey = KeyBinding.Parse("Escape")!.KeyCode;
+
+    /// <summary>Stops waiting for a key, for a click somewhere else or a tab change.</summary>
+    public void CancelHotkeyCapture()
+    {
+        if (CapturingRow is { } row) row.Capturing = false;
+    }
 
     /// <summary>
     /// Resolves the pack against ModDB, downloads what is missing, removes what is no

@@ -14,6 +14,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         UiScale.Attach(this);
+
+        // Tunnelling, and taking handled events too. Overriding OnKeyDown looks like the
+        // same thing and is not: that is a class handler on the bubbling pass, which runs
+        // after the focused control has had the key and only if it did not take it. Capture
+        // starts from a click on a button, so the button holds focus — and a button eats
+        // Space and Enter. Those two were unbindable, and the row sat on "Press a key…"
+        // for ever, because the press it was waiting for never left the button.
+        AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     /// <summary>
@@ -37,6 +45,46 @@ public partial class MainWindow : Window
         vm.RunOptimumBuild = RunOptimumBuildAsync;
         vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
+    }
+
+    /// <summary>
+    /// Feeds a keypress to a hotkey row that is waiting for one.
+    ///
+    /// Here rather than on the row, because a view model has no keyboard: the press arrives
+    /// at the window, and the window is also the only thing that can stop it going on to be
+    /// somebody's shortcut. Registered to tunnel from the top — see the constructor — so a
+    /// key a focused control would otherwise swallow, Space on a button or Tab moving focus,
+    /// still reaches the binding somebody is in the middle of setting.
+    ///
+    /// Every branch marks the event handled, which on the tunnelling pass means nothing
+    /// below sees it at all. That is the point: while a row is waiting, the keyboard belongs
+    /// to it and to nothing else.
+    /// </summary>
+    private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel { Detail: { CapturingRow: not null } detail }) return;
+
+        // A modifier on its own is the first half of a combination, not a binding.
+        if (KeyCodes.IsModifier(e.Key)) { e.Handled = true; return; }
+
+        if (KeyCodes.Of(e.Key) is { } code)
+        {
+            var modifiers = e.KeyModifiers;
+
+            detail.CaptureHotkey(
+                code,
+                ctrl: modifiers.HasFlag(KeyModifiers.Control),
+                alt: modifiers.HasFlag(KeyModifiers.Alt),
+                shift: modifiers.HasFlag(KeyModifiers.Shift));
+
+            e.Handled = true;
+            return;
+        }
+
+        // A key the game cannot name binds nothing, and giving up on the capture is
+        // better than leaving the row waiting for a key that will never work.
+        detail.CancelHotkeyCapture();
+        e.Handled = true;
     }
 
     /// <summary>

@@ -100,7 +100,18 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     /// the first after this became a rule, which is why it is a return value rather than a
     /// warning somebody has to dismiss.
     /// </returns>
-    public IReadOnlyList<string> BeforeLaunch(string id)
+    /// <param name="bound">
+    /// Receives the hotkeys taken from the pack, which is how a launch says it changed the
+    /// keyboard instead of doing it quietly. See <see cref="ClientHotkeys"/>.
+    ///
+    /// Purely for reporting, and optional for that reason alone — the bindings are applied
+    /// either way. This was briefly a second overload with the hotkey work inside the
+    /// <c>bound is not null</c> branch, which made whether a pack's keyboard arrived depend
+    /// on whether the caller wanted to print about it. Two front ends passed one; a third
+    /// calling the obvious overload would have launched without the pack's hotkeys and
+    /// said nothing.
+    /// </param>
+    public IReadOnlyList<string> BeforeLaunch(string id, ICollection<string>? bound = null)
     {
         EnsureDataPath(id);
 
@@ -115,6 +126,22 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
         CaptureLatest();
 
         ClientSession.Load(SessionPath).MergeInto(SettingsIn(store.DataDir(id)));
+
+        // After the session merge rather than before, so both write into one settled file.
+        // Read from disk rather than taken as an argument: this is the launch, and the
+        // manifest on disk is what the pack currently declares.
+        try
+        {
+            foreach (var code in ClientHotkeys.Apply(
+                         SettingsIn(store.DataDir(id)), store.Load(id).Keybinds))
+                bound?.Add(code);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                      or System.Text.Json.JsonException)
+        {
+            // A pack whose manifest will not load has bigger problems, and every one of
+            // them is reported somewhere a launch already looks.
+        }
 
         return dropped;
     }

@@ -98,13 +98,25 @@ public sealed class PackUpdatePlan
     /// </summary>
     private readonly HashSet<string> _declined;
 
+    /// <summary>
+    /// The keybinds of the revision this copy follows, which is what tells a binding the
+    /// holder chose from one they were simply given. Without it every code the author has
+    /// ever published reads as the follower's own — an unedited copy would pin the author's
+    /// first set for ever, and they could never move a key again for anybody who already
+    /// has the pack. Same three-way reasoning as the mod list, and the same fallback when
+    /// there is no base: see <see cref="Between"/>.
+    /// </summary>
+    private readonly IReadOnlyDictionary<string, string> _basisKeybinds;
+
     private PackUpdatePlan(
         PackManifest mine, PackManifest theirs, int fromRevision, int toRevision,
-        IReadOnlyList<ModChange> changes, bool hadBase, HashSet<string> declined)
+        IReadOnlyList<ModChange> changes, bool hadBase, HashSet<string> declined,
+        IReadOnlyDictionary<string, string> basisKeybinds)
     {
         _mine = mine;
         _theirs = theirs;
         _declined = declined;
+        _basisKeybinds = basisKeybinds;
         FromRevision = fromRevision;
         ToRevision = toRevision;
         Changes = changes;
@@ -290,7 +302,8 @@ public sealed class PackUpdatePlan
         }
 
         return new PackUpdatePlan(
-            mine, theirs, fromRevision, toRevision, changes, @base is not null, declined);
+            mine, theirs, fromRevision, toRevision, changes, @base is not null, declined,
+            (@base ?? mine).Keybinds ?? []);
     }
 
     /// <summary>
@@ -298,6 +311,10 @@ public sealed class PackUpdatePlan
     ///
     /// The author's, plus what is yours: their id, name, description, game version and
     /// server, because it is their pack and this is their revision of it.
+    ///
+    /// Every field here is named on purpose. A manifest field left out of this list is one
+    /// that silently empties on every update, which is how the pack's hotkeys were lost
+    /// between the revision that shipped them and the next — see <see cref="MergeKeybinds"/>.
     /// </summary>
     public PackManifest Merge()
     {
@@ -308,6 +325,7 @@ public sealed class PackUpdatePlan
             Description = _theirs.Description,
             GameVersion = _theirs.GameVersion,
             Connect = _theirs.Connect,
+            Keybinds = MergeKeybinds(),
             Mods = [],
         };
 
@@ -367,5 +385,59 @@ public sealed class PackUpdatePlan
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// The hotkeys this update would leave behind.
+    ///
+    /// The author's, plus the ones this copy chose for itself. Reconciling twenty mods'
+    /// collisions is the author's work and the reason the pack carries it at all, so a
+    /// revision that moves a key has to reach the people already holding the pack — but
+    /// somebody who sat down and rebound something did so on purpose, and an update
+    /// putting it back is the bug they can never get out of.
+    ///
+    /// Told apart by the base, exactly as a mod's pin is: a code whose value here still
+    /// matches the revision this copy follows was never chosen, it was inherited, and the
+    /// author's newer answer stands. One whose value has moved is a decision, and it
+    /// survives. A code the holder cleared stays cleared, for the same reason a mod they
+    /// removed is not put back.
+    ///
+    /// No base means no way to tell those apart, so the basis falls back to this copy's
+    /// own — under which nothing reads as chosen and the author's set wins whole. The same
+    /// fallback the mod list makes, and for the same reason: an unedited follower merges
+    /// perfectly, which is nearly all of them.
+    ///
+    /// Null rather than empty when it comes to nothing, so a pack that has never set one
+    /// keeps the file it had.
+    /// </summary>
+    private Dictionary<string, string>? MergeKeybinds()
+    {
+        var theirs = _theirs.Keybinds ?? [];
+
+        // Their answer, whole — a reset keeps nothing of this copy's own.
+        if (Reset)
+            return theirs.Count == 0 ? null : new Dictionary<string, string>(theirs, StringComparer.Ordinal);
+
+        var mine = _mine.Keybinds ?? [];
+        var merged = new Dictionary<string, string>(theirs, StringComparer.Ordinal);
+
+        foreach (var code in _basisKeybinds.Keys.Concat(mine.Keys).Distinct(StringComparer.Ordinal))
+        {
+            var wasInherited = _basisKeybinds.TryGetValue(code, out var inherited);
+
+            if (mine.TryGetValue(code, out var chosen))
+            {
+                // Untouched since it arrived, so this is simply their change.
+                if (wasInherited && string.Equals(chosen, inherited, StringComparison.Ordinal)) continue;
+
+                merged[code] = chosen;
+                continue;
+            }
+
+            // Had it, cleared it. Left cleared rather than handed back on every revision.
+            if (wasInherited) merged.Remove(code);
+        }
+
+        return merged.Count == 0 ? null : merged;
     }
 }

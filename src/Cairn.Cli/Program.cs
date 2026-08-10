@@ -649,8 +649,17 @@ internal static class Program
         }
 
         // Carried in now, so a pack does not ask for a fresh login.
-        foreach (var dropped in packData.BeforeLaunch(id))
+        var bound = new List<string>();
+
+        foreach (var dropped in packData.BeforeLaunch(id, bound))
             Console.WriteLine($"no longer loading mods from {dropped} — this pack has its own");
+
+        // The pack's hotkeys, for the ones this copy has no binding of its own for. Said
+        // out loud here as well as in the launcher: a keyboard that changes without
+        // mentioning it is the same surprise from either front end.
+        if (bound.Count > 0)
+            Console.WriteLine($"bound {bound.Count} hotkey{(bound.Count == 1 ? "" : "s")} "
+                              + $"from the pack: {string.Join(", ", bound)}");
 
         var proc = launcher.Launch(options);
         Console.WriteLine($"started pid {proc.Id}");

@@ -311,4 +311,135 @@ public class PackUpdateTests
         Assert.Empty(plan.Changes);
         Assert.Contains("changes no mods", plan.Summary());
     }
+
+    // ---- the hotkeys the pack carries ----
+    //
+    // Same three-way rules as a pin, and they matter for the same reason: the author's
+    // reconciliation has to reach people who already hold the pack, and a follower who sat
+    // down and rebound something must not have it taken back on every revision.
+
+    private static PackManifest WithKeys(
+        PackManifest pack, params (string Code, string Key)[] keys)
+    {
+        pack.Keybinds = keys.Length == 0 ? null : keys.ToDictionary(k => k.Code, k => k.Key);
+        return pack;
+    }
+
+    [Fact]
+    public void The_authors_hotkeys_survive_an_update()
+    {
+        // The bug this whole thing exists to stop: Merge names the fields it carries, and
+        // a field it does not name empties on every revision.
+        var @base = WithKeys(Pack("1.22.5", Mod("carryon")), ("scribepinhud", "Ctrl-P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("carryon")), ("scribepinhud", "Ctrl-P"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("carryon"), Mod("scribe")), ("scribepinhud", "Ctrl-P"));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        Assert.Equal("Ctrl-P", Assert.Single(merged.Keybinds!).Value);
+    }
+
+    [Fact]
+    public void A_hotkey_the_author_moved_moves_for_a_follower_who_never_touched_it()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "Ctrl-P"));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        // Inherited, not chosen. The author reconciled a new collision and everybody gets it.
+        Assert.Equal("Ctrl-P", merged.Keybinds!["scribepinhud"]);
+    }
+
+    [Fact]
+    public void A_hotkey_you_rebound_yourself_survives_the_authors_change()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "K"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "Ctrl-P"));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        // You sat down and moved it. Putting it back every revision is the bug you could
+        // never get out of.
+        Assert.Equal("K", merged.Keybinds!["scribepinhud"]);
+    }
+
+    [Fact]
+    public void A_hotkey_the_author_adds_arrives()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "K"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe"), Mod("carryon")),
+            ("scribepinhud", "P"), ("carryonswap", "Ctrl-C"));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        Assert.Equal("K", merged.Keybinds!["scribepinhud"]);      // yours, still
+        Assert.Equal("Ctrl-C", merged.Keybinds!["carryonswap"]);  // theirs, new
+    }
+
+    [Fact]
+    public void A_hotkey_you_cleared_stays_cleared()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        // Reset here means "use whatever the mod ships", which is a decision like any
+        // other — handing it back on every revision undoes it silently.
+        Assert.Null(merged.Keybinds);
+    }
+
+    [Fact]
+    public void A_hotkey_of_your_own_is_left_alone()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "K"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")));
+
+        var merged = PackUpdatePlan.Between(mine, theirs, @base).Merge();
+
+        Assert.Equal("K", merged.Keybinds!["scribepinhud"]);
+    }
+
+    [Fact]
+    public void With_no_base_the_authors_hotkeys_win_whole()
+    {
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "K"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "Ctrl-P"));
+
+        // Nothing can be told from nothing. The mod list falls back the same way, and for
+        // the same reason: an unedited follower merges perfectly, which is nearly all of them.
+        var merged = PackUpdatePlan.Between(mine, theirs, null).Merge();
+
+        Assert.Equal("Ctrl-P", merged.Keybinds!["scribepinhud"]);
+    }
+
+    [Fact]
+    public void A_reset_takes_the_authors_hotkeys()
+    {
+        var @base = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "P"));
+        var mine = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "K"));
+        var theirs = WithKeys(Pack("1.22.5", Mod("scribe")), ("scribepinhud", "Ctrl-P"));
+
+        var plan = PackUpdatePlan.Between(mine, theirs, @base);
+        plan.Reset = true;
+
+        // A reset is the statement that there is only one set worth keeping.
+        Assert.Equal("Ctrl-P", plan.Merge().Keybinds!["scribepinhud"]);
+    }
+
+    [Fact]
+    public void A_pack_with_no_hotkeys_keeps_the_file_it_had()
+    {
+        var same = Pack("1.22.5", Mod("carryon"));
+
+        // Null rather than an empty object: a pack that never set one must look exactly as
+        // it did, or every follower reports a change nobody made.
+        Assert.Null(PackUpdatePlan.Between(same, same, same).Merge().Keybinds);
+    }
 }
