@@ -176,10 +176,16 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                               && (want.Version is null || want.Version == prior.Version);
 
             // A lock may say WHAT to install, but only ModDB says WHERE it comes from.
-            // An imported pack carries its author's lock, so a URL taken out of one is
-            // attacker-supplied. Falling back to a fresh resolve rather than refusing
-            // keeps a pack with an unfamiliar URL installable — and still reproducible,
-            // because the download is verified against the locked hash either way.
+            // Somebody else's lock now arrives with those fields already cleared — see
+            // PackLock.ClearResolvedLocations, which is where that rule lives, because a
+            // host allowlist cannot tell a URL ModDB gave us from one an attacker uploaded
+            // to the same host. Anyone may upload a mod, so anyone may put a file there.
+            //
+            // What is left here is the second question rather than the first: a URL that
+            // survives to this point was written by a previous sync on this machine, and
+            // the check is that ModDB has not since moved its downloads somewhere else. An
+            // empty URL — the shape an imported lock has — fails it, which is precisely
+            // what sends the entry to a fresh resolve pinned to the author's version.
             var lockUrlUsable = prior is not null && ModDbUrls.IsKnownDownloadHost(prior.Url);
 
             ResolvedRelease? release;

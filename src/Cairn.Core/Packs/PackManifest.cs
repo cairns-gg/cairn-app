@@ -237,6 +237,38 @@ public sealed class PackLock
     [JsonPropertyName("gameVersion")] public string GameVersion { get; set; } = "";
     [JsonPropertyName("mods")] public List<LockedMod> Mods { get; set; } = [];
 
+    /// <summary>
+    /// Drops the parts of every entry that only ModDB is entitled to assert.
+    ///
+    /// A lock may say WHAT to install; it does not get to say WHERE the bytes come from.
+    /// That distinction was always the intent — <see cref="PackSyncer"/> says so where it
+    /// decides whether to believe a lock — but it was enforced by asking whether the URL
+    /// pointed at a host ModDB serves from, which is not the same question. Anyone may
+    /// upload a mod, so anyone may put a file on that host: a shared lock could name a
+    /// reputable mod id and version beside a URL for something else entirely, and the
+    /// SHA-256 sitting next to it was no defence, because whoever writes the URL writes
+    /// the hash to match.
+    ///
+    /// Clearing these sends every entry down the resolve path instead, where the lock's
+    /// version is used as the pin and ModDB answers where that release lives. The
+    /// author's hash then becomes what it should always have been: a check that the bytes
+    /// ModDB serves are the bytes the author had, which fails loudly when they differ.
+    ///
+    /// Modid, version and sha256 stay, and so do side and markedFor. Those are the
+    /// author's to claim, and they are what makes a shared pack reproduce rather than
+    /// merely resemble.
+    /// </summary>
+    public void ClearResolvedLocations()
+    {
+        foreach (var mod in Mods)
+        {
+            mod.Url = "";
+            mod.FileName = "";
+            mod.ReleaseId = 0;
+            mod.FileId = 0;
+        }
+    }
+
     public static PackLock? Load(string path)
         => File.Exists(path)
             ? JsonSerializer.Deserialize<PackLock>(File.ReadAllText(path), PackManifest.JsonOptions)

@@ -15,6 +15,31 @@ public enum PackRole
     Author,
 }
 
+/// <summary>
+/// What somebody decided a copy of a published pack is, when they imported it.
+///
+/// The question only exists for a document that came off a server: it names an owner and
+/// an address, and taking it on could mean either "keep me in step with theirs" or "this
+/// is where mine starts". Cairn used to answer it by itself — always the first — which
+/// left no way to make a pack of your own out of somebody else's, and no way back, since
+/// taking over is specced in TODO.md and unimplemented.
+///
+/// It is also the point where the document's own claim about where it lives either does
+/// or does not get acted on, which is why the choice belongs to a person and not to a
+/// default. See <see cref="PackStore.Import"/>.
+/// </summary>
+public enum ImportIntent
+{
+    /// <summary>Somebody else's pack; this copy is kept in step with theirs.</summary>
+    Follow,
+
+    /// <summary>
+    /// The start of a pack of your own. No owner, nothing to check back with, and yours to
+    /// publish or export — which is the whole difference.
+    /// </summary>
+    Fork,
+}
+
 /// <summary>What was sent the last time this pack was published.</summary>
 public sealed class PublishRecord
 {

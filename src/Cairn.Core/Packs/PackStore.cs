@@ -183,6 +183,13 @@ public sealed class PackStore
         // Nothing to reproduce and nothing worth keeping: let sync build it from scratch.
         if (theirs is null && mine is null) return;
 
+        // Their lock is their document, and an update is the second chance to plant one:
+        // the plan diffs manifests, so an entry whose URL and hash moved underneath an
+        // unchanged mod id would present as no change at all. Same rule as import, applied
+        // here as well because this is the other way somebody else's lock entries reach
+        // this machine. See PackLock.ClearResolvedLocations.
+        theirs?.ClearResolvedLocations();
+
         var retargeted = mine is not null && !string.Equals(
             mine.GameVersion, merged.GameVersion, StringComparison.OrdinalIgnoreCase);
 
@@ -371,7 +378,18 @@ public sealed class PackStore
     /// verifies the bytes. Set false for a loose import: the lock is discarded and every
     /// pin dropped, so the pack resolves newest-compatible instead.
     /// </param>
-    public PackManifest Import(PackBundle bundle, string? asId = null, bool reproduce = true)
+    /// <param name="sourceUrl">
+    /// The address this document was actually fetched from, or null when it came out of a
+    /// file. This — not anything the document says about itself — is what a follow
+    /// relationship is recorded against whenever it exists.
+    /// </param>
+    /// <param name="intent">
+    /// Whether this copy follows the author or starts a pack of your own. Null lets the
+    /// answer follow from what can be verified: see the comment on the decision below.
+    /// </param>
+    public PackManifest Import(
+        PackBundle bundle, string? asId = null, bool reproduce = true, string? sourceUrl = null,
+        ImportIntent? intent = null)
     {
         var manifest = bundle.Pack
                        ?? throw new InvalidDataException("The bundle has no pack.");
@@ -386,20 +404,37 @@ public sealed class PackStore
         Save(manifest);
         Directory.CreateDirectory(DataDir(manifest.Id));
 
-        // The author's lock is what reproduces their set: sync installs from it and checks
-        // the download against their SHA-256. Their manifest travels unchanged alongside
-        // it, so mods they deliberately pinned stay pinned and the rest stay followed —
-        // the recipient gets identical bytes now and is still offered updates later.
-        if (reproduce) bundle.Lock?.Save(LockPath(manifest.Id));
-
-        // A published pack arrives with an owner, and this copy follows theirs. Recorded
-        // now, at the one moment it is knowable — without it the pack looks exactly like
-        // one you made yourself, and Share would offer to publish somebody else's curation
-        // under your name.
+        // The author's lock is what reproduces their set: sync resolves their exact
+        // versions and checks the download against their SHA-256. Their manifest travels
+        // unchanged alongside it, so mods they deliberately pinned stay pinned and the rest
+        // stay followed — the recipient gets identical bytes now and is still offered
+        // updates later.
         //
-        // A bundle from a file gets no link: nobody's URL is behind it, so there is
-        // nothing to follow and nothing to take over.
-        if (bundle.IsPublished)
+        // Stripped of where each mod came from first. See PackLock.ClearResolvedLocations:
+        // the author says which mod at which version, ModDB says where it lives.
+        if (reproduce)
+        {
+            bundle.Lock?.ClearResolvedLocations();
+            bundle.Lock?.Save(LockPath(manifest.Id));
+        }
+
+        // Which of the two a published document became. Front-ends ask; this is what
+        // happens when nobody said, and it follows from what can be verified rather than
+        // from what the document asserts. Fetched from an address, following is the
+        // default and that address is what gets followed. Handed over as a file, the only
+        // address on offer is the document's own word — so it forks, because taking that
+        // word unasked is what lets a file choose where a launcher checks back for ever.
+        var decided = intent ?? (sourceUrl is not null ? ImportIntent.Follow : ImportIntent.Fork);
+
+        // A followed pack has an owner, and this copy is in step with theirs. Recorded now,
+        // at the one moment it is knowable — without it the pack looks exactly like one you
+        // made yourself, and Share would offer to publish somebody else's curation under
+        // your name.
+        //
+        // A fork deliberately gets none of this: no link and no merge base, because there
+        // is nobody to reconcile with. That is the whole of what forking means here, and it
+        // is the only way to get a copy that is yours to publish.
+        if (bundle.IsPublished && decided == ImportIntent.Follow)
         {
             // The base for every future merge, recorded at the one moment it is certainly
             // the author's own: right now, before anybody has edited a line of it.
@@ -408,7 +443,17 @@ public sealed class PackStore
             SaveLink(manifest.Id, new PackLink
             {
                 Role = PackRole.Follower,
-                Url = bundle.CanonicalUrl!,
+
+                // Where this came from, not where it says it came from — believing the
+                // document's canonicalUrl would let a pack choose the address its updates
+                // are fetched from ever after, which is the same trick as a lock choosing
+                // a download URL and just as invisible.
+                //
+                // The claim is only reached for a document with no fetch behind it, and
+                // only once somebody has been shown that address and chosen to follow it.
+                // A claim a person approved is a different thing from a claim believed,
+                // which is why front-ends must show the URL where they offer the choice.
+                Url = PackUpdateCheck.PageUrl(sourceUrl ?? bundle.CanonicalUrl!),
                 Revision = bundle.Revision ?? 0,
                 Following = true,
             });

@@ -146,7 +146,11 @@ public static class Program
             : File.ReadAllText(source);
 
         var bundle = PackBundle.Parse(json);
-        var manifest = packs.Import(bundle, ArgValue(args, "--id"));
+        var manifest = packs.Import(
+            bundle, ArgValue(args, "--id"),
+            // The address it actually came from, so a follow is recorded against that
+            // rather than against whatever the document names itself. A file gets none.
+            sourceUrl: PackSources.IsRemote(source) ? source : null);
 
         Console.WriteLine($"following '{manifest.Id}' for game {manifest.GameVersion} "
                           + $"({manifest.Mods.Count} mods)");

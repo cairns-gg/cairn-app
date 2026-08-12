@@ -57,8 +57,29 @@
                        FontSize="11" TextWrapping="Wrap"
                        Foreground="{DynamicResource VsErrorBrush}" />
 
-            <CheckBox IsChecked="{Binding Reproduce}" IsEnabled="{Binding HasLock}"
-                      FontSize="12" Content="Reproduce the author's exact versions" />
+            <!-- Neither is preselected for a file, so the address a follow would use is
+                 read before it is agreed to rather than after. -->
+            <StackPanel IsVisible="{Binding CanChooseFollow}" Spacing="6">
+                <TextBlock Text="This pack belongs to someone" FontSize="12" Opacity="0.7" />
+
+                <RadioButton Name="FollowChoice" GroupName="FollowOrFork" FontSize="12"
+                             IsChecked="{Binding FollowChosen, Mode=TwoWay}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Follow it" FontSize="12" />
+                        <TextBlock Text="{Binding FollowNote}" FontSize="11" Opacity="0.7"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton Name="ForkChoice" GroupName="FollowOrFork" FontSize="12"
+                             IsChecked="{Binding ForkChosen, Mode=TwoWay}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Make it mine" FontSize="12" />
+                        <TextBlock Text="{Binding ForkNote}" FontSize="11" Opacity="0.7"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </RadioButton>
+            </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="AddButton" Content="Add pack" Classes="accent" Padding="16,5"

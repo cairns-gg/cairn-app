@@ -103,7 +103,8 @@ internal static class Program
               cairn-cli remove <id> <modid>           remove a mod from a pack
               cairn-cli delete <id>                   delete a pack and its mods
               cairn-cli export <id> [-o file] [--no-lock]   write a shareable pack file
-              cairn-cli import <file|url> [--id x] [--loose] create a pack from one
+              cairn-cli import <file|url> [--id x] [--loose] [--follow|--fork]
+                                                        create a pack from one
               cairn-cli import-install <name> [--id x] [--game <version>] [--from <dir>]
                                                       [--include-disabled] [--dry-run]
                                                       make a pack from the mods you already have
@@ -879,7 +880,7 @@ internal static class Program
 
     private static async Task<int> Import(PackStore store, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli import <file|url> [--id x] [--loose]");
+        if (args.Length < 2) return Fail("usage: cairn-cli import <file|url> [--id x] [--loose] [--follow|--fork]");
 
         var source = args[1];
         string json;
@@ -891,8 +892,12 @@ internal static class Program
             if (PackSources.IsRewritableInFlight(source))
                 return Fail("refusing to import over http; use https");
 
+            // Through DocumentUrl, because a pack's canonical URL is the page a person
+            // reads and that address serves HTML. Fetching it raw reported invalid JSON,
+            // which is true and tells whoever pasted the URL nothing about what to paste
+            // instead. cairn-server has done this since it was written; this had not.
             json = PackSources.IsRemote(source)
-                ? await http.GetStringAsync(source)
+                ? await http.GetStringAsync(PackUpdateCheck.DocumentUrl(source))
                 : File.ReadAllText(source);
         }
         catch (Exception e) when (e is IOException or HttpRequestException)
@@ -904,7 +909,27 @@ internal static class Program
 
         // --loose tracks newest-compatible instead of reproducing the author's versions.
         var reproduce = !args.Contains("--loose");
-        var manifest = store.Import(bundle, ArgValue(args, "--id"), reproduce);
+
+        if (args.Contains("--follow") && args.Contains("--fork"))
+            return Fail("--follow and --fork ask for opposite things; pass one");
+
+        // The address it actually came from, so a follow is recorded against that rather
+        // than against whatever the document names itself.
+        var fetchedFrom = PackSources.IsRemote(source) ? source : null;
+
+        ImportIntent? intent = args.Contains("--fork") ? ImportIntent.Fork
+            : args.Contains("--follow") ? ImportIntent.Follow
+            : null;
+
+        // A published document out of a file, with nobody having said which they meant.
+        // It forks, because the only address on offer is the file's own word for where it
+        // lives and acting on that unasked is what lets a file point this machine at a
+        // host of its choosing. Said out loud rather than done quietly — the choice is
+        // real, and somebody who wanted the other one should not have to discover it from
+        // a pack that never checks for updates.
+        var unaskedFork = intent is null && fetchedFrom is null && bundle.IsPublished;
+
+        var manifest = store.Import(bundle, ArgValue(args, "--id"), reproduce, fetchedFrom, intent);
 
         var pinned = manifest.Mods.Count(m => m.Version is not null);
         var how = reproduce && bundle.Lock is not null
@@ -912,6 +937,18 @@ internal static class Program
             : "tracking newest-compatible";
         Console.WriteLine($"imported '{manifest.Id}' for game {manifest.GameVersion} "
                           + $"({manifest.Mods.Count} mods, {pinned} pinned, {how})");
+
+        if (unaskedFork)
+        {
+            Console.WriteLine($"  this pack says it comes from {bundle.CanonicalUrl}");
+            Console.WriteLine("  imported as your own copy, so nothing checks back with it");
+            Console.WriteLine("  pass --follow to keep it in step with that address instead");
+        }
+        else if (store.LoadLink(manifest.Id) is { Role: PackRole.Follower } link)
+        {
+            Console.WriteLine($"  following {link.Url}");
+        }
+
         Console.WriteLine($"  sync it with: cairn-cli sync {manifest.Id}");
         return 0;
     }

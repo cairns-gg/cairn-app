@@ -40,13 +40,17 @@ public static class ModDbUrls
     /// <summary>
     /// Whether a download URL points somewhere ModDB actually serves files from.
     ///
-    /// This gates attacker-supplied input. A shared pack carries its own lockfile, and
-    /// following a URL out of one would let the pack choose where a mod is fetched from,
-    /// into the directory handed to the game. Mods are code.
+    /// Deliberately NOT what keeps somebody else's lockfile from choosing where a mod is
+    /// fetched from — it cannot be, and reading it that way was a real hole. A host
+    /// allowlist answers "is this a host ModDB uses", never "did ModDB give us this URL",
+    /// and since anyone may upload a mod, anyone may put a file on that host. Provenance
+    /// is enforced by clearing those fields on the way in instead; see
+    /// <see cref="Packs.PackLock.ClearResolvedLocations"/>.
     ///
-    /// Deliberately not the only defence: ModDB's CDN host is a config value in its own
-    /// source rather than a constant, so this list can go stale. A caller that fails this
-    /// check should resolve the mod again rather than refuse it.
+    /// What this is for is staleness: ModDB's CDN host is a config value in its own source
+    /// rather than a constant, so a URL this machine wrote down last week may point at a
+    /// host that has since stopped serving. A caller that fails this check should resolve
+    /// the mod again rather than refuse it.
     /// </summary>
     public static bool IsKnownDownloadHost(string? url)
     {

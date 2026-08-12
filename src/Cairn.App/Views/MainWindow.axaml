@@ -116,13 +116,11 @@
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="Import as" VerticalAlignment="Center"
                                    FontSize="12" Opacity="0.7" />
                         <TextBox Grid.Column="1" Text="{Binding ImportAsId}"
                                  PlaceholderText="(keep the author's name)" />
-                        <CheckBox Grid.Column="2" Content="use their exact versions"
-                                  IsChecked="{Binding ImportReproduce}" />
                     </Grid>
 
                     <Border IsVisible="{Binding HasImportError}" Padding="10,8" CornerRadius="1"

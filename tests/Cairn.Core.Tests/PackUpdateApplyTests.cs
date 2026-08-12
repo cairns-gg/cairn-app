@@ -65,7 +65,10 @@ public class PackUpdateApplyTests : IDisposable
     /// <summary>Imports revision 1, so the pack exists as a follower with a base.</summary>
     private PackManifest Follow(PackManifest theirs, PackLock? locked = null)
     {
-        var imported = _store.Import(Bundle(theirs, locked, revision: 1));
+        var imported = _store.Import(
+            Bundle(theirs, locked, revision: 1),
+            sourceUrl: "https://cairns.gg/dizzyd/anego");
+
         return imported;
     }
 
@@ -261,6 +264,34 @@ public class PackUpdateApplyTests : IDisposable
         // Theirs reproduces their set exactly; yours is not re-downloaded for no reason.
         Assert.Equal("2.0.0", locked.Mods.Single(m => m.ModId == "carryon").Version);
         Assert.Equal("5.0.0", locked.Mods.Single(m => m.ModId == "myfavourite").Version);
+    }
+
+    [Fact]
+    public void An_update_cannot_move_a_mod_you_already_have_to_a_url_of_its_choosing()
+    {
+        Follow(Pack("1.22.5", Mod("carryon")), Lock("1.22.5", ("carryon", "1.0.0")));
+
+        var mine = Pack("1.22.5", Mod("carryon"));
+        _store.Save(mine);
+
+        // A revision that adds nothing and removes nothing, but rewrites where carryon
+        // comes from. The plan diffs manifests, so this is invisible there — it would read
+        // as "matches the author's revision" while silently replacing the download.
+        var theirs = Pack("1.22.5", Mod("carryon"));
+        var poisoned = Lock("1.22.5", ("carryon", "1.0.0"));
+        poisoned.Mods.Single().Url = "https://moddbcdn.vintagestory.at/attacker/payload.zip";
+        poisoned.Mods.Single().FileName = "payload.zip";
+
+        var plan = PackUpdatePlan.Between(mine, theirs, _store.LoadUpstream("anego"));
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, poisoned, revision: 2));
+
+        var locked = _store.LoadLock("anego")!.Mods.Single();
+
+        // Import is not the only way somebody else's lock entries arrive, so it is not the
+        // only place the rule applies.
+        Assert.Equal("carryon", locked.ModId);
+        Assert.Equal("", locked.Url);
+        Assert.Equal("", locked.FileName);
     }
 
     [Fact]

@@ -1798,6 +1798,113 @@ public class MainWindowTests : IDisposable
         Assert.Equal("anego-copy", vm.SelectedPack!.Id);
     }
 
+    /// <summary>
+    /// The pane behind the dialogs.
+    ///
+    /// IsImporting is what opens the main window's import pane, and it exists as the
+    /// fallback for having no view to put a dialog in. Setting it on the dialog path too
+    /// put "Import a Pack" in the main window behind the very dialogs that were asking, so
+    /// the same step showed twice and the window moved underneath a modal.
+    ///
+    /// Every other import test nulls ChooseImportSource and therefore runs the fallback,
+    /// which is exactly why none of them noticed. This one wires the dialogs up.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Nothing_moves_in_the_main_window_while_the_dialogs_are_up()
+    {
+        var http = new OfflineHandler();
+        http.Serve("/dizzyd/quiet.json", """
+            {"formatVersion":1,
+             "pack":{"id":"quiet","gameVersion":"1.22.5","mods":[{"modid":"glassview"}]},
+             "publishedBy":"dizzyd",
+             "canonicalUrl":"https://cairns.gg/dizzyd/quiet",
+             "revision":1}
+            """);
+
+        var (_, vm) = Show(http);
+
+        vm.ChooseImportSource = choice =>
+        {
+            choice.Source = ImportSource.Link;
+            choice.Url = "https://cairns.gg/dizzyd/quiet";
+            return Task.FromResult(true);
+        };
+
+        var paneWasUp = false;
+        vm.ConfirmImport = _ =>
+        {
+            paneWasUp = vm.ShowImport;
+            return Task.FromResult(true);
+        };
+
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        Assert.False(paneWasUp);
+        Assert.False(vm.ShowImport);
+        Assert.Contains(vm.Packs, p => p.Id == "quiet");
+    }
+
+    /// <summary>
+    /// The other half: a failure still needs somewhere to be read, so the pane opens then
+    /// — and opens as a pane, not by asking again where the pack was coming from.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_failure_opens_the_pane_rather_than_the_source_dialog_again()
+    {
+        var (_, vm) = Show(new OfflineHandler());   // every address 404s
+
+        var asked = 0;
+
+        vm.ChooseImportSource = choice =>
+        {
+            asked++;
+            choice.Source = ImportSource.Link;
+            choice.Url = "https://cairns.gg/dizzyd/missing";
+            return Task.FromResult(true);
+        };
+
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, asked);
+        Assert.True(vm.ShowImport);
+        Assert.NotNull(vm.ImportError);
+        Assert.Equal("https://cairns.gg/dizzyd/missing", vm.ImportText);
+    }
+
+    [AvaloniaFact]
+    public async Task The_address_a_person_copies_is_the_one_that_works()
+    {
+        var http = new OfflineHandler();
+
+        // Only the document answers here. The page address 404s, which is what cairns.gg
+        // effectively does to a JSON parser by serving HTML there — so this passes only if
+        // the launcher asked for the document rather than the page.
+        http.Serve("/dizzyd/anego-page.json", """
+            {"formatVersion":1,
+             "pack":{"id":"anego-page","gameVersion":"1.22.5","mods":[{"modid":"glassview"}]},
+             "publishedBy":"dizzyd",
+             "canonicalUrl":"https://cairns.gg/dizzyd/anego-page",
+             "revision":1}
+            """);
+
+        var (_, vm) = Show(http);
+        vm.ConfirmImport = _ => Task.FromResult(true);
+
+        vm.BeginImportCommand.Execute(null);
+        vm.ImportText = "https://cairns.gg/dizzyd/anego-page";
+
+        await vm.ImportPackCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.ImportError);
+        Assert.Contains(vm.Packs, p => p.Id == "anego-page");
+
+        // And the follow is recorded against the page, not the document beside it: the
+        // ".json" is how a machine fetches it, never how a person refers to it.
+        var link = new PackStore().LoadLink("anego-page");
+        Assert.NotNull(link);
+        Assert.Equal("https://cairns.gg/dizzyd/anego-page", link!.Url);
+    }
+
     [AvaloniaFact]
     public void Importing_junk_reports_an_error_and_stays_on_the_form()
     {

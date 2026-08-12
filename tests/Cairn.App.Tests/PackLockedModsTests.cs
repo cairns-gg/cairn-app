@@ -51,12 +51,16 @@ public class PackLockedModsTests : IDisposable
             Mods = [.. mods.Select(m => new PackMod { ModId = m })],
         };
 
-        Store.Import(new PackBundle
-        {
-            Pack = manifest,
-            CanonicalUrl = "https://cairns.gg/dizzyd/anego",
-            Revision = 1,
-        });
+        Store.Import(
+            new PackBundle
+            {
+                Pack = manifest,
+                CanonicalUrl = "https://cairns.gg/dizzyd/anego",
+                Revision = 1,
+            },
+            // A follow is recorded against the address it was fetched from, so a bundle
+            // that never came off a server is nobody's to follow.
+            sourceUrl: "https://cairns.gg/dizzyd/anego");
     }
 
     private (MainWindow Window, MainViewModel Vm) Open()

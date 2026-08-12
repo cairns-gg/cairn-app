@@ -96,6 +96,22 @@ public static class PackUpdateCheck
             : trimmed + ".json";
     }
 
+    /// <summary>
+    /// The inverse: the page a person reads, from the address a machine fetched.
+    ///
+    /// Recorded rather than the document URL because a pack's link is shown to whoever
+    /// holds it and is the address they would open — and because the slug is read back out
+    /// of it by taking the last segment, which ".json" would quietly become part of.
+    /// </summary>
+    public static string PageUrl(string documentUrl)
+    {
+        var trimmed = documentUrl.TrimEnd('/');
+
+        return trimmed.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^".json".Length]
+            : trimmed;
+    }
+
     public static async Task<PackBundle?> FetchAsync(
         PackLink? link, HttpClient http, CancellationToken ct = default)
     {

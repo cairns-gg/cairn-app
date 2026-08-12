@@ -404,7 +404,6 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty] public partial string ImportText { get; set; } = "";
     [ObservableProperty] public partial string ImportAsId { get; set; } = "";
-    [ObservableProperty] public partial bool ImportReproduce { get; set; } = true;
     [ObservableProperty] public partial string? ImportError { get; set; }
     [ObservableProperty] public partial bool ImportBusy { get; set; }
 
@@ -687,7 +686,13 @@ public partial class MainViewModel : ViewModelBase
         // The link and paste answers are the two the pane always handled, and they are
         // handled by exactly the same code: a URL is fetched and shown for approval, text
         // in your hand imports directly.
-        IsImporting = true;
+        //
+        // The pane deliberately stays shut. It is the fallback for having no view to open
+        // a dialog in — see above — and turning it on here as well put "Import a Pack" in
+        // the main window behind the dialogs that were already asking, so the same step
+        // appeared twice and the window changed under a modal. Nothing should move back
+        // there while somebody is working through the dialogs; a failure opens it, which
+        // is the one time it has something to say.
         ImportAsId = choice.AsId;
         ImportText = choice.Payload;
 
@@ -821,13 +826,42 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var json = File.Exists(source) ? File.ReadAllText(source) : source;
+            var bundle = PackBundle.Parse(json);
 
-            Added(_store.Import(
-                PackBundle.Parse(json),
-                // Slugged like a new pack's name, so "Anego Copy" is accepted here rather
-                // than rejected for containing a space.
-                string.IsNullOrWhiteSpace(ImportAsId) ? null : PackId.FromOrFallback(ImportAsId),
-                ImportReproduce));
+            // Slugged like a new pack's name, so "Anego Copy" is accepted here rather than
+            // rejected for containing a space.
+            var asId = string.IsNullOrWhiteSpace(ImportAsId)
+                ? null
+                : PackId.FromOrFallback(ImportAsId);
+
+            // A file still imports directly when there is nothing to ask — see the comment
+            // on this method. What a published document adds is a real question: it names
+            // an owner and an address, and nothing here watched it arrive from one, so
+            // whether to check back with it is not Cairn's to assume.
+            if (bundle.IsPublished && ConfirmImport is not null)
+            {
+                var offer = new ImportViewModel(
+                    bundle, bundle.CanonicalUrl ?? source, id => _store.Exists(id), fetched: false);
+
+                if (!string.IsNullOrWhiteSpace(ImportAsId)) offer.AsId = asId!;
+
+                // Dismissed the same way a fetched one is: the pane closes rather than
+                // being left open behind a dialog that is no longer there. One dialog
+                // ought not to mean two things depending on how it was reached.
+                if (!await ConfirmImport(offer))
+                {
+                    IsImporting = false;
+                    return;
+                }
+
+                Added(_store.Import(
+                    bundle, PackId.FromOrFallback(offer.AsId),
+                    sourceUrl: null, intent: offer.Intent));
+
+                return;
+            }
+
+            Added(_store.Import(bundle, asId));
         }
         catch (Exception e)
         {
@@ -861,7 +895,16 @@ public partial class MainViewModel : ViewModelBase
                 return;
             }
 
-            var response = await _http.GetAsync(url);
+            // A pack's address is the page a person reads, and that page serves HTML.
+            // Fetching it raw reports "invalid JSON", which is true and tells whoever
+            // pasted a perfectly good URL nothing about what to paste instead.
+            // cairn-server has asked for the document since it was written; the launcher
+            // and the CLI had not, so the same address worked in one front-end and not the
+            // others. Idempotent, so a cairn:// link — which already names the document —
+            // arrives here unchanged.
+            var documentUrl = PackUpdateCheck.DocumentUrl(url);
+
+            var response = await _http.GetAsync(documentUrl);
 
             // A withdrawn pack answers rather than 404s, precisely so this can say what
             // happened instead of "not found".
@@ -874,7 +917,7 @@ public partial class MainViewModel : ViewModelBase
             response.EnsureSuccessStatusCode();
 
             var bundle = PackBundle.Parse(await response.Content.ReadAsStringAsync());
-            var offer = new ImportViewModel(bundle, url, id => _store.Exists(id));
+            var offer = new ImportViewModel(bundle, documentUrl, id => _store.Exists(id));
 
             if (ConfirmImport is null || !await ConfirmImport(offer))
             {
@@ -882,7 +925,9 @@ public partial class MainViewModel : ViewModelBase
                 return;
             }
 
-            Added(_store.Import(bundle, PackId.FromOrFallback(offer.AsId), offer.Reproduce));
+            Added(_store.Import(
+                bundle, PackId.FromOrFallback(offer.AsId),
+                sourceUrl: documentUrl, intent: offer.Intent));
         }
         catch (Exception e)
         {
@@ -902,7 +947,13 @@ public partial class MainViewModel : ViewModelBase
     {
         if (!IsImporting)
         {
-            BeginImport();
+            // The pane itself, rather than BeginImport: that asks again where the pack is
+            // coming from, and a dialog reopening on top of a failure is not somewhere to
+            // read one. Harmless while the pane was being opened here anyway; not once it
+            // is only opened when something has gone wrong.
+            IsCreating = false;
+            ImportAsId = "";
+            IsImporting = true;
             ImportText = url;
         }
 

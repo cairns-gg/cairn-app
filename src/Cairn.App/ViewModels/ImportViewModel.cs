@@ -34,17 +34,34 @@ public sealed class ImportModViewModel(
 /// say plainly what is in it: who published it, from where, and every mod and version it
 /// would install.
 ///
-/// Pure disclosure apart from two choices — what to call it locally, and whether to
-/// reproduce the author's exact versions.
+/// Pure disclosure apart from two choices — what to call it locally, and whether this copy
+/// follows the author or starts a pack of your own.
 /// </summary>
 public sealed partial class ImportViewModel : ViewModelBase
 {
     private readonly Func<string, bool> _idTaken;
 
-    public ImportViewModel(PackBundle bundle, string source, Func<string, bool> idTaken)
+    /// <param name="fetched">
+    /// Whether Cairn fetched this from <paramref name="source"/> itself, as opposed to
+    /// reading it out of a file or a pasted blob. It decides which address a follow would
+    /// use and whether one may be preselected — see <see cref="FollowNote"/>.
+    /// </param>
+    public ImportViewModel(
+        PackBundle bundle, string source, Func<string, bool> idTaken, bool fetched = true)
     {
         Bundle = bundle;
         _idTaken = idTaken;
+        Fetched = fetched;
+
+        FollowUrl = fetched
+            ? PackUpdateCheck.PageUrl(source)
+            : bundle.CanonicalUrl;
+
+        // Preselected only where the address is one Cairn watched this arrive from.
+        // Leaving it unanswered for a file is the point rather than an oversight: the only
+        // address on offer there is the document's own word, and a preselected "follow" is
+        // that word being acted on with a person's consent standing in front of it.
+        Follow = fetched ? true : null;
 
         var manifest = bundle.Pack!;
 
@@ -123,19 +140,93 @@ public sealed partial class ImportViewModel : ViewModelBase
         $"{Mods.Count} mod{(Mods.Count == 1 ? "" : "s")} · game {GameVersion}";
 
     /// <summary>
-    /// Without a lock there is nothing to reproduce, and the toggle would be a lie — sync
-    /// resolves newest-compatible whatever it is set to.
+    /// What the pack will install, stated rather than offered.
+    ///
+    /// There used to be a toggle here for taking the mod list without the author's
+    /// versions. It is gone: a lock exists so that a shared pack reproduces, and inviting
+    /// somebody to discard it at the moment they take the pack on offers them the one
+    /// outcome nobody wants — a pack that resembles the author's and is not it. The CLI
+    /// keeps --loose for the rare case, where asking for it is deliberate.
     /// </summary>
     public string VersionNote => HasLock
-        ? "Exact versions the author tested, checked against their checksums."
+        ? "Installs the exact versions the author tested, checked against their checksums."
         : "This pack carries no lockfile, so sync will resolve the newest compatible releases.";
 
     // ---- the choices ----
 
     [ObservableProperty] public partial string AsId { get; set; }
 
-    /// <summary>Off only deliberately: the whole value of a shared pack is that it matches.</summary>
-    [ObservableProperty] public partial bool Reproduce { get; set; } = true;
+    // ---- following, or starting your own ----
+
+    /// <summary>Whether Cairn fetched this itself. See the constructor.</summary>
+    public bool Fetched { get; }
+
+    /// <summary>
+    /// The address a follow would check back with: the one this was fetched from, or —
+    /// for a file — the one the document names itself. Null when it names none.
+    /// </summary>
+    public string? FollowUrl { get; }
+
+    /// <summary>
+    /// Whether there is anything to decide. A document that came off nobody's server has
+    /// no owner to follow, so the question would be noise.
+    /// </summary>
+    public bool CanChooseFollow => Bundle.IsPublished && FollowUrl is { Length: > 0 };
+
+    /// <summary>
+    /// Null until answered. Tri-state rather than a bool because "not yet said" and "no"
+    /// are different answers, and a file's default must be the first.
+    /// </summary>
+    [ObservableProperty] public partial bool? Follow { get; set; }
+
+    /// <summary>
+    /// Where following would go, and how much Cairn actually knows about it.
+    ///
+    /// The distinction is the whole reason the choice exists. An address Cairn fetched
+    /// from is one it watched this document arrive from; an address inside a file is that
+    /// file's claim about itself, which nothing has checked and which would otherwise
+    /// decide where this machine checks back for ever.
+    /// </summary>
+    public string FollowNote => Fetched
+        ? $"Keep in step with {FollowUrl}, where this came from."
+        : $"This file says it comes from {FollowUrl}. Cairn has not checked that — "
+          + "following takes the file's word for it.";
+
+    public string ForkNote =>
+        "Start a pack of your own from it. Nothing checks back, and it is yours to "
+        + "change, publish or share.";
+
+    /// <summary>
+    /// The two radio buttons, as plain bools.
+    ///
+    /// A tri-state cannot drive <c>IsChecked</c> directly without a converter that has to
+    /// guess what unchecking means, and in a group the uncheck of one arrives around the
+    /// check of the other — so "neither" and "the other one" become order-dependent. Two
+    /// derived properties have no such ambiguity: both false is the unanswered state, and
+    /// only a check ever writes.
+    /// </summary>
+    public bool FollowChosen
+    {
+        get => Follow == true;
+        set { if (value) Follow = true; }
+    }
+
+    public bool ForkChosen
+    {
+        get => Follow == false;
+        set { if (value) Follow = false; }
+    }
+
+    partial void OnFollowChanged(bool? value)
+    {
+        OnPropertyChanged(nameof(FollowChosen));
+        OnPropertyChanged(nameof(ForkChosen));
+        OnPropertyChanged(nameof(NeedsFollowAnswer));
+        OnPropertyChanged(nameof(CanAdd));
+    }
+
+    /// <summary>What <see cref="PackStore.Import"/> is told, once somebody has said.</summary>
+    public ImportIntent Intent => Follow == true ? ImportIntent.Follow : ImportIntent.Fork;
 
     partial void OnAsIdChanged(string value)
     {
@@ -163,7 +254,13 @@ public sealed partial class ImportViewModel : ViewModelBase
 
     public bool HasIdConflict => IdConflict is not null;
 
-    public bool CanAdd => !HasIdConflict;
+    /// <summary>
+    /// Blocked until an unpreselected choice has been made. Only a file reaches this: a
+    /// fetched document starts on "follow", which is what it has always done.
+    /// </summary>
+    public bool NeedsFollowAnswer => CanChooseFollow && Follow is null;
+
+    public bool CanAdd => !HasIdConflict && !NeedsFollowAnswer;
 
     /// <summary>
     /// The host alone, because that is the part worth reading. A full URL puts the domain
