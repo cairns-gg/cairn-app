@@ -273,7 +273,12 @@ public sealed class InstallImport(ModDbClient moddb)
                 {
                     ModId = c.ModId,
                     Version = c.Release!.ModVersion,
-                    FileName = c.Release.FileName,
+                    // Guarded here as well as in PackSyncer: this is a lock written
+                    // straight from a remote API's idea of a filename, and it sits on disk
+                    // being read by the diagnostics report long before any sync re-derives
+                    // it. A name Cairn would refuse to install is recorded as no name at
+                    // all rather than as something a reader might combine with a path.
+                    FileName = ModFileName.Safe(c.Release.FileName) ?? "",
                     Url = c.Release.Url,
                     ReleaseId = c.Release.ReleaseId,
                     FileId = c.Release.FileId,

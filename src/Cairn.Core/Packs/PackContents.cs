@@ -24,7 +24,9 @@ public sealed record PackContents(
         var dataDir = store.DataDir(id);
 
         return new PackContents(
-            Mods: CountFiles(modsDir, "*.zip"),
+            // Every kind of mod file, not only .zip, so the count matches what the sweep
+            // in PackSyncer would clear and what deleting the pack actually removes.
+            Mods: CountFiles(modsDir, ModFileName.HasModExtension),
             ModsBytes: DirectoryGrowth.Measure(modsDir),
             Worlds: WorldsIn(dataDir),
             WorldsBytes: DirectoryGrowth.Measure(Path.Combine(dataDir, "Saves")),
@@ -34,11 +36,13 @@ public sealed record PackContents(
             TotalBytes: DirectoryGrowth.Measure(store.PackDir(id)));
     }
 
-    private static int CountFiles(string dir, string pattern)
+    private static int CountFiles(string dir, Func<string, bool> wanted)
     {
         try
         {
-            return Directory.Exists(dir) ? Directory.GetFiles(dir, pattern).Length : 0;
+            return Directory.Exists(dir)
+                ? Directory.GetFiles(dir).Count(f => wanted(Path.GetFileName(f)))
+                : 0;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

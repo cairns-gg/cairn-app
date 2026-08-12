@@ -143,12 +143,22 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 locked.RequiredBy = [.. wanters.Order(StringComparer.OrdinalIgnoreCase)];
         }
 
-        // Anything in the directory we did not just account for is no longer part of
-        // the pack. Only touch .zip files so a hand-dropped folder mod is left alone.
+        // Anything in the directory we did not just account for is no longer part of the
+        // pack. Every kind of file Cairn installs, not only .zip: the set here and the set
+        // ModFileName will let through are the same set on purpose, because a file Cairn
+        // could write and could not sweep would sit in the mod path for ever, invisible to
+        // the lock and to everything that reads it.
+        //
+        // Still files only, so a hand-dropped folder mod is left alone, and still only the
+        // kinds Cairn installs, so a readme or a config somebody parked here is not ours
+        // to delete.
         var keep = newLock.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var stray in Directory.EnumerateFiles(modsDir, "*.zip"))
+        foreach (var stray in Directory.EnumerateFiles(modsDir))
         {
-            if (keep.Contains(Path.GetFileName(stray))) continue;
+            var name = Path.GetFileName(stray);
+
+            if (keep.Contains(name) || !ModFileName.HasModExtension(name)) continue;
+
             File.Delete(stray);
             Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray), "no longer in pack"));
         }
@@ -267,16 +277,17 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     $"ModDB marks this as {release.Side}-side; installing it "
                     + $"{ModSides.Describe(side)} may do nothing"));
 
-            // Reduced to a bare filename before it touches the filesystem: this can come
-            // from an imported lock, and Path.Combine with "../../evil.zip" would happily
-            // escape the pack. PackStore.PackDir guards ids for exactly this reason.
-            var safeName = SafeFileName(release.FileName);
-            if (safeName is null)
+            // Reduced to a name a pack may hold before it touches the filesystem: this
+            // arrives from a remote API, and Path.Combine with "../../evil.zip" would
+            // happily escape the pack. PackStore.PackDir guards ids for the same reason.
+            if (ModFileName.Problem(release.FileName) is { } badName)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId,
-                    $"refusing a mod filename that is not a plain file name: '{release.FileName}'"));
+                    $"refusing a mod filename that {badName}: '{release.FileName}'"));
                 return null;
             }
+
+            var safeName = release.FileName;
 
             var target = Path.Combine(modsDir, safeName);
 
@@ -370,10 +381,6 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     }
 
     /// <summary>
-    /// The bare filename, or null if it is not one. Rejects rather than sanitises, so a
-    /// name that tries to escape is reported instead of quietly becoming something else.
-    /// </summary>
-    /// <summary>
     /// The game versions a release claims, for a warning somebody has to act on.
     ///
     /// Named rather than counted: "marked for 1.21.4" says how far behind the mod is and
@@ -389,21 +396,6 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         var rest = versions.Count - shown.Count;
 
         return string.Join(", ", shown) + (rest > 0 ? $" and {rest} more" : "");
-    }
-
-    private static string? SafeFileName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return null;
-
-        // GetFileName strips any directory part; if that changed the string, the original
-        // was trying to carry one. Also catches "..", rooted paths and both separators.
-        var bare = Path.GetFileName(name);
-
-        if (bare != name || bare is "." or "..") return null;
-        if (bare.AsSpan().IndexOfAny('/', '\\') >= 0) return null;
-        if (Path.IsPathRooted(bare)) return null;
-
-        return bare;
     }
 
     /// <summary>

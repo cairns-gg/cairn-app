@@ -218,7 +218,19 @@ public static class Diagnostics
             return;
         }
 
-        var path = Path.Combine(modsDir, mod.FileName);
+        // A lock is a document, and this one may have been written by somebody else or by
+        // an API. Combining a name out of it with a directory and then reporting whether
+        // the result exists, how large it is and what a zip at that path contains turns
+        // this report into an oracle for any file on the machine — in text people are
+        // asked to paste into a bug report. Refused rather than inspected.
+        if (ModFileName.Safe(mod.FileName) is not { } safeName)
+        {
+            text.AppendLine($"      file       {mod.FileName} — not a plain mod file name, "
+                            + "not inspected");
+            return;
+        }
+
+        var path = Path.Combine(modsDir, safeName);
 
         if (!Safely(() => File.Exists(path), false))
         {

@@ -7,12 +7,16 @@ using Xunit;
 namespace Cairn.Core.Tests;
 
 /// <summary>
-/// A shared pack arrives with its author's lockfile, and PackStore.Import writes it
-/// verbatim — so every field in it is attacker-supplied. Two of them used to be obeyed:
-/// the download URL and the filename, the latter combined straight into the directory
-/// handed to the game via --addModPath. Mods are code.
+/// A shared pack arrives with its author's lockfile, so every field in it started out
+/// attacker-supplied. Two of them used to be obeyed: the download URL and the filename,
+/// the latter combined straight into the directory handed to the game via --addModPath.
+/// Mods are code.
 ///
 /// The lock may still say WHAT to install. It no longer says where from, or where to.
+/// PackStore.Import now clears the location fields on the way in as well — see
+/// PackLock.ClearResolvedLocations — so these exercise the second line of that defence:
+/// what PackSyncer does when a lock reaches it carrying them anyway, which is what a
+/// hand-edited file or a future caller that forgets would produce.
 /// </summary>
 public class UntrustedLockTests : IDisposable
 {
@@ -159,6 +163,33 @@ public class UntrustedLockTests : IDisposable
         var escaped = Path.GetFullPath(Path.Combine(ModsDir, fileName));
         Assert.False(File.Exists(escaped), $"wrote outside Mods/: {escaped}");
         Assert.Empty(Directory.GetFiles(ModsDir));
+    }
+
+    [Fact]
+    public async Task A_mod_file_the_pack_no_longer_lists_is_removed_whatever_kind_it_is()
+    {
+        // ModDB takes dll and cs uploads as well as zip, so a release filename can be any
+        // of the three — and the sweep used to look only for *.zip. Anything else Cairn
+        // installed stayed in the mod path for ever: named by no lock, counted by nothing,
+        // and still loaded by the game long after the mod was taken out of the pack.
+        var (syncer, _) = Make();
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+
+        var leftovers = new[] { "aaa_lib.dll", "snippet.cs", "old_mod.zip" };
+        foreach (var name in leftovers)
+            File.WriteAllText(Path.Combine(ModsDir, name), "code");
+
+        // Something Cairn did not put there and would not install stays put.
+        var mine = Path.Combine(ModsDir, "notes.txt");
+        File.WriteAllText(mine, "mine");
+
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+
+        foreach (var name in leftovers)
+            Assert.False(File.Exists(Path.Combine(ModsDir, name)), $"left behind: {name}");
+
+        Assert.True(File.Exists(mine));
+        Assert.True(File.Exists(Path.Combine(ModsDir, "olla_1.0.0.zip")));
     }
 
     [Fact]
