@@ -133,13 +133,19 @@ public sealed class ClientSession
 
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(sessionPath)!);
+            // These are the keys that are the Vintage Story login — a session key, an
+            // mptoken, an entitlements blob. They were written with no mode at all, so
+            // they landed at 0644 under an ordinary umask and stayed there.
+            OwnerOnly.CreateDirectory(Path.GetDirectoryName(sessionPath)!);
 
             // Staged and moved, like the caches: a half-written session file would be
-            // read back as a partial login.
+            // read back as a partial login. The staging file is created owner-only and
+            // File.Move carries the mode with it, so there is no moment at which the
+            // login is on disk readable by anybody else.
             var staging = sessionPath + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, JsonSerializer.Serialize(Values, Json));
+            OwnerOnly.WriteText(staging, JsonSerializer.Serialize(Values, Json));
             File.Move(staging, sessionPath, overwrite: true);
+            OwnerOnly.Tighten(sessionPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

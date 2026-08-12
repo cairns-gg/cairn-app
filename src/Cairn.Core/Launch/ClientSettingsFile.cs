@@ -42,9 +42,13 @@ internal static class ClientSettingsFile
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
+            // Owner-only, because PackData merges the Vintage Story login into every
+            // pack's copy of this file at launch so one sign-in reaches all of them —
+            // which makes each one a credential, not a preferences file.
             var staging = path + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, root.ToJsonString(Json));
+            OwnerOnly.WriteText(staging, root.ToJsonString(Json));
             File.Move(staging, path, overwrite: true);
+            OwnerOnly.Tighten(path);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

@@ -43,18 +43,13 @@ public sealed class CairnsSession
 
     public void Save()
     {
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        File.WriteAllText(Path, JsonSerializer.Serialize(this, Json));
-
-        // Best effort: no-op on Windows, and a token in a file only this user can read is
-        // the point rather than a guarantee anybody should lean on.
-        try
-        {
-            File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        }
-        catch (PlatformNotSupportedException)
-        {
-        }
+        // Owner-only from the moment it exists. This used to write the file and narrow it
+        // afterwards, which left the token on disk at 0644 for as long as that took — and
+        // a descriptor opened in the window keeps its access across the change. See
+        // OwnerOnly, and the directory is narrowed too so containment covers whatever
+        // ends up alongside it.
+        OwnerOnly.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+        OwnerOnly.WriteText(Path, JsonSerializer.Serialize(this, Json));
     }
 
     public static void Clear()
