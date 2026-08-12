@@ -14,39 +14,39 @@ public class GameCatalogTests
         "windows": {
           "filename": "vs_install_win-x64_1.22.5.exe", "filesize": "570.2 MB",
           "md5": "8b28f69adff116e83a1c39dd613c6d65",
-          "urls": { "cdn": "https://cdn.example/vs_install_win-x64_1.22.5.exe",
-                    "local": "https://account.example/vs_install_win-x64_1.22.5.exe" },
+          "urls": { "cdn": "https://cdn.vintagestory.at/vs_install_win-x64_1.22.5.exe",
+                    "local": "https://account.vintagestory.at/vs_install_win-x64_1.22.5.exe" },
           "latest": 1
         },
         "mac-x64": {
           "filename": "vs_client_osx-x64_1.22.5.tar.gz", "filesize": "613.5 MB",
           "md5": "6131fa037b8300000000000000000000",
-          "urls": { "cdn": "https://cdn.example/vs_client_osx-x64_1.22.5.tar.gz" },
+          "urls": { "cdn": "https://cdn.vintagestory.at/vs_client_osx-x64_1.22.5.tar.gz" },
           "latest": 1
         },
         "mac-arm64": {
           "filename": "vs_client_osx-arm64_1.22.5.tar.gz", "filesize": "607.8 MB",
           "md5": "e7e4dd2b38f500000000000000000000",
-          "urls": { "cdn": "https://cdn.example/vs_client_osx-arm64_1.22.5.tar.gz" },
+          "urls": { "cdn": "https://cdn.vintagestory.at/vs_client_osx-arm64_1.22.5.tar.gz" },
           "latest": 1
         },
         "linux": {
           "filename": "vs_client_linux-x64_1.22.5.tar.gz", "filesize": "590.2 MB",
           "md5": "ffeb9b11b78400000000000000000000",
-          "urls": { "cdn": "https://cdn.example/vs_client_linux-x64_1.22.5.tar.gz" }
+          "urls": { "cdn": "https://cdn.vintagestory.at/vs_client_linux-x64_1.22.5.tar.gz" }
         }
       },
       "1.21.5": {
         "mac-x64": {
           "filename": "vs_client_osx-x64_1.21.5.tar.gz", "filesize": "563.6 MB",
           "md5": "8b8838c3937100000000000000000000",
-          "urls": { "cdn": "https://cdn.example/vs_client_osx-x64_1.21.5.tar.gz" }
+          "urls": { "cdn": "https://cdn.vintagestory.at/vs_client_osx-x64_1.21.5.tar.gz" }
         }
       },
       "1.10.0": {
         "mac-x64": {
           "filename": "vs_client_osx-x64_1.10.0.tar.gz", "filesize": "300 MB",
-          "md5": "aaaa", "urls": { "cdn": "https://cdn.example/old.tar.gz" }
+          "md5": "aaaa", "urls": { "cdn": "https://cdn.vintagestory.at/old.tar.gz" }
         },
         "mac-arm64": {
           "filename": "vs_client_osx-arm64_1.10.0.tar.gz", "filesize": "300 MB",
@@ -56,7 +56,7 @@ public class GameCatalogTests
       "1.9.14": {
         "mac-x64": {
           "filename": "vs_client_osx-x64_1.9.14.tar.gz", "filesize": "290 MB",
-          "md5": "bbbb", "urls": { "cdn": "https://cdn.example/older.tar.gz" }
+          "md5": "bbbb", "urls": { "cdn": "https://cdn.vintagestory.at/older.tar.gz" }
         }
       },
       "1.22.6": {
@@ -70,6 +70,55 @@ public class GameCatalogTests
         var raw = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, JsonElement>>>(
             Manifest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         return GameCatalog.Parse(raw, platform);
+    }
+
+    [Fact]
+    public void A_download_url_is_only_believed_when_it_points_at_the_vendor()
+    {
+        Assert.True(GameCatalog.IsKnownDownloadHost(
+            "https://cdn.vintagestory.at/vs_client_linux-x64_1.22.5.tar.gz"));
+        Assert.True(GameCatalog.IsKnownDownloadHost(
+            "https://account.vintagestory.at/vs_client_linux-x64_1.22.5.tar.gz"));
+
+        // The catalogue names both the URL and the md5 to check it against, so it
+        // authenticates nothing on its own: whoever rewrites one rewrites the other. This
+        // list is the part that does not come out of the document.
+        Assert.False(GameCatalog.IsKnownDownloadHost("https://evil.example/vs_install.exe"));
+
+        // Not over plaintext, and not a lookalike: userinfo puts the real host after the @.
+        Assert.False(GameCatalog.IsKnownDownloadHost("http://cdn.vintagestory.at/x.tar.gz"));
+        Assert.False(GameCatalog.IsKnownDownloadHost("https://cdn.vintagestory.at.evil.example/x"));
+        Assert.False(GameCatalog.IsKnownDownloadHost("https://cdn.vintagestory.at@evil.example/x"));
+        Assert.False(GameCatalog.IsKnownDownloadHost(null));
+    }
+
+    [Fact]
+    public void A_poisoned_cdn_url_falls_through_to_the_account_url()
+    {
+        // Filtered rather than merely picked, so one rewritten entry does not take the
+        // artifact down with it — and cannot be reached by a caller either way.
+        var artifact = JsonSerializer.Deserialize<CatalogArtifact>("""
+            {"filename":"vs_install_win-x64_1.22.5.exe","filesize":"570.2 MB","md5":"abcd",
+             "urls":{"cdn":"https://evil.example/payload.exe",
+                     "local":"https://account.vintagestory.at/vs_install_win-x64_1.22.5.exe"}}
+            """, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        Assert.Equal(
+            "https://account.vintagestory.at/vs_install_win-x64_1.22.5.exe", artifact.DownloadUrl);
+    }
+
+    [Fact]
+    public void An_artifact_with_no_vendor_url_left_is_no_artifact()
+    {
+        var artifact = JsonSerializer.Deserialize<CatalogArtifact>("""
+            {"filename":"vs_install_win-x64_1.22.5.exe","filesize":"570.2 MB","md5":"abcd",
+             "urls":{"cdn":"https://evil.example/payload.exe",
+                     "local":"https://evil.example/payload.exe"}}
+            """, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        // Null is what GameCatalog.Parse already drops an entry on, so a version served
+        // from nowhere Cairn will fetch from simply stops being offered.
+        Assert.Null(artifact.DownloadUrl);
     }
 
     [Fact]
@@ -105,7 +154,7 @@ public class GameCatalogTests
     public void The_cdn_url_is_preferred_over_the_account_url()
     {
         var windows = Parse("windows").Single();
-        Assert.StartsWith("https://cdn.example/", windows.Artifact.DownloadUrl);
+        Assert.StartsWith("https://cdn.vintagestory.at/", windows.Artifact.DownloadUrl);
     }
 
     [Fact]

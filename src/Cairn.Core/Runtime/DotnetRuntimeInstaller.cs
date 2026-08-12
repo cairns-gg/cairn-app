@@ -217,11 +217,16 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         {
             await DownloadAsync(release.Url, archive, progress, ct).ConfigureAwait(false);
 
-            if (release.Sha512 is { Length: > 0 })
-            {
-                progress?.Report(new InstallProgressReport("verifying", 0, 0));
-                await VerifyAsync(archive, release.Sha512, ct).ConfigureAwait(false);
-            }
+            // Refused rather than skipped when absent. Microsoft's release index carries a
+            // hash for every file, so a release without one is not a case worth tolerating
+            // — and skipping made the check vanish precisely for a crafted entry.
+            if (release.Sha512 is not { Length: > 0 })
+                throw new InvalidOperationException(
+                    $"The .NET release index published no hash for {release.FileName}, so "
+                    + "there is nothing to check it against. Refusing to install it.");
+
+            progress?.Report(new InstallProgressReport("verifying", 0, 0));
+            await VerifyAsync(archive, release.Sha512, ct).ConfigureAwait(false);
 
             if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
 

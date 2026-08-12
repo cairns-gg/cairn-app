@@ -17,10 +17,21 @@ public sealed class CatalogArtifact
     [JsonPropertyName("md5")] public string Md5 { get; set; } = "";
     [JsonPropertyName("urls")] public Dictionary<string, string> Urls { get; set; } = [];
 
-    public string? DownloadUrl =>
-        Urls.TryGetValue("cdn", out var cdn) && !string.IsNullOrWhiteSpace(cdn)
-            ? cdn
-            : Urls.TryGetValue("local", out var local) ? local : null;
+    /// <summary>
+    /// Where to fetch this artifact, or null when the catalogue does not name a place
+    /// Cairn is willing to fetch from.
+    ///
+    /// Filtered rather than merely picked. The catalogue supplies both the URL and the MD5
+    /// to check it against, so on its own it authenticates nothing: whoever rewrites one
+    /// rewrites the other. <see cref="GameCatalog.IsKnownDownloadHost"/> is the part that
+    /// does not come out of the document, and running it here rather than at the call site
+    /// means a caller cannot hold a URL that never passed it. A poisoned "cdn" entry falls
+    /// through to "local" rather than taking the artifact down with it.
+    /// </summary>
+    public string? DownloadUrl => Allowed("cdn") ?? Allowed("local");
+
+    private string? Allowed(string key) =>
+        Urls.TryGetValue(key, out var url) && GameCatalog.IsKnownDownloadHost(url) ? url : null;
 }
 
 /// <summary>A game version paired with the artifact for this machine's platform.</summary>
@@ -61,6 +72,33 @@ public sealed class GameCatalog(HttpClient http)
     public const string LatestStableUrl = "https://api.vintagestory.at/lateststable.txt";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Hosts the vendor serves game downloads from.
+    ///
+    /// Both observed on every one of the 300 artifacts the stable catalogue publishes:
+    /// "cdn" is always cdn.vintagestory.at and "local" is always account.vintagestory.at.
+    /// Kept as a constant here, in Cairn's own source, precisely because that is the one
+    /// part of the decision the catalogue cannot rewrite — the URL and the MD5 beside it
+    /// both come out of the same document, so neither constrains the other.
+    ///
+    /// The same shape as <see cref="ModDb.ModDbUrls"/>' list, and it can go stale the same
+    /// way. It failing is a version that cannot be installed with a reason worth printing,
+    /// which is the right direction for a list whose job is to bound where a binary Cairn
+    /// executes may come from.
+    /// </summary>
+    private static readonly string[] DownloadHosts =
+    [
+        "cdn.vintagestory.at",
+        "account.vintagestory.at",
+    ];
+
+    /// <summary>Whether a catalogue URL points somewhere the vendor actually serves from.</summary>
+    public static bool IsKnownDownloadHost(string? url) =>
+        !string.IsNullOrWhiteSpace(url)
+        && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Manifest keys for this machine, best first.

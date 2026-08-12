@@ -175,13 +175,13 @@ public class ServerInstallTests : IDisposable
               "1.22.6": {
                 "windowsserver": {
                   "filename": "vs_server_win-x64_1.22.6.zip",
-                  "urls": { "cdn": "https://cdn.example/vs_server_win-x64_1.22.6.zip" }
+                  "urls": { "cdn": "https://cdn.vintagestory.at/vs_server_win-x64_1.22.6.zip" }
                 }
               },
               "1.17.12": {
                 "server": {
                   "filename": "vs_server_1.17.12.tar.gz",
-                  "urls": { "cdn": "https://cdn.example/vs_server_1.17.12.tar.gz" }
+                  "urls": { "cdn": "https://cdn.vintagestory.at/vs_server_1.17.12.tar.gz" }
                 }
               }
             }

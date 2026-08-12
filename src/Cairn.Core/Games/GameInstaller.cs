@@ -225,7 +225,15 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
     private static async Task VerifyAsync(
         string path, string expectedMd5, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(expectedMd5)) return;
+        // A missing hash used to mean "nothing to check", which quietly turned the one
+        // integrity step into a no-op for exactly the entry an attacker would craft — and
+        // on Windows the thing being checked is an installer this then runs silently.
+        // Every artifact the catalogue publishes carries an md5, so an entry without one
+        // is not a normal case to tolerate.
+        if (string.IsNullOrWhiteSpace(expectedMd5))
+            throw new GameInstallException(
+                "The version manifest published no md5 for this download, so there is "
+                + "nothing to check it against. Refusing to install it.");
 
         progress?.Report(new InstallProgress(InstallPhase.Verifying, 0, 0, "checking md5"));
 
