@@ -1432,8 +1432,9 @@ Two consequences worth naming, because they are real:
   licenses what you propose to the licensor so it can actually ship in a release.
 
 PolyForm Strict is not on the SPDX licence list — only the Noncommercial and Small Business
-variants are — so GitHub shows no licence badge for this repository and no tooling will
-recognise an identifier for it. That is why the terms are stated here as well as in the file.
+variants are — so GitHub reports this repository's licence as "Other" (`NOASSERTION`) and no
+tooling will recognise an identifier for it. A badge saying "Other" tells a reader nothing,
+which is why the terms are stated here as well as in the file.
 
 The dependencies are all permissive and nothing here conflicts with them: Avalonia,
 CommunityToolkit.Mvvm and BouncyCastle are MIT or MIT-style. Vintage Story itself is neither
