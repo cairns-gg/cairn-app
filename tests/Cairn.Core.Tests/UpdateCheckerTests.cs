@@ -352,4 +352,99 @@ public class UpdateCheckerTests : IDisposable
 
         Assert.Equal("https://cairns.gg", update!.DownloadUrl);
     }
+
+    // ---- the signed manifest ----
+
+    private const string SignedKey = "RWRAbJ1gHdDEh9xDOLFum0islHiQrxMrXefIFoeDUB2GgqUNY4bHmPXr";
+
+    /// <summary>Byte for byte what was signed. Reformatting it invalidates the signature.</summary>
+    private const string SignedBody =
+        """{"version":"0.3.0","files":[{"platform":"linux-x64","name":"c.tar.gz","url":"https://download.cairns.gg/releases/0.3.0/c.tar.gz","size":1,"sha256":"aa"}]}""";
+
+    private const string SignedSig = """
+        untrusted comment: signature from minisign secret key
+        RURAbJ1gHdDEh+0ZEdWrBFaVFMthcKIXEfvcS1DRxddOtn11ayjxmA0+zUGD8e3rNh6by6nRhTWXvx3JIlkdFdzDjAyeytEqRgw=
+        trusted comment: cairn 0.3.0
+        lP+lAY50nL781p6251LPY4cUpdJCuEG5Nfj52CWQ7lxWVtp7yUF9BlA9f5QU5YK/NsLX2sIZUJhvP8e15Nl7Cg==
+        """;
+
+    /// <summary>Answers the manifest and its signature separately, or 404s the signature.</summary>
+    private sealed class Signed(string body, string? signature) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            var wantsSignature = r.RequestUri!.ToString().EndsWith(".minisig", StringComparison.Ordinal);
+
+            if (wantsSignature && signature is null)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(wantsSignature ? signature! : body, Encoding.UTF8),
+            });
+        }
+    }
+
+    private UpdateChecker Armed(string body, string? signature, string key = SignedKey) =>
+        new(new HttpClient(new Signed(body, signature)), UpdateChecker.DefaultManifest,
+            StatePath, () => DateTimeOffset.UtcNow, "0.2.1", key);
+
+    [Fact]
+    public async Task A_signed_manifest_is_acted_on()
+    {
+        var update = await Armed(SignedBody, SignedSig).CheckAsync();
+
+        Assert.NotNull(update);
+        Assert.Equal("0.3.0", update!.Version);
+    }
+
+    /// <summary>
+    /// An unsigned manifest is refused as firmly as a wrongly-signed one. Treating absence
+    /// as the lesser failure would let anybody who can rewrite the manifest turn the check
+    /// off by deleting a file, which is the same attack with less work.
+    /// </summary>
+    [Fact]
+    public async Task An_unsigned_manifest_is_refused_once_a_key_is_configured()
+        => Assert.Null(await Armed(SignedBody, signature: null).CheckAsync());
+
+    [Fact]
+    public async Task A_manifest_edited_after_signing_is_refused()
+    {
+        var edited = SignedBody.Replace("\"0.3.0\"", "\"9.9.9\"");
+
+        Assert.Null(await Armed(edited, SignedSig).CheckAsync());
+    }
+
+    /// <summary>
+    /// The version comes out of the same document as everything else, so a manifest that
+    /// does not verify is not a source for it either — announcing a release named by a
+    /// forged document is doing the attacker's typing.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_manifest_offers_nothing_at_all()
+    {
+        var forged = SignedBody.Replace("\"0.3.0\"", "\"9.9.9\"");
+        var update = await Armed(forged, SignedSig).CheckAsync();
+
+        Assert.Null(update);
+    }
+
+    [Fact]
+    public async Task A_manifest_signed_by_another_key_is_refused()
+        => Assert.Null(await Armed(SignedBody, SignedSig,
+            key: "RWQDiHgg9aatPFKkqUvPYNvMyNAevHIYjOOTWaN65OATfn8zQawEfQCZ").CheckAsync());
+
+    /// <summary>
+    /// And with no key compiled in, nothing changes — which is the state this ships in
+    /// until a key exists, and the reason SR-011 is not closed by this alone.
+    /// </summary>
+    [Fact]
+    public async Task With_no_key_configured_an_unsigned_manifest_is_still_accepted()
+    {
+        var checker = new UpdateChecker(
+            new HttpClient(new Signed(SignedBody, signature: null)), UpdateChecker.DefaultManifest,
+            StatePath, () => DateTimeOffset.UtcNow, "0.2.1", publicKey: "");
+
+        Assert.NotNull(await checker.CheckAsync());
+    }
 }

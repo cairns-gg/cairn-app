@@ -324,13 +324,117 @@ jobs:
           name: cross
           path: dist/*
 
+  # The manifest is made and signed here, in a job that holds the signing key and no
+  # credential that can write to object storage — which is the entire point of it existing
+  # as a separate job. Signing beside the upload would put both keys in one place and leave
+  # the signature vouching for whatever that one place decided to say.
+  #
+  # So the ordering is deliberate: describe the artifacts, sign the description, and only
+  # then hand both to a job that can publish. A compromise of the R2 credentials can still
+  # replace what people download — but not without the signature ceasing to match, which is
+  # the difference between an undetectable substitution and a client that refuses.
+  manifest:
+    needs: [macos, cross]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    env:
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Describe what was built
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          public="${R2_PUBLIC_URL:-$R2_ENDPOINT/$R2_BUCKET}"
+          public="${public%/}"
+
+          cd dist
+
+          # Named explicitly rather than `*`, which would depend on whether the glob is
+          # expanded before the redirection creates the file it is writing to.
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+          {
+            echo "{"
+            echo "  \"version\": \"$version\","
+            echo "  \"publishedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"files\": ["
+            first=1
+            for f in *.zip *.tar.gz; do
+              [ -e "$f" ] || continue
+              platform="$(echo "$f" | sed -E "s/^cairn-$version-//; s/\.(zip|tar\.gz)$//")"
+              [ $first = 1 ] || echo ","
+              first=0
+              printf '    {"platform": "%s", "name": "%s", "url": "%s", "size": %s, "sha256": "%s"}' \
+                "$platform" "$f" "$public/releases/$version/$f" \
+                "$(stat -c%s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
+            done
+            echo
+            echo "  ]"
+            echo "}"
+          } > manifest.json
+
+          cat manifest.json
+
+      # Signed with a key that exists nowhere else in this workflow. Without it the manifest
+      # names both the download and the hash to check it against, so it authenticates
+      # nothing: whoever rewrites one rewrites the other.
+      #
+      # Not configured is a valid answer and leaves things exactly as they were, in the same
+      # way the macOS certificate does — but it is said out loud, because a release that
+      # quietly stopped being signed while clients expected a signature is the failure worth
+      # noticing early.
+      - name: Sign the manifest
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_KEY_PASSWORD: ${{ secrets.MINISIGN_KEY_PASSWORD }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "MINISIGN_SECRET_KEY is not set — publishing an unsigned manifest."
+            echo "Clients built with a public key compiled in will refuse it."
+            exit 0
+          fi
+
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+
+          umask 077
+          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$RUNNER_TEMP/minisign.key"
+
+          # -t is the trusted comment, which the second signature covers, so it cannot be
+          # edited after the fact the way the untrusted one can.
+          MINISIGN_PASSWORD="$MINISIGN_KEY_PASSWORD" minisign -S \
+            -s "$RUNNER_TEMP/minisign.key" \
+            -m dist/manifest.json \
+            -t "cairn $GITHUB_REF_NAME" \
+            -c "cairn release manifest"
+
+          rm -f "$RUNNER_TEMP/minisign.key"
+
+          cat dist/manifest.json.minisig
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manifest
+          path: |
+            dist/manifest.json
+            dist/manifest.json.minisig
+            dist/SHA256SUMS
+
   # Object storage, which is where downloads actually come from — GitHub is not a public
   # distribution channel here, so this job is the one that reaches people.
   #
   # Uploading a version is safe on its own: the files sit at an immutable path that nothing
   # links to. Moving latest.json is the act that ships them, and that has a condition on it.
   r2:
-    needs: [macos, cross]
+    needs: [macos, cross, manifest]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
@@ -375,9 +479,12 @@ jobs:
 
           cd dist
 
-          # Named explicitly rather than `*`, which would depend on whether the glob is
-          # expanded before the redirection creates the file it is writing to.
-          sha256sum *.zip *.tar.gz > SHA256SUMS
+          # SHA256SUMS, manifest.json and manifest.json.minisig all arrive from the
+          # `manifest` job. Regenerating any of them here would defeat the point: this job
+          # holds the credential that can rewrite object storage, and a description it
+          # wrote itself vouches for nothing. The signature travels with them, so what gets
+          # published either matches what was signed or stops verifying.
+          test -f manifest.json || { echo "no manifest.json from the manifest job"; exit 1; }
           cat SHA256SUMS
 
           # A versioned path, and never overwritten. Somebody who linked a build a year ago
@@ -392,30 +499,6 @@ jobs:
               --cache-control "public, max-age=31536000, immutable"
           done
 
-          # What the site reads to know what to offer. Written last, so it never names a
-          # file that is not up yet, and cached briefly rather than forever — it is the one
-          # thing here that is meant to change.
-          {
-            echo "{"
-            echo "  \"version\": \"$version\","
-            echo "  \"publishedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-            echo "  \"files\": ["
-            first=1
-            for f in *.zip *.tar.gz; do
-              [ -e "$f" ] || continue
-              platform="$(echo "$f" | sed -E "s/^cairn-$version-//; s/\.(zip|tar\.gz)$//")"
-              [ $first = 1 ] || echo ","
-              first=0
-              printf '    {"platform": "%s", "name": "%s", "url": "%s", "size": %s, "sha256": "%s"}' \
-                "$platform" "$f" "$public/releases/$version/$f" \
-                "$(stat -c%s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
-            done
-            echo
-            echo "  ]"
-            echo "}"
-          } > manifest.json
-
-          cat manifest.json
 
           # Kept with the version it describes, immutable like everything else under that
           # path. latest.json is overwritten every release, so without this the manifest
@@ -449,6 +532,17 @@ jobs:
 
           # The same bytes at both paths rather than a pointer, so a reader needs one
           # request and cannot catch latest.json naming a manifest that is not up yet.
+          # The signature first, then the document it vouches for. A reader that catches
+          # the pair mid-update finds an old signature against an old manifest, which
+          # verifies; the other order gives them a new manifest against an old signature,
+          # which does not, and a client that refuses a good release is the worse failure.
+          if [ -f manifest.json.minisig ]; then
+            aws s3 cp manifest.json.minisig "s3://$R2_BUCKET/releases/latest.json.minisig" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --content-type text/plain \
+              --cache-control "public, max-age=300"
+          fi
+
           aws s3 cp manifest.json "s3://$R2_BUCKET/releases/latest.json" \
             --endpoint-url "$R2_ENDPOINT" \
             --content-type application/json \

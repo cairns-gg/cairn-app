@@ -117,9 +117,44 @@ public sealed class UpdateChecker(
     string? manifestUrl = null,
     string? statePath = null,
     Func<DateTimeOffset>? clock = null,
-    string? currentVersion = null)
+    string? currentVersion = null,
+    string? publicKey = null)
 {
+    /// <summary>
+    /// The key in force. Overridable for the same reason the clock and the running version
+    /// are: the armed behaviour is the half worth testing, and it cannot be reached while
+    /// the compiled-in key is empty. Not a way to weaken anything in the product — the
+    /// default is the constant, nothing that constructs this passes anything else, and a
+    /// document arriving over the network cannot reach a constructor argument.
+    /// </summary>
+    private readonly string _publicKey = publicKey ?? ManifestPublicKey;
+
     public const string DefaultManifest = "https://download.cairns.gg/releases/latest.json";
+
+    /// <summary>
+    /// The minisign public key the release manifest is signed with, or empty while there is
+    /// none.
+    ///
+    /// This is the one value in the update path that does not come from the same place as
+    /// everything it vouches for. The manifest names the download and the SHA-256 to check
+    /// it against, and both are written by one job holding one credential — so whoever
+    /// holds it can rewrite the artifact, the hash and the checksum file together and every
+    /// check downstream still passes. A signature made with a key that never enters that
+    /// job is what breaks the circle, and it only breaks it because this constant is
+    /// compiled in rather than fetched.
+    ///
+    /// <para><b>Empty means unarmed.</b> With no key there is nothing to check against, so
+    /// the manifest is taken as it always was and this is worth no more than the comment
+    /// describing it. Filling it in is what turns the check on — and from then on an
+    /// unsigned or wrongly-signed manifest is refused outright rather than believed a
+    /// little less. Deliberately not a setting or an environment variable: something a
+    /// hostile document could switch off is not a control.</para>
+    ///
+    /// <para>Generate the pair with <c>minisign -G -p cairn.pub -s cairn.key</c>, put the
+    /// line out of <c>cairn.pub</c> here, and give the secret key to the release workflow
+    /// as <c>MINISIGN_SECRET_KEY</c>. The private half must never be in this repository.</para>
+    /// </summary>
+    public const string ManifestPublicKey = "";
 
     /// <summary>
     /// How often the server is asked. Short enough that a release is noticed the same
@@ -283,6 +318,35 @@ public sealed class UpdateChecker(
     }
 
     /// <summary>
+    /// Why the manifest just fetched should not be acted on, or null when it is fine.
+    ///
+    /// Refuses on a missing signature as firmly as on a wrong one, once a key is
+    /// configured. Treating "absent" as a lesser failure would hand anybody who can rewrite
+    /// the manifest a way to switch the check off by deleting a file — which is not a
+    /// smaller problem than forging one, it is the same problem with less work.
+    ///
+    /// The whole manifest is refused rather than just its download links: a document whose
+    /// signature does not check out is not a source for the version number either, and
+    /// announcing "9.9.9 is available" out of one is doing the attacker's typing.
+    /// </summary>
+    private async Task<string?> SignatureProblemAsync(byte[] body, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_publicKey)) return null;
+
+        string signature;
+        try
+        {
+            signature = await http.GetStringAsync(_manifest + ".minisig", ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return "it is not signed";
+        }
+
+        return Minisign.Problem(body, signature, _publicKey);
+    }
+
+    /// <summary>
     /// Returns something only when there is a newer version than this build. Never throws:
     /// an update check is the least important thing the app does, and it runs while
     /// somebody is trying to play a game.
@@ -294,7 +358,13 @@ public sealed class UpdateChecker(
         LatestRelease? latest;
         try
         {
-            latest = await http.GetFromJsonAsync<LatestRelease>(_manifest, ct).ConfigureAwait(false);
+            // Fetched as bytes rather than deserialised in one step, because the signature
+            // covers what was served and not what a parser made of it.
+            var body = await http.GetByteArrayAsync(_manifest, ct).ConfigureAwait(false);
+
+            if (await SignatureProblemAsync(body, ct).ConfigureAwait(false) is not null) return null;
+
+            latest = JsonSerializer.Deserialize<LatestRelease>(body);
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException
                                       or NotSupportedException or InvalidOperationException)
