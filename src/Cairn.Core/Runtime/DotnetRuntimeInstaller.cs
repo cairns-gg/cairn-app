@@ -101,6 +101,38 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
     private const string ReleasesIndexUrl =
         "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json";
 
+    /// <summary>
+    /// Where Microsoft publishes runtime archives.
+    ///
+    /// One host, from reading every channel the release index lists: 5,234 of the 5,258
+    /// runtime file URLs across all fourteen channels are builds.dotnet.microsoft.com, and
+    /// every one of the remaining 24 belongs to .NET 1.0 through 5.0 on the two hosts
+    /// Microsoft published from before the move — download.visualstudio.microsoft.com and
+    /// download.microsoft.com. Those are deliberately not listed: the major asked for here
+    /// comes from the game's own runtimeconfig, Vintage Story needs .NET 8 or 10, and there
+    /// is no path by which Cairn requests a channel old enough to reach them. Adding them
+    /// would widen the list to hosts serving Microsoft's entire download estate in exchange
+    /// for versions this cannot ask for.
+    ///
+    /// Same shape and same staleness risk as the lists in
+    /// <see cref="Games.GameCatalog"/> and <see cref="ModDb.ModDbUrls"/>: if Microsoft
+    /// moves again, this fails closed with a printable reason, which is the right
+    /// direction for a list bounding where an executable runtime may come from.
+    /// </summary>
+    private static readonly string[] DownloadHosts = ["builds.dotnet.microsoft.com"];
+
+    /// <summary>Whether a release-index URL points somewhere Microsoft serves runtimes from.</summary>
+    public static bool IsKnownDownloadHost(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The host worth naming in a refusal, or a description when there is none.</summary>
+    private static string Origin(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.Scheme == Uri.UriSchemeHttps ? uri.Host : $"{uri.Host} over {uri.Scheme}"
+            : "an address that is not a URL";
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
@@ -209,6 +241,38 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         var target = store.InstallDir(release.Version, release.Rid);
         if (DotnetRuntimeLocator.Inspect(target) is { } existing) return existing;
 
+        // Both of these guard the same thing the game installer guards, for the same
+        // reason: this is a remote document choosing where bytes land and where they come
+        // from, and what gets unpacked here is the runtime that goes on to execute the
+        // game. They were written for GameInstaller and not for this file, which is how a
+        // rule ends up applied to one of the two places that needed it.
+        //
+        // FileName is derived by taking everything after the last '/' in the URL, so it
+        // cannot carry a forward slash — but it can carry backslashes, and on Windows
+        // "a\..\..\evil.exe" is a directory traversal that Path.Combine will honour.
+        if (!BareFileName.IsBare(release.FileName))
+            throw new DotnetRuntimeException(
+                $"The .NET release index gave '{release.FileName}' as a file name, which is "
+                + "not a plain one. Refusing to download it.");
+
+        if (!IsKnownDownloadHost(release.Url))
+            throw new DotnetRuntimeException(
+                $"The .NET release index points at {Origin(release.Url)} for "
+                + $"{release.FileName}, which is not where Microsoft publishes runtimes. "
+                + "Refusing to download it.");
+
+        // Asked before the download rather than after it. Refusing a hashless release is
+        // not new, but it used to happen once ~80 MB had already been fetched — a check
+        // whose answer never depended on the bytes, placed after the expensive step that
+        // a crafted index entry would have wanted anyway. Microsoft's release index
+        // carries a hash for every file, so an entry without one is not a case to
+        // tolerate; the verification itself still runs after the download, because that
+        // one genuinely needs the bytes.
+        if (release.Sha512 is not { Length: > 0 })
+            throw new DotnetRuntimeException(
+                $"The .NET release index published no hash for {release.FileName}, so "
+                + "there is nothing to check it against. Refusing to install it.");
+
         Directory.CreateDirectory(store.Root);
         var archive = Path.Combine(store.Root, release.FileName + ".partial");
         var staging = target + ".staging";
@@ -216,14 +280,6 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         try
         {
             await DownloadAsync(release.Url, archive, progress, ct).ConfigureAwait(false);
-
-            // Refused rather than skipped when absent. Microsoft's release index carries a
-            // hash for every file, so a release without one is not a case worth tolerating
-            // — and skipping made the check vanish precisely for a crafted entry.
-            if (release.Sha512 is not { Length: > 0 })
-                throw new InvalidOperationException(
-                    $"The .NET release index published no hash for {release.FileName}, so "
-                    + "there is nothing to check it against. Refusing to install it.");
 
             progress?.Report(new InstallProgressReport("verifying", 0, 0));
             await VerifyAsync(archive, release.Sha512, ct).ConfigureAwait(false);
