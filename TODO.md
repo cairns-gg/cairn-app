@@ -71,12 +71,24 @@ volume, which is the silent-empty-root failure wearing a different hat.
 1. ~~**Resolution and the pointer file**, plus `cairn-cli home` to show and set it.~~ Done —
    `CairnHome` owns the order, `CairnPaths.Root` is its wiring, and the rules take what they
    read as arguments so they can be tested without a real home directory to stand in.
-2. **Migration as a CLI command** — copy with progress, verify, rewrite the local state,
-   write the pointer, report what remains. `home set` deliberately says "nothing was moved"
-   on every path through it until this exists.
+2. ~~**Migration as a CLI command**~~ Done — `cairn-cli home move`, over `HomeMigration` in
+   Core so the launcher can drive the same engine. Copies rather than renames, keeps links
+   as links, verifies every file arrived at its full length, moves each pack's recorded
+   install path with it, and repoints last so a failure anywhere leaves the old root live.
+   Deletes nothing: what to do with the old copy is a decision made after this one is known
+   to have worked.
 3. **A Preferences affordance** wrapping it, next to `CairnHome` and the per-directory
    sizes already displayed there — the numbers that make somebody want this are on that
-   screen already.
+   screen already. `MovePlan` answers what it would cost and `MoveProgress` reports as it
+   goes, so what is left is a folder picker, a progress bar and the two refusals a window
+   can show better than a terminal.
+
+   **The old copy needs an answer there that the CLI ducks.** It leaves the old root in
+   place and says so, which is right for a tool run by somebody watching it. A launcher that
+   moves 40 GB and leaves 40 GB behind has not solved the problem the user came with — they
+   are out of disk space. Offering to delete it after the new root has been used once, from
+   a screen that already shows what everything costs, is probably the shape. Deleting it in
+   the same breath as the copy is not.
 
 **The launcher does not run the preflight yet, and must before 3 ships.** `cairn-cli`
 refuses to run on a pointer at a directory that is not there, and exempts `home` itself so

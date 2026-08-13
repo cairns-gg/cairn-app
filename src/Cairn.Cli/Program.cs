@@ -114,6 +114,7 @@ internal static class Program
               cairn-cli info                          show the detected install and data path
               cairn-cli home [show]                   where Cairn keeps its state, and why
               cairn-cli home set <dir>                keep it somewhere else (moves nothing)
+              cairn-cli home move <dir> [--yes]       copy everything there, then use it
               cairn-cli home clear                    go back to the default
               cairn-cli diagnostics [<id>]            print what a bug report needs
               cairn-cli list                          list packs
@@ -271,6 +272,89 @@ internal static class Program
                 return 0;
             }
 
+            case "move":
+            {
+                if (args.Length < 3) return Fail("usage: cairn-cli home move <directory> [--yes]");
+
+                var plan = HomeMigration.Plan(Path.GetFullPath(args[2]));
+
+                // Every refusal is decided before a byte is written, so this is the whole
+                // of the risk assessment and it costs nothing to have got wrong.
+                if (!plan.CanMove) return Fail(plan.Problem!);
+
+                Console.WriteLine($"from  {plan.From}");
+                Console.WriteLine($"to    {plan.To}");
+                Console.WriteLine($"      {plan.Files} files, {HomeMigration.Describe(plan.Bytes)}"
+                                  + (plan.Links > 0 ? $", {plan.Links} links kept as links" : ""));
+                Console.WriteLine();
+                Console.WriteLine("Copies. The old copy is left exactly where it is, and nothing");
+                Console.WriteLine("is repointed until everything has arrived and been checked.");
+
+                if (!args.Contains("--yes"))
+                {
+                    Console.Write("\nMove it? [y/N] ");
+                    if (!string.Equals(Console.ReadLine()?.Trim(), "y", StringComparison.OrdinalIgnoreCase))
+                        return Fail("cancelled");
+                }
+
+                using var cts = new CancellationTokenSource();
+                Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+                var lastPercent = -1;
+                var progress = new Progress<MoveProgress>(p =>
+                {
+                    var percent = p.BytesTotal == 0 ? 100 : (int)(100 * p.Bytes / p.BytesTotal);
+                    if (percent == lastPercent) return;
+                    lastPercent = percent;
+
+                    // Redirected output gets whole lines: a carriage return into a file
+                    // produces one unreadable line holding every update at once.
+                    if (Console.IsOutputRedirected) Console.WriteLine($"  {percent}%");
+                    else Console.Write($"\r  {percent}%  {p.Files}/{p.FilesTotal} files   ");
+                });
+
+                MoveResult result;
+                try
+                {
+                    result = HomeMigration.Move(plan, progress, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine();
+                    return Fail($"cancelled; nothing was repointed and {plan.From} is untouched. "
+                                + $"Delete the part-copy at {plan.To} before trying again.");
+                }
+
+                if (!Console.IsOutputRedirected) Console.WriteLine();
+
+                Console.WriteLine();
+                Console.WriteLine($"cairn home is now {plan.To}");
+                Console.WriteLine($"copied {result.Files} files, {HomeMigration.Describe(result.Bytes)}"
+                                  + (result.Links > 0 ? $" and {result.Links} links" : ""));
+
+                if (result.Rewritten > 0)
+                    Console.WriteLine($"repointed {result.Rewritten} pack"
+                                      + (result.Rewritten == 1 ? "" : "s")
+                                      + " at their pinned install");
+
+                Console.WriteLine();
+                Console.WriteLine($"The old copy is still at {result.OldRoot} and is no longer read.");
+                Console.WriteLine("Check the new one works, then clear it out yourself — this will not.");
+
+                // The pointer lives at the default location, so moving away from it leaves
+                // the pointer inside the directory somebody has just been told to delete.
+                // Deleting it would undo the move by way of tidying up, and leave Cairn
+                // looking at an empty default with the data still on the other disk.
+                if (result.KeepInOldRoot is { } keep)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine($"Keep {keep} — that one file is what now points Cairn");
+                    Console.WriteLine("at the new location. Deleting the whole directory undoes this.");
+                }
+
+                return 0;
+            }
+
             case "clear":
             {
                 if (!File.Exists(CairnHome.PointerPath))
@@ -279,14 +363,20 @@ internal static class Program
                     return 0;
                 }
 
+                // Read before removing it, so the message can name what is about to stop
+                // being reachable rather than leaving somebody to work it out.
+                var pointedAt = CairnHome.Resolve().Root;
+
                 CairnHome.SetPointer(null);
                 Console.WriteLine($"pointer removed; cairn home is {CairnHome.DefaultRoot} again");
-                Console.WriteLine("Nothing was moved.");
+                Console.WriteLine();
+                Console.WriteLine($"Nothing was moved. Everything is still at {pointedAt},");
+                Console.WriteLine("and Cairn no longer reads it — set the pointer again to get it back.");
                 return 0;
             }
 
             default:
-                return Fail($"unknown home action '{action}' — show, set or clear");
+                return Fail($"unknown home action '{action}' — show, set, move or clear");
         }
 
         static string Describe(HomeSource source) => source switch
