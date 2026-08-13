@@ -395,7 +395,6 @@ jobs:
       - name: Sign the manifest
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          MINISIGN_KEY_PASSWORD: ${{ secrets.MINISIGN_KEY_PASSWORD }}
         run: |
           if [ -z "$MINISIGN_SECRET_KEY" ]; then
             echo "MINISIGN_SECRET_KEY is not set — publishing an unsigned manifest."
@@ -406,17 +405,40 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq minisign
 
           umask 077
-          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$RUNNER_TEMP/minisign.key"
+          key="$RUNNER_TEMP/minisign.key"
+          printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$key"
+          trap 'rm -f "$key"' EXIT
+
+          # The key must have no password, and this checks rather than hopes.
+          #
+          # minisign reads a password from the terminal and has no environment variable or
+          # flag for one — so an encrypted key here does not fail, it blocks on a prompt
+          # nobody can answer until the job hits its timeout, which is the least
+          # informative way for a release to break. The second field of a secret key is the
+          # KDF: 0000 for a key generated with -W, "Sc" for a scrypt-encrypted one.
+          #
+          # A password would buy nothing here in any case. It would have to live beside
+          # this one as a second repository secret, handed to this same step — so anything
+          # that can read one can read the other. Where a password is worth having is on
+          # the copy kept off this machine, which is a different file with a different
+          # threat behind it.
+          kdf="$(sed -n '2p' "$key" | base64 --decode | od -An -tx1 -j2 -N2 | tr -d ' \n')"
+
+          if [ "$kdf" != "0000" ]; then
+            echo "MINISIGN_SECRET_KEY is password-protected (kdf=$kdf)."
+            echo "minisign can only take a password from a terminal, and there is none here."
+            echo "Use a key made with 'minisign -G -W', or strip the password with 'minisign -C -W'."
+            exit 1
+          fi
 
           # -t is the trusted comment, which the second signature covers, so it cannot be
-          # edited after the fact the way the untrusted one can.
-          MINISIGN_PASSWORD="$MINISIGN_KEY_PASSWORD" minisign -S \
-            -s "$RUNNER_TEMP/minisign.key" \
+          # edited after the fact the way the untrusted one can. Stdin closed and a timeout
+          # around it, so any future prompt is a fast failure rather than a hung job.
+          timeout 60 minisign -S \
+            -s "$key" \
             -m dist/manifest.json \
             -t "cairn $GITHUB_REF_NAME" \
-            -c "cairn release manifest"
-
-          rm -f "$RUNNER_TEMP/minisign.key"
+            -c "cairn release manifest" < /dev/null
 
           cat dist/manifest.json.minisig
 

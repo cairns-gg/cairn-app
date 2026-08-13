@@ -6,3 +6,8 @@ obj/
 .vs/
 TestResults/
 artifacts/
+
+# Signing keys. The public half is fine here and is committed; the private half is not,
+# and was committed once by a careless `git add -A` before this line existed.
+*.key
+!packages.lock.json

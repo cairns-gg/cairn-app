@@ -150,9 +150,18 @@ public sealed class UpdateChecker(
     /// little less. Deliberately not a setting or an environment variable: something a
     /// hostile document could switch off is not a control.</para>
     ///
-    /// <para>Generate the pair with <c>minisign -G -p cairn.pub -s cairn.key</c>, put the
-    /// line out of <c>cairn.pub</c> here, and give the secret key to the release workflow
-    /// as <c>MINISIGN_SECRET_KEY</c>. The private half must never be in this repository.</para>
+    /// <para>Generate the pair with <c>minisign -G -W -p cairn.pub -s cairn.key</c>, put
+    /// the line out of <c>cairn.pub</c> here, and give the secret key to the release
+    /// workflow as <c>MINISIGN_SECRET_KEY</c>. The private half must never be in this
+    /// repository.</para>
+    ///
+    /// <para><c>-W</c>, meaning no password on the key, is deliberate rather than lazy.
+    /// minisign takes a password only from a terminal, and a release runner has none — so
+    /// an encrypted key does not fail there, it waits for a prompt until the job times out.
+    /// A password would also buy nothing in that setting: it would live beside the key as a
+    /// second repository secret handed to the same step, so whatever can read one can read
+    /// the other. It is worth having on the copy kept elsewhere, which is a different file
+    /// facing a different threat.</para>
     /// </summary>
     public const string ManifestPublicKey = "";
 
