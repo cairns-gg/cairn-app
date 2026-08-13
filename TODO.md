@@ -68,19 +68,24 @@ volume, which is the silent-empty-root failure wearing a different hat.
 
 ### Wanted, in an order where each part stands alone
 
-1. **Resolution and the pointer file**, plus `cairn-cli home` to show and set it. Small,
-   and it is the whole feature for anyone willing to move the directory themselves.
+1. ~~**Resolution and the pointer file**, plus `cairn-cli home` to show and set it.~~ Done —
+   `CairnHome` owns the order, `CairnPaths.Root` is its wiring, and the rules take what they
+   read as arguments so they can be tested without a real home directory to stand in.
 2. **Migration as a CLI command** — copy with progress, verify, rewrite the local state,
-   write the pointer, report what remains.
+   write the pointer, report what remains. `home set` deliberately says "nothing was moved"
+   on every path through it until this exists.
 3. **A Preferences affordance** wrapping it, next to `CairnHome` and the per-directory
    sizes already displayed there — the numbers that make somebody want this are on that
    screen already.
 
-Worth deciding before building: whether the resolution logic gets a seam for tests.
-Nothing currently exercises `CairnPaths.Root` — the suites set `CAIRN_HOME` and never test
-the fallback — and the default branch reads the real user profile, so a pointer-file test
-has nowhere to stand. A pure function taking the environment value, the default root and a
-reader, with `Root` as its thin wiring, is testable without a seam anywhere else.
+**The launcher does not run the preflight yet, and must before 3 ships.** `cairn-cli`
+refuses to run on a pointer at a directory that is not there, and exempts `home` itself so
+the repair tool is not gated on the thing it repairs. `Cairn.App` does neither: it would
+start on the fallback root and look empty, which is the failure this was all written to
+avoid. It is not reachable today — only `cairn-cli` writes a pointer, and it is not shipped
+in releases — so this is a gap and not a bug, but it stops being that the moment a GUI
+button can write one. Refusing needs somewhere to say so, which is why it waits for the UI
+rather than going in blind.
 
 ## Taking over an imported pack
 

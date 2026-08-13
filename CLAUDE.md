@@ -116,7 +116,10 @@ is drawn.
   data/            this pack's Saves, ModConfig, Playerdata, clientsettings.json
 ```
 
-`CairnPaths` is the single source of truth for all of these; `CAIRN_HOME` overrides the root.
+`CairnPaths` is the single source of truth for all of these. The root is `CAIRN_HOME`, then a
+`home` pointer file in `~/.cairn` naming somewhere else, then `~/.cairn` — `CairnHome` owns
+that order and the reasons, and the environment always wins. It is re-evaluated on every
+access rather than cached, because the test suites move `CAIRN_HOME` per class.
 
 - **Sync installs what the lockfile says.** `PackSyncer` resolves against ModDB only when it
   must (never installed, moved pin, retargeted game version). Sync runs on every Play, and

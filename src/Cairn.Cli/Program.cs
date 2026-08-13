@@ -39,6 +39,21 @@ internal static class Program
             // An unusual console is not a reason to refuse to run.
         }
 
+        // Before anything reads or writes a path, and before the migration below moves a
+        // directory. A pointer at a disk that is not mounted has to stop here: falling back
+        // to the default would start on an empty root, and the first thing that happens on
+        // an empty root is Cairn offering to download everything again.
+        //
+        // Except for `home` itself, which is how somebody repairs exactly that. A repair
+        // tool that refuses to run until the thing it repairs is fixed is no use at all.
+        if (args[0] != "home" && CairnHome.Preflight() is { } problem)
+        {
+            Console.Error.WriteLine($"error: {problem}");
+            Console.Error.WriteLine("       cairn-cli home            to see what is set");
+            Console.Error.WriteLine("       cairn-cli home clear      to go back to the default");
+            return 1;
+        }
+
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) }.Bounded();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1 (+https://github.com/dizzyd/cairn)");
         var moddb = new ModDbClient(http);
@@ -56,6 +71,7 @@ internal static class Program
         {
             return args[0] switch
             {
+                "home" => Home(args),
                 "info" => Info(),
                 "diagnostics" => Diagnostics(store, games, args),
                 "list" => List(store),
@@ -96,6 +112,9 @@ internal static class Program
             cairn-cli - Vintage Story modpack manager
 
               cairn-cli info                          show the detected install and data path
+              cairn-cli home [show]                   where Cairn keeps its state, and why
+              cairn-cli home set <dir>                keep it somewhere else (moves nothing)
+              cairn-cli home clear                    go back to the default
               cairn-cli diagnostics [<id>]            print what a bug report needs
               cairn-cli list                          list packs
               cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]
@@ -129,7 +148,8 @@ internal static class Program
               cairn-cli publish <id> [--slug x] [--public] [--keep-server]  share a pack
               cairn-cli unpublish <id>                withdraw a published pack
 
-            Packs live under $CAIRN_HOME (default ~/.cairn/packs/<id>).
+            Packs live under $CAIRN_HOME, then whatever `home set` recorded, then
+            ~/.cairn/packs/<id> — in that order, and CAIRN_HOME always wins.
             Set CAIRNS_SERVER to publish somewhere other than https://cairns.gg.
             """);
     }
@@ -187,6 +207,95 @@ internal static class Program
         library.ResolveFor(
             store.Load(id).GameVersion,
             store.LoadLocalState(id).InstallDirectory).Install;
+
+    /// <summary>
+    /// Shows or changes where Cairn keeps its state.
+    ///
+    /// Moves nothing. That is the whole of what this does and it is said on every path
+    /// through it, because "set the home directory" reads like it relocates the data, and
+    /// somebody who believes that will point Cairn at an empty disk and conclude their packs
+    /// are gone.
+    /// </summary>
+    private static int Home(string[] args)
+    {
+        var action = args.Length > 1 ? args[1] : "show";
+
+        switch (action)
+        {
+            case "show":
+            {
+                var r = CairnHome.Resolve();
+
+                Console.WriteLine($"root        : {r.Root}");
+                Console.WriteLine($"decided by  : {Describe(r.Source)}");
+                Console.WriteLine($"pointer file: {CairnHome.PointerPath}"
+                                  + (File.Exists(CairnHome.PointerPath) ? "" : "  (none)"));
+
+                if (r.Problem is not null) Console.WriteLine($"problem     : {r.Problem}");
+
+                // Said here rather than only on failure: the pointer being ignored is not an
+                // error, and somebody wondering why their setting did nothing looks here.
+                if (r.Source is HomeSource.Environment && File.Exists(CairnHome.PointerPath))
+                    Console.WriteLine("note        : CAIRN_HOME is set, so the pointer file is ignored");
+
+                if (r.Source is HomeSource.Pointer && !Directory.Exists(r.Root))
+                    Console.WriteLine("problem     : that directory is not there");
+
+                return r.Problem is null ? 0 : 1;
+            }
+
+            case "set":
+            {
+                if (args.Length < 3) return Fail("usage: cairn-cli home set <directory>");
+
+                // Set-but-ignored is the worst outcome: the file is written, nothing changes,
+                // and the reason is invisible. Refuse instead of leaving them to find out.
+                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CAIRN_HOME")))
+                    return Fail("CAIRN_HOME is set, and it wins over the pointer file. "
+                                + "Unset it first, or keep using it.");
+
+                var target = Path.GetFullPath(args[2]);
+
+                if (!Directory.Exists(target))
+                    return Fail($"{target} is not there. Create it first — this names a "
+                                + "directory, it does not make one.");
+
+                CairnHome.SetPointer(target);
+
+                Console.WriteLine($"cairn home is now {target}");
+                Console.WriteLine($"recorded in {CairnHome.PointerPath}");
+                Console.WriteLine();
+                Console.WriteLine("Nothing was moved. Anything already installed is still in the");
+                Console.WriteLine("old place and Cairn will no longer see it — copy it across, or");
+                Console.WriteLine("clear this and start from what you had.");
+                return 0;
+            }
+
+            case "clear":
+            {
+                if (!File.Exists(CairnHome.PointerPath))
+                {
+                    Console.WriteLine("no pointer file; already using the default");
+                    return 0;
+                }
+
+                CairnHome.SetPointer(null);
+                Console.WriteLine($"pointer removed; cairn home is {CairnHome.DefaultRoot} again");
+                Console.WriteLine("Nothing was moved.");
+                return 0;
+            }
+
+            default:
+                return Fail($"unknown home action '{action}' — show, set or clear");
+        }
+
+        static string Describe(HomeSource source) => source switch
+        {
+            HomeSource.Environment => "CAIRN_HOME",
+            HomeSource.Pointer => "the pointer file",
+            _ => "the default",
+        };
+    }
 
     private static int Info()
     {

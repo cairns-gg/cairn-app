@@ -10,9 +10,12 @@ namespace Cairn.Core;
 /// </summary>
 public static class CairnPaths
 {
-    public static string Root =>
-        Environment.GetEnvironmentVariable("CAIRN_HOME")
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cairn");
+    /// <summary>
+    /// CAIRN_HOME, then a pointer file, then <c>~/.cairn</c> — see <see cref="CairnHome"/>,
+    /// which owns the rules and the reasons. Kept here as the one name the rest of the
+    /// codebase reads, so nothing else has to know there are three answers.
+    /// </summary>
+    public static string Root => CairnHome.Resolve().Root;
 
     public static string PacksRoot => Path.Combine(Root, "packs");
 
