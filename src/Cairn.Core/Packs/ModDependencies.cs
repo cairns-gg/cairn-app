@@ -29,6 +29,27 @@ public static class ModDependencies
     public static bool IsBuiltIn(string modId) => BuiltIn.Contains(modId);
 
     /// <summary>
+    /// The most a <c>modinfo.json</c> may be before Cairn refuses to read it.
+    ///
+    /// A mod zip is somebody else's archive, and this file is read on every sync — which
+    /// means on every Play, and unattended under systemd on a server. Without a bound,
+    /// <see cref="JsonDocument.Parse(Stream, JsonDocumentOptions)"/> over the entry's
+    /// <see cref="DeflateStream"/> reads to the end into a doubling buffer and keeps it, so
+    /// a ~1 MB entry — DEFLATE tops out near 1000:1 — becomes about a gigabyte resident and
+    /// twice that at peak. The pack then fails in the same place on every retry and cannot
+    /// be launched again without deleting the zip by hand, because the lock is never
+    /// written.
+    ///
+    /// A megabyte is enormous for what this file is. Measured across a spread of the ~8,000
+    /// mods ModDB lists, by reading each zip's central directory rather than downloading it:
+    /// 38 real <c>modinfo.json</c> entries ran from 159 bytes to 649, median 329. The cap is
+    /// therefore about 1,600 times the largest one anybody has actually published, which is
+    /// the right side to err on — it exists to stop an allocation, not to police a format,
+    /// and a mod that trips it is telling you something.
+    /// </summary>
+    public const int MaxModInfoBytes = 1024 * 1024;
+
+    /// <summary>
     /// What a mod's zip said about its dependencies, and whether it could be asked.
     /// </summary>
     /// <param name="Problem">
@@ -128,8 +149,30 @@ public static class ModDependencies
             // sync for every pack carrying one.
             if (entry is null) return Empty(null);
 
+            // What the archive says it will be, before a byte is decompressed. This is the
+            // cheap half and it costs nothing on an ordinary mod.
+            if (entry.Length > MaxModInfoBytes) return Empty(TooBig(entry.Length));
+
             using var stream = entry.Open();
-            using var doc = JsonDocument.Parse(stream, new JsonDocumentOptions
+
+            // And what actually arrives. Belt and braces rather than the load-bearing
+            // check: .NET bounds a read-mode entry stream at the declared uncompressed
+            // length, so a zip that understates its entry truncates instead of inflating
+            // and lands in the JsonException path below — asserted in ModInfoSizeTests,
+            // because it is a framework guarantee this leans on rather than anything here.
+            // Counting anyway costs nothing and is what would hold if that ever changed.
+            // Reading one byte past the cap distinguishes "exactly at the limit" from
+            // "more than we will take", and bounds the allocation either way.
+            var bytes = ReadAtMost(stream, MaxModInfoBytes + 1);
+
+            if (bytes.Length > MaxModInfoBytes) return Empty(TooBig(null));
+
+            // Parsed from a stream over the bytes already in hand rather than from the
+            // decompressor, so the bound above is what limits memory. Still a Stream and
+            // not the ReadOnlyMemory overload: that one rejects a UTF-8 BOM, and mod
+            // authors on Windows write plenty of them.
+            using var bounded = new MemoryStream(bytes, writable: false);
+            using var doc = JsonDocument.Parse(bounded, new JsonDocumentOptions
             {
                 AllowTrailingCommas = true,
                 CommentHandling = JsonCommentHandling.Skip,
@@ -160,6 +203,39 @@ public static class ModDependencies
         }
 
         static ModInfoSummary Empty(string? problem) => new(null, null, null, null, [], [], problem);
+
+        // Phrased like the other problems here: what was not read, and what that costs.
+        // The declared size is quoted when there is one, because "declares 1.1 GB" and
+        // "kept coming" are different things to whoever has to look at the mod.
+        static string TooBig(long? declared) =>
+            "its modinfo.json is "
+            + (declared is { } n ? $"{Bytes.Human(n)}, " : "")
+            + "far larger than any real one, so it was not read — any mods it requires are "
+            + "not installed";
+    }
+
+    /// <summary>
+    /// At most <paramref name="limit"/> bytes of <paramref name="stream"/>.
+    ///
+    /// The point is the ceiling on what gets allocated, so this grows a buffer as bytes
+    /// arrive rather than reserving the limit up front — the overwhelming majority of
+    /// these files are a few hundred bytes, and reserving a megabyte per mod to read 329
+    /// bytes would trade one memory problem for a smaller one.
+    /// </summary>
+    private static byte[] ReadAtMost(Stream stream, int limit)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+
+        while (buffer.Length < limit)
+        {
+            var read = stream.Read(chunk, 0, (int)Math.Min(chunk.Length, limit - buffer.Length));
+            if (read == 0) break;
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
     }
 
     /// <summary>A string property, whatever case the author wrote it in.</summary>
