@@ -21,13 +21,20 @@ namespace Cairn.Core.Packs;
 public static class ModFileName
 {
     /// <summary>
-    /// The kinds of file Vintage Story loads from a mod path, which is also exactly what
-    /// the sweep in <see cref="PackSyncer"/> knows to remove. Kept deliberately in step:
-    /// anything Cairn can write has to be something Cairn can later clear away.
+    /// The kinds of file Vintage Story loads from a mod path, and therefore the kinds Cairn
+    /// is willing to install.
     ///
     /// ModDB accepts these three for a release — see docs/moddb-listing.md — so this is
     /// what its API can hand back, not a preference. A folder mod is a directory and is
     /// unaffected either way.
+    ///
+    /// This list used to be the sweep's set too, on the reasoning that anything Cairn can
+    /// write must be something Cairn can later clear away. The reasoning was sound and the
+    /// mechanism was not: keying removal on the extension meant Cairn deleted loose mods
+    /// somebody had placed by hand, which it had never written. The sweep now works from
+    /// the previous lock — Cairn's record of what it actually installed — so the two sets
+    /// are deliberately no longer coupled, and widening this one no longer widens what gets
+    /// deleted. See the sweep in <see cref="PackSyncer"/>.
     /// </summary>
     public static readonly string[] Extensions = [".zip", ".dll", ".cs"];
 
@@ -56,22 +63,14 @@ public static class ModFileName
     /// <summary>
     /// Whether this is a filename and nothing else — no directory part, nothing rooted,
     /// and nothing that means somewhere other than where it reads.
+    ///
+    /// Delegated to <see cref="BareFileName"/> rather than kept here, because the game
+    /// catalogue and the .NET runtime index build paths out of remote names too and could
+    /// not sensibly reach for something called "ModFileName". What kind of file a pack may
+    /// hold is this type's business; what counts as a filename at all is not specific to
+    /// mods and is one rule for the whole tree.
     /// </summary>
-    public static bool IsBare(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-
-        // GetFileName strips any directory part; if that changed the string, the original
-        // was carrying one. Also catches "..", rooted paths and both separators.
-        if (Path.GetFileName(name) != name || name is "." or "..") return false;
-        if (name.AsSpan().IndexOfAny('/', '\\') >= 0) return false;
-        if (Path.IsPathRooted(name)) return false;
-
-        // Windows reads "mod.zip:hidden" as an alternate data stream, which File.Create
-        // will happily write and which neither the sweep nor a directory listing shows.
-        // The colon survives GetFileName unchanged, so it has to be named on its own.
-        return !name.Contains(':');
-    }
+    public static bool IsBare(string? name) => BareFileName.IsBare(name);
 
     /// <summary>
     /// Whether this is a file Cairn installs, and therefore one it is entitled to remove.
