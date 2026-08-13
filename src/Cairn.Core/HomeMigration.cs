@@ -198,6 +198,62 @@ public static class HomeMigration
     }
 
     /// <summary>
+    /// Removes what was left behind, once the copy has been proven.
+    ///
+    /// The other half of a move. Copying and repointing is the safe part and it is not the
+    /// whole job: somebody moves 40 GB off a disk because the disk is full, and stopping
+    /// after the copy leaves them with two copies and less room than they started with.
+    ///
+    /// Everything except <paramref name="keep"/>, which is the pointer file when the old
+    /// root was the default — deleting that would send Cairn back to a default root that is
+    /// now empty, undoing the move by way of tidying up. Kept, so the directory survives
+    /// holding one line of text.
+    /// </summary>
+    /// <returns>Bytes removed.</returns>
+    public static long DeleteOldRoot(string oldRoot, string? keep, CancellationToken ct = default)
+    {
+        if (!Directory.Exists(oldRoot)) return 0;
+
+        // Refusing rather than deleting is the only safe answer here: this is called with a
+        // path that is no longer the live root, and being wrong about that deletes
+        // everything Cairn has.
+        if (PathsEqual(oldRoot, CairnPaths.Root))
+            throw new MoveFailed($"{oldRoot} is where Cairn is keeping its files now");
+
+        var freed = 0L;
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(oldRoot))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (keep is not null && PathsEqual(entry, keep)) continue;
+
+            var info = new FileInfo(entry);
+
+            // A link is unlinked, never followed — deleting through one would take what it
+            // points at, which is somewhere else entirely and not ours to remove.
+            if (info.LinkTarget is not null) { File.Delete(entry); continue; }
+
+            if (info.Attributes.HasFlag(FileAttributes.Directory))
+            {
+                freed += Measure(entry).Bytes;
+                Directory.Delete(entry, recursive: true);
+            }
+            else
+            {
+                freed += info.Length;
+                File.Delete(entry);
+            }
+        }
+
+        // Gone entirely when there was nothing to keep; otherwise it stays, holding the one
+        // file that now points Cairn at where everything went.
+        if (!Directory.EnumerateFileSystemEntries(oldRoot).Any()) Directory.Delete(oldRoot);
+
+        return freed;
+    }
+
+    /// <summary>
     /// That what arrived is what left. Length and presence per file rather than hashes: the
     /// mods have SHA-256 in the lockfile already and sync checks them, so hashing tens of
     /// gigabytes here would double the wait to re-answer a question something else asks

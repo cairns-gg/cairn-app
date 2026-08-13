@@ -115,6 +115,7 @@ internal static class Program
               cairn-cli home [show]                   where Cairn keeps its state, and why
               cairn-cli home set <dir>                keep it somewhere else (moves nothing)
               cairn-cli home move <dir> [--yes]       copy everything there, then use it
+              cairn-cli home discard <dir> [--yes]    delete a copy a move left behind
               cairn-cli home clear                    go back to the default
               cairn-cli diagnostics [<id>]            print what a bug report needs
               cairn-cli list                          list packs
@@ -338,20 +339,60 @@ internal static class Program
                                       + " at their pinned install");
 
                 Console.WriteLine();
-                Console.WriteLine($"The old copy is still at {result.OldRoot} and is no longer read.");
-                Console.WriteLine("Check the new one works, then clear it out yourself — this will not.");
+                Console.WriteLine($"The old copy is still at {result.OldRoot}, is no longer read,");
+                Console.WriteLine($"and is using {HomeMigration.Describe(result.Bytes)}. When you are satisfied:");
+                Console.WriteLine();
+                Console.WriteLine($"  cairn-cli home discard {result.OldRoot}");
 
-                // The pointer lives at the default location, so moving away from it leaves
-                // the pointer inside the directory somebody has just been told to delete.
-                // Deleting it would undo the move by way of tidying up, and leave Cairn
-                // looking at an empty default with the data still on the other disk.
+                // Deleting it by hand is the trap: the pointer lives at the default
+                // location, so moving away from the default leaves it inside the directory
+                // being cleared out, and removing that undoes the move.
                 if (result.KeepInOldRoot is { } keep)
                 {
                     Console.WriteLine();
-                    Console.WriteLine($"Keep {keep} — that one file is what now points Cairn");
-                    Console.WriteLine("at the new location. Deleting the whole directory undoes this.");
+                    Console.WriteLine($"Not `rm -rf` — {keep} lives in there and is what now points");
+                    Console.WriteLine("Cairn at the new location. `home discard` keeps it; deleting");
+                    Console.WriteLine("the directory wholesale would undo this move.");
                 }
 
+                return 0;
+            }
+
+            case "discard":
+            {
+                if (args.Length < 3) return Fail("usage: cairn-cli home discard <old-root> [--yes]");
+
+                var old = Path.GetFullPath(args[2]);
+
+                if (!Directory.Exists(old)) return Fail($"{old} is not there");
+
+                // The whole point of the command: deleting the live root is the one mistake
+                // that cannot be walked back, and a mistyped path is how it would happen.
+                if (string.Equals(Path.TrimEndingDirectorySeparator(old),
+                                  Path.TrimEndingDirectorySeparator(CairnPaths.Root),
+                                  StringComparison.OrdinalIgnoreCase))
+                    return Fail($"{old} is where Cairn is keeping its files now");
+
+                // Kept if it is in there: it is what points Cairn at where everything went.
+                var keep = File.Exists(CairnHome.PointerPath)
+                           && CairnHome.PointerPath.StartsWith(old, StringComparison.OrdinalIgnoreCase)
+                    ? CairnHome.PointerPath
+                    : null;
+
+                Console.WriteLine($"deletes everything under {old}");
+                if (keep is not null) Console.WriteLine($"keeps    {keep}");
+                Console.WriteLine($"Cairn is using {CairnPaths.Root} and is not touched.");
+
+                if (!args.Contains("--yes"))
+                {
+                    Console.Write("\nDelete it? [y/N] ");
+                    if (!string.Equals(Console.ReadLine()?.Trim(), "y", StringComparison.OrdinalIgnoreCase))
+                        return Fail("cancelled");
+                }
+
+                var freed = HomeMigration.DeleteOldRoot(old, keep);
+
+                Console.WriteLine($"deleted, freeing {HomeMigration.Describe(freed)}");
                 return 0;
             }
 
@@ -376,7 +417,7 @@ internal static class Program
             }
 
             default:
-                return Fail($"unknown home action '{action}' — show, set, move or clear");
+                return Fail($"unknown home action '{action}' — show, set, move, discard or clear");
         }
 
         static string Describe(HomeSource source) => source switch

@@ -213,6 +213,82 @@ public partial class PreferencesViewModel : ViewModelBase
 
     [ObservableProperty] public partial string MoveStage { get; set; } = "";
 
+    /// <summary>How far the copy has got, 0 to 100, for the bar beside the text.</summary>
+    [ObservableProperty] public partial double MovePercent { get; set; }
+
+    /// <summary>
+    /// The root a move left behind, once there is one, so it can be offered for deletion.
+    ///
+    /// Null until a move has finished, and null again once it has been dealt with. Held
+    /// rather than recomputed because after the move Cairn is looking somewhere else, and
+    /// nothing else on this screen knows the old place existed.
+    /// </summary>
+    [ObservableProperty] public partial string? OldCopyPath { get; set; }
+
+    [ObservableProperty] public partial string OldCopyLabel { get; set; } = "";
+
+    /// <summary>The pointer file inside the old root, which deletion must not take.</summary>
+    private string? _oldCopyKeep;
+
+    private long _oldCopyBytes;
+
+    public bool HasOldCopy => OldCopyPath is not null;
+
+    partial void OnOldCopyPathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasOldCopy));
+        DeleteOldCopyCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Deletes the copy the move left behind — the half that actually frees the space.
+    ///
+    /// Offered rather than done: the copy is verified before Cairn is repointed, so this is
+    /// safe by then, but "safe" and "without being asked" are different things when the
+    /// subject is every pack somebody owns. Shown with the size on the button, because that
+    /// number is the entire reason anybody started.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDeleteOldCopy))]
+    private async Task DeleteOldCopy()
+    {
+        if (OldCopyPath is not { } old) return;
+
+        var message = $"Deletes the copy left behind at:\n\n  {old}\n\n"
+                      + $"Frees {HomeMigration.Describe(_oldCopyBytes)}. Everything Cairn uses "
+                      + $"is now at {CairnPaths.Root} and has been checked file by file."
+                      + (_oldCopyKeep is not null
+                          ? $"\n\nThe one file that stays is {_oldCopyKeep}, which is what "
+                            + "points Cairn at the new location."
+                          : "");
+
+        if (Confirm is not null
+            && !await Confirm(new ConfirmViewModel("Delete the old copy?", message, "Delete")))
+            return;
+
+        IsMovingHome = true;
+        MoveStage = "Deleting the old copy…";
+
+        try
+        {
+            var freed = await Task.Run(() => HomeMigration.DeleteOldRoot(old, _oldCopyKeep));
+
+            MoveAftermath = $"Deleted the old copy, freeing {HomeMigration.Describe(freed)}.";
+            OldCopyPath = null;
+        }
+        catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)
+        {
+            MoveAftermath = $"{e.Message}\n\nThe old copy is still at {old}.";
+        }
+        finally
+        {
+            IsMovingHome = false;
+            MoveStage = "";
+            Refresh();
+        }
+    }
+
+    private bool CanDeleteOldCopy() => HasOldCopy && NotCleaningUp;
+
     /// <summary>
     /// What to do with the old copy, once there is an old copy. Empty until then.
     ///
@@ -252,8 +328,9 @@ public partial class PreferencesViewModel : ViewModelBase
                       + $"{plan.Files} files, {HomeMigration.Describe(plan.Bytes)}"
                       + (plan.Links > 0 ? $", and {plan.Links} links kept as links" : "")
                       + ".\n\nThe copy at " + plan.From + " is left exactly where it is, and "
-                      + "Cairn is not repointed until everything has arrived and been checked. "
-                      + "You can delete the old copy yourself afterwards.";
+                      + "Cairn is not repointed until everything has arrived and been checked.\n\n"
+                      + "Deleting it — which is what actually frees the space — is offered "
+                      + "here afterwards, once the new copy has been verified.";
 
         if (Confirm is not null
             && !await Confirm(new ConfirmViewModel("Move Cairn's files?", message, "Move")))
@@ -264,19 +341,36 @@ public partial class PreferencesViewModel : ViewModelBase
 
         try
         {
+            // Throttled to whole percents. Reported per file, a root with tens of thousands
+            // of them would post that many updates to the UI thread, each one a property
+            // change and a text layout — the progress display becoming the reason the copy
+            // is slow.
+            var lastPercent = -1;
+
             var progress = new Progress<MoveProgress>(p =>
-                MoveStage = $"{(p.BytesTotal == 0 ? 100 : 100 * p.Bytes / p.BytesTotal)}% — "
-                            + $"{p.Files} of {p.FilesTotal} files");
+            {
+                var percent = p.BytesTotal == 0 ? 100 : (int)(100 * p.Bytes / p.BytesTotal);
+                if (percent == lastPercent) return;
+
+                lastPercent = percent;
+                MovePercent = percent;
+                MoveStage = $"{percent}% — {p.Files} of {p.FilesTotal} files";
+            });
 
             var result = await Task.Run(() => HomeMigration.Move(plan, progress));
 
+            // Held so the space can actually be freed from here. Leaving the old copy in
+            // place and telling somebody to go and find it does not solve a full disk.
+            OldCopyPath = result.OldRoot;
+            _oldCopyKeep = result.KeepInOldRoot;
+            _oldCopyBytes = result.Bytes;
+            OldCopyLabel = $"Delete the old copy ({HomeMigration.Describe(result.Bytes)})";
+
             MoveAftermath =
-                $"Moved to {plan.To}. The old copy is still at {result.OldRoot}, is no longer "
-                + $"read, and is using {HomeMigration.Describe(result.Bytes)} — delete it "
-                + "yourself once you are satisfied."
-                + (result.KeepInOldRoot is { } keep
-                    ? $"\n\nKeep {keep}. That one file is what points Cairn at the new "
-                      + "location, so deleting the whole directory would undo this."
+                $"Moved to {plan.To}, checked file by file. The old copy at {result.OldRoot} "
+                + $"is no longer read and is still using {HomeMigration.Describe(result.Bytes)}."
+                + (result.KeepInOldRoot is not null
+                    ? " Deleting it here keeps the one file that points Cairn at the new location."
                     : "");
         }
         catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)

@@ -42,10 +42,26 @@
                                     Command="{Binding MoveHomeCommand}"
                                     IsEnabled="{Binding NotCleaningUp}" />
 
+                            <!-- Only once there is one, and it carries the size: that
+                                 number is the entire reason anybody started. -->
+                            <Button Name="DeleteOldCopyButton" Padding="12,4"
+                                    Content="{Binding OldCopyLabel}"
+                                    Command="{Binding DeleteOldCopyCommand}"
+                                    IsVisible="{Binding HasOldCopy}" />
+                        </StackPanel>
+
+                        <!-- A bar rather than a percentage in prose. This copies gigabytes
+                             across a disk boundary and takes minutes; a line of text that
+                             changes every few seconds does not read as something running. -->
+                        <StackPanel Spacing="4" Margin="0,4,0,0" MaxWidth="460"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding IsMovingHome}">
+                            <ProgressBar Name="MoveProgressBar" Height="6"
+                                         Minimum="0" Maximum="100"
+                                         Value="{Binding MovePercent}" />
+
                             <TextBlock Name="MoveStageText" Text="{Binding MoveStage}"
-                                       FontSize="11" Opacity="0.75"
-                                       VerticalAlignment="Center"
-                                       IsVisible="{Binding IsMovingHome}" />
+                                       FontSize="11" Opacity="0.75" />
                         </StackPanel>
 
                         <!-- Stays on screen rather than passing by: what it has to say after

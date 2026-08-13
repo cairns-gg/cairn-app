@@ -85,22 +85,17 @@ volume, which is the silent-empty-root failure wearing a different hat.
    two honest ways out: quit and reconnect the disk, or start on the default and be told
    where everything still is.
 
-### Still open: what happens to the old copy
+4. ~~**Deleting the old copy**~~ Done, and it turned out to be part of the feature rather
+   than a follow-up. A button labelled Move that leaves both copies in place has not moved
+   anything, and somebody doing this is out of disk space by definition — so the offer
+   appears as soon as the copy has been verified and Cairn repointed, carrying the size, and
+   `cairn-cli home discard` does the same. Two steps rather than one, because tens of
+   gigabytes are not worth a single unverified pass; but both steps are in front of the
+   person, not one of them in a file manager.
 
-Neither front-end deletes it, which is right so far as it goes — tens of gigabytes are not
-worth one unverified pass. But a launcher that moves 40 GB off a full disk and leaves 40 GB
-on it has not solved the problem the user arrived with. Both say where the old copy is and
-what it costs; neither offers to finish the job.
-
-The shape is probably an offer that appears *after* the new root has been used at least
-once, on the screen that already shows what everything costs — not in the same breath as the
-copy, when nothing has been proven yet. Worth deciding: what counts as "used once" and where
-that is recorded, given the obvious place to record it is inside the root whose predecessor
-is the thing in question.
-
-The pointer sitting inside the abandoned directory is the sharp edge here. Deleting the old
-root wholesale undoes the move, and both front-ends currently handle that by saying so.
-Anything that deletes on the user's behalf has to keep that one file, and be sure of it.
+   `DeleteOldRoot` keeps the pointer when it is in there, refuses outright if handed the
+   live root, and unlinks a symlink rather than deleting through it — what it points at is
+   somewhere else and not Cairn's to remove.
 
 ## Taking over an imported pack
 

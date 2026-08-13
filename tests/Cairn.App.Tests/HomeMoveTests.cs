@@ -142,6 +142,64 @@ public class HomeMoveTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void The_delete_button_is_hidden_until_there_is_an_old_copy()
+    {
+        // Offering to delete something that does not exist yet is worse than not offering.
+        var model = Model();
+        var window = ShowOverview(model);
+
+        var button = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "DeleteOldCopyButton");
+
+        Assert.False(button.IsVisible);
+        Assert.False(model.HasOldCopy);
+        Assert.False(model.DeleteOldCopyCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void The_delete_button_appears_carrying_the_size()
+    {
+        // The size is the entire reason anybody started, so it goes on the button rather
+        // than in prose beside it.
+        var model = Model();
+        var window = ShowOverview(model);
+
+        model.OldCopyPath = Path.Combine(_home, "old");
+        model.OldCopyLabel = "Delete the old copy (1.7 GB)";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var button = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "DeleteOldCopyButton");
+
+        Assert.True(button.IsVisible);
+        Assert.Equal("Delete the old copy (1.7 GB)", button.Content as string);
+        Assert.True(model.DeleteOldCopyCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void The_progress_bar_shows_only_while_moving()
+    {
+        // Copying gigabytes takes minutes. A line of text that changes every few seconds
+        // does not read as something running.
+        var model = Model();
+        var window = ShowOverview(model);
+
+        var bar = window.GetVisualDescendants().OfType<ProgressBar>()
+            .Single(b => b.Name == "MoveProgressBar");
+
+        // Effectively, not IsVisible: the bar sits inside the panel that is bound, so its
+        // own property stays true while the panel above it is collapsed.
+        Assert.False(bar.IsEffectivelyVisible);
+
+        model.IsMovingHome = true;
+        model.MovePercent = 42;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(bar.IsEffectivelyVisible);
+        Assert.Equal(42, bar.Value);
+    }
+
+    [AvaloniaFact]
     public void A_refusal_leaves_the_home_path_alone()
     {
         // The failure worth guarding: reporting a new root that was never adopted.

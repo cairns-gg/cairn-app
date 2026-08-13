@@ -219,6 +219,66 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Discarding_the_old_copy_frees_the_space()
+    {
+        // The half that makes it a move rather than a copy: somebody moves 40 GB off a disk
+        // because the disk is full, and stopping after the copy leaves them worse off.
+        Move(PlanTo(To));
+
+        var freed = HomeMigration.DeleteOldRoot(From, keep: null);
+
+        Assert.False(Directory.Exists(From));
+        Assert.True(freed > 0);
+
+        // And the copy that matters is untouched.
+        Assert.True(File.Exists(Path.Combine(To, "packs", "demo", "pack.json")));
+    }
+
+    [Fact]
+    public void Discarding_keeps_the_file_it_is_told_to()
+    {
+        // The pointer, when the old root was the default. Taking it would send Cairn back to
+        // a default root that is now empty — the move undone by the tidying up.
+        Move(PlanTo(To));
+
+        var pointer = Path.Combine(From, "home");
+        File.WriteAllText(pointer, To);
+
+        HomeMigration.DeleteOldRoot(From, keep: pointer);
+
+        Assert.True(File.Exists(pointer));
+        Assert.Equal(To, File.ReadAllText(pointer));
+
+        // Everything else went, and the directory survives holding one line of text.
+        Assert.False(Directory.Exists(Path.Combine(From, "packs")));
+        Assert.Single(Directory.EnumerateFileSystemEntries(From));
+    }
+
+    [Fact]
+    public void Discarding_refuses_to_delete_the_live_root()
+    {
+        // A mistyped path is how somebody would ask for this, and it is the one mistake
+        // that cannot be walked back.
+        Assert.Throws<MoveFailed>(() => HomeMigration.DeleteOldRoot(CairnPaths.Root, null));
+    }
+
+    [Fact]
+    public void Discarding_unlinks_a_link_rather_than_deleting_through_it()
+    {
+        // What it points at is somewhere else and not ours to remove.
+        var elsewhere = Path.Combine(_tmp, "elsewhere");
+        Directory.CreateDirectory(elsewhere);
+        File.WriteAllText(Path.Combine(elsewhere, "keepme.txt"), "not ours");
+
+        Directory.CreateSymbolicLink(Path.Combine(From, "linked"), elsewhere);
+
+        HomeMigration.DeleteOldRoot(From, keep: null);
+
+        Assert.False(Directory.Exists(From));
+        Assert.True(File.Exists(Path.Combine(elsewhere, "keepme.txt")));
+    }
+
+    [Fact]
     public void A_refused_plan_repoints_nothing()
     {
         Assert.Throws<MoveFailed>(() => Move(PlanTo(To, environment: "/somewhere/else")));
