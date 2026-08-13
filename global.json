@@ -1,15 +1,25 @@
 {
   "$comment": [
-    "Which SDK band builds this. The workflow asked for '10.0.x' and nothing else said",
+    "Which SDK builds this, exactly. The workflow asked for '10.0.x' and nothing else said",
     "anything, so the SDK was whatever the runner had that day and no two builds were",
     "obliged to agree.",
     "",
-    "latestFeature rather than disable: pinning an exact patch means a release stops",
-    "building the day GitHub updates its images, which trades a real outage for a",
-    "reproducibility that the lock file already provides for the part that ships."
+    "This said latestFeature, on the grounds that pinning an exact patch means a release",
+    "stops building the day GitHub updates its images. That reasoning was wrong about how",
+    "the SDK gets here: actions/setup-dotnet downloads the version it is asked for rather",
+    "than using the image's, so a pin costs nothing and no image update can break it.",
+    "",
+    "It also could not coexist with the lock file. Restore in locked mode pins the SDK's",
+    "own implicit package references, and their versions move with the SDK — latestFeature",
+    "let a runner take 10.0.400, which injects Microsoft.NET.ILLink.Tasks 10.0.11 where",
+    "10.0.302 injects 10.0.10, and restore refused with NU1004. Two settings that each",
+    "asked for reproducibility, arranged so that one broke the other.",
+    "",
+    "disable, therefore, and the workflow reads this file rather than naming a version of",
+    "its own — so the SDK is decided in one place, the way the release version is."
   ],
   "sdk": {
     "version": "10.0.302",
-    "rollForward": "latestFeature"
+    "rollForward": "disable"
   }
 }

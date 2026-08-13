@@ -22,8 +22,15 @@ on:
 permissions:
   contents: read
 
+# No DOTNET_VERSION here, deliberately. Every setup-dotnet below reads global.json, so the
+# SDK is decided in one file rather than in a workflow variable and a file free to disagree
+# — the same rule the version itself follows.
+#
+# It said '10.0.x', which meant the latest 10.0 the installer could find: a runner took
+# 10.0.400 while global.json named 10.0.302, and since the SDK's implicit package references
+# move with it, restore in locked mode refused the build outright. A floating SDK and a lock
+# file cannot both be right.
 env:
-  DOTNET_VERSION: '10.0.x'
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
@@ -39,7 +46,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - run: dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj -c Release
 
@@ -74,7 +81,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       # On a tag this is the tag. On a manual run there is no version to speak of, and
       # GITHUB_REF_NAME is the branch — which is how a dispatch build ended up stamping
@@ -282,7 +289,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - run: ./build-release.sh win-x64 linux-x64
 

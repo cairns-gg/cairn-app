@@ -8,6 +8,26 @@
   <PropertyGroup>
     <RootNamespace>Cairn.Core</RootNamespace>
   </PropertyGroup>
+
+  <!--
+    Nothing here is trimmed, and this changes nothing about what ships.
+
+    All three projects that are published set PublishTrimmed, and the SDK injects
+    Microsoft.NET.ILLink.Tasks into the restore graph of everything a trimmed publish
+    reaches — which is this project, since all three reference it. A plain `dotnet restore`
+    does not, so Core's lock file was written without it and every trimmed publish was then
+    refused in locked mode: "lock file's package references: BouncyCastle.Cryptography,
+    project's package references: BouncyCastle.Cryptography, Microsoft.NET.ILLink.Tasks".
+
+    Declaring it here makes the lock record the graph a publish actually evaluates rather
+    than the smaller one a bare restore sees. Core is never published on its own, so the
+    property has nothing to act on; the trimming decisions that matter are in the three
+    projects that are, and are documented there.
+  -->
+  <PropertyGroup>
+    <PublishTrimmed>true</PublishTrimmed>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
   </ItemGroup>

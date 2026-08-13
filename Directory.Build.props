@@ -64,6 +64,27 @@
   </PropertyGroup>
 
   <!--
+    Every runtime a lock file has to answer for.
+
+    A lock file records the graph per runtime identifier, and restore in locked mode fails
+    if the one it needs is not in there. Nothing declared these, so the lock held whatever
+    RID the machine that wrote it happened to use — osx-arm64, from a Mac — and the first
+    Linux runner to restore it was refused: "the project's runtime identifiers have changed
+    from. Project's runtime identifiers: linux-x64, lock file's runtime identifiers
+    osx-arm64." It would have failed for win-x64 and osx-x64 in the release build too.
+
+    The same four build-release.sh publishes, so the lock covers a release rather than
+    covering whichever quarter of one was cut last. Declared for every project and not only
+    the three that are published: a RID-specific restore of the launcher restores what it
+    references the same way, so Cairn.Core needs the RIDs in its lock as much as the
+    launcher does, and deciding case by case which project is in that graph is how this
+    happened in the first place.
+  -->
+  <PropertyGroup>
+    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64;linux-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!--
     NuGetAudit is on by default in the .NET 10 SDK, but it reports NU1901-NU1904 as
     warnings — and the release publish ran with `-v quiet >/dev/null`, so a known-vulnerable
     transitive was a warning written to a discarded log in the job that ships. Promoted to
