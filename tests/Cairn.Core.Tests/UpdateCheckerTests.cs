@@ -73,7 +73,11 @@ public class UpdateCheckerTests : IDisposable
         });
 
         var clock = now ?? DateTimeOffset.UtcNow;
-        return (new UpdateChecker(new HttpClient(handler), "https://cairns.test/latest.json",
+        // The real manifest address, not a stand-in on another host. The files it names
+        // live on this host too, and an offer is only followed when they agree — a fixture
+        // that served the manifest from somewhere else was modelling a combination that
+        // does not occur and would now, rightly, be refused.
+        return (new UpdateChecker(new HttpClient(handler), UpdateChecker.DefaultManifest,
                                   StatePath, () => clock, running), handler);
     }
 
@@ -312,5 +316,40 @@ public class UpdateCheckerTests : IDisposable
         var (checker, _) = Make("<html>not json at all</html>");
 
         Assert.Null(await checker.CheckAsync());
+    }
+
+    /// <summary>
+    /// The manifest names both the URL and the sha256 to check it against, and nothing
+    /// reads that hash — so the document decides, on its own word alone, what a button
+    /// labelled "Download for Windows" fetches. Whoever can rewrite it cannot also send
+    /// that button off the host they had to compromise to rewrite it.
+    /// </summary>
+    [Fact]
+    public async Task A_build_hosted_somewhere_else_is_not_what_the_button_fetches()
+    {
+        var elsewhere = Manifest("0.3.0").Replace(
+            "https://download.cairns.gg/releases/", "https://attacker.example/releases/");
+
+        var (checker, _) = Make(elsewhere);
+        var update = await checker.CheckAsync();
+
+        Assert.NotNull(update);
+        Assert.Equal("0.3.0", update!.Version);
+
+        // Still offered — a release that exists is worth mentioning — but pointed at the
+        // site rather than at whatever the manifest asked for.
+        Assert.Equal("https://cairns.gg", update.DownloadUrl);
+        Assert.DoesNotContain("attacker.example", update.DownloadUrl);
+    }
+
+    [Fact]
+    public async Task A_build_offered_over_plain_http_is_not_followed_either()
+    {
+        var downgraded = Manifest("0.3.0").Replace("https://download.cairns.gg", "http://download.cairns.gg");
+
+        var (checker, _) = Make(downgraded);
+        var update = await checker.CheckAsync();
+
+        Assert.Equal("https://cairns.gg", update!.DownloadUrl);
     }
 }

@@ -40,9 +40,34 @@ public sealed record LatestRelease(
 /// Null when the manifest carries nothing for this platform — which is worth offering
 /// anyway, pointed at the site, rather than staying silent about a release that exists.
 /// </param>
-public sealed record UpdateAvailable(string Version, ReleaseFile? File)
+public sealed record UpdateAvailable(string Version, ReleaseFile? File, string? Origin = null)
 {
-    public string DownloadUrl => File?.Url ?? "https://cairns.gg";
+    /// <summary>
+    /// Where the download button goes, or the site when the manifest offers nothing this
+    /// machine should follow.
+    ///
+    /// Bounded to the origin the manifest itself was fetched from. The manifest names both
+    /// the URL and the sha256 to check it against, and nothing reads that hash — so the
+    /// document decides, on its own word, what a button labelled "Download for macOS
+    /// (Apple silicon)" fetches. Whoever can rewrite it could point that anywhere; this at
+    /// least stops them pointing it off the host they already had to compromise to rewrite
+    /// it, which is what would let a build be served to some people and not others, or
+    /// from somewhere that keeps no logs.
+    ///
+    /// Derived from the manifest rather than pinned to a constant, so it holds for a
+    /// mirror or a test server too and cannot go stale the way a hardcoded host would.
+    /// Falling back to the site rather than refusing: a release that exists is still worth
+    /// telling somebody about, and cairns.gg is where they would have gone anyway.
+    /// </summary>
+    public string DownloadUrl => IsFromOrigin(File?.Url) ? File!.Url : "https://cairns.gg";
+
+    private bool IsFromOrigin(string? url) =>
+        Origin is { Length: > 0 }
+        && Uri.TryCreate(url, UriKind.Absolute, out var target)
+        && Uri.TryCreate(Origin, UriKind.Absolute, out var manifest)
+        && target.Scheme == Uri.UriSchemeHttps
+        && string.Equals(target.Host, manifest.Host, StringComparison.OrdinalIgnoreCase)
+        && target.Port == manifest.Port;
 
     /// <summary>Names the platform, so the button says what pressing it fetches.</summary>
     public string ButtonLabel => File is null ? "Open cairns.gg" : $"Download for {File.Label}";
@@ -302,6 +327,8 @@ public sealed class UpdateChecker(
         var file = latest.Files?.FirstOrDefault(
             f => string.Equals(f.Platform, ThisPlatform, StringComparison.OrdinalIgnoreCase));
 
-        return new UpdateAvailable(latest.Version, file);
+        // The manifest's own address travels with the offer, so the button cannot be sent
+        // somewhere the manifest was not. See UpdateAvailable.DownloadUrl.
+        return new UpdateAvailable(latest.Version, file, _manifest);
     }
 }
