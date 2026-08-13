@@ -201,6 +201,50 @@ construction, making a pack would have signed every other pack back in as whoeve
 data path last was. The seed is stripped of session keys, which arrive a moment later from
 Cairn's own record.
 
+### Where all this lives, and moving it
+
+Everything — packs, game versions, private runtimes, caches, build trees — is under one
+root, which is `~/.cairn` unless something says otherwise. Three things can say otherwise,
+in this order:
+
+```
+CAIRN_HOME                      an environment variable, and it always wins
+~/.cairn/home                   a file holding one absolute path
+~/.cairn                        the default
+```
+
+`CAIRN_HOME` has always worked and still does; `cairn-server` units are configured with it.
+What it cannot do is stick, which is why the file exists: an environment variable set in a
+shell does not reach a Start-menu launch, a `.desktop` entry, an `.app` bundle or a
+`cairn://` activation, and those are how the launcher is actually started. The file is read
+at the default location and cannot live in `settings.json`, which is inside the root it
+would be configuring.
+
+**Preferences → Move…** copies everything to a directory you pick and then uses it. It is a
+copy, not a rename — the point is to cross onto another disk, where a rename fails. Cairn is
+repointed only once every file has arrived and been checked, so a failure at any stage
+leaves the old root live and untouched. Links are recreated as links rather than followed,
+and each pack's pinned install path is moved with it.
+
+```
+cairn-cli home                  where the root is, and which of the three decided it
+cairn-cli home move <dir>       copy everything there, then use it
+cairn-cli home set <dir>        use a directory that already holds a Cairn root
+cairn-cli home clear            go back to the default
+```
+
+**The old copy is never deleted.** Tens of gigabytes are not worth trusting to one
+unverified pass, so it is left in place and named, and removing it is a separate decision
+made once the new one has been used. One warning comes with that: moving away from the
+default leaves the pointer file *inside* the directory being abandoned, so deleting the
+whole of `~/.cairn` would undo the move — the launcher and the CLI both say which single
+file to keep.
+
+If the root is a pointer at somewhere that is not there — an unplugged disk, a share that is
+down — Cairn refuses to start rather than falling back. An empty launcher does not read as
+"that disk is not connected", it reads as "everything is gone", and the next thing it offers
+is downloading the game again beside data that is perfectly fine.
+
 ## Usage
 
 The launcher is the primary interface — everything can be done from it, no terminal

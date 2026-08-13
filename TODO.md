@@ -77,27 +77,30 @@ volume, which is the silent-empty-root failure wearing a different hat.
    install path with it, and repoints last so a failure anywhere leaves the old root live.
    Deletes nothing: what to do with the old copy is a decision made after this one is known
    to have worked.
-3. **A Preferences affordance** wrapping it, next to `CairnHome` and the per-directory
-   sizes already displayed there — the numbers that make somebody want this are on that
-   screen already. `MovePlan` answers what it would cost and `MoveProgress` reports as it
-   goes, so what is left is a folder picker, a progress bar and the two refusals a window
-   can show better than a terminal.
+3. ~~**A Preferences affordance**~~ Done — **Move…** beside the home path, where the sizes
+   that make somebody want it already are. The platform's folder picker, `MovePlan`'s cost
+   in the confirmation, `MoveProgress` on screen while it runs, and every refusal shown as
+   text rather than thrown, because choosing an unsuitable folder is an ordinary thing to
+   do. The launcher runs the preflight now too, and refuses in a window of its own with the
+   two honest ways out: quit and reconnect the disk, or start on the default and be told
+   where everything still is.
 
-   **The old copy needs an answer there that the CLI ducks.** It leaves the old root in
-   place and says so, which is right for a tool run by somebody watching it. A launcher that
-   moves 40 GB and leaves 40 GB behind has not solved the problem the user came with — they
-   are out of disk space. Offering to delete it after the new root has been used once, from
-   a screen that already shows what everything costs, is probably the shape. Deleting it in
-   the same breath as the copy is not.
+### Still open: what happens to the old copy
 
-**The launcher does not run the preflight yet, and must before 3 ships.** `cairn-cli`
-refuses to run on a pointer at a directory that is not there, and exempts `home` itself so
-the repair tool is not gated on the thing it repairs. `Cairn.App` does neither: it would
-start on the fallback root and look empty, which is the failure this was all written to
-avoid. It is not reachable today — only `cairn-cli` writes a pointer, and it is not shipped
-in releases — so this is a gap and not a bug, but it stops being that the moment a GUI
-button can write one. Refusing needs somewhere to say so, which is why it waits for the UI
-rather than going in blind.
+Neither front-end deletes it, which is right so far as it goes — tens of gigabytes are not
+worth one unverified pass. But a launcher that moves 40 GB off a full disk and leaves 40 GB
+on it has not solved the problem the user arrived with. Both say where the old copy is and
+what it costs; neither offers to finish the job.
+
+The shape is probably an offer that appears *after* the new root has been used at least
+once, on the screen that already shows what everything costs — not in the same breath as the
+copy, when nothing has been proven yet. Worth deciding: what counts as "used once" and where
+that is recorded, given the obvious place to record it is inside the root whose predecessor
+is the thing in question.
+
+The pointer sitting inside the abandoned directory is the sharp edge here. Deleting the old
+root wholesale undoes the move, and both front-ends currently handle that by saying so.
+Anything that deletes on the user's behalf has to keep that one file, and be sure of it.
 
 ## Taking over an imported pack
 

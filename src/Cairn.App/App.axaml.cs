@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
+using Cairn.Core;
 using Cairn.Core.Packs;
 
 namespace Cairn.App;
@@ -23,6 +24,32 @@ public partial class App : Application
     private void OnAbout(object? sender, EventArgs e) =>
         _model?.ShowPreferencesCommand.Execute(null);
 
+    /// <summary>
+    /// Puts the problem in front of the user and reports whether to carry on regardless.
+    ///
+    /// Shown with ShowDialog against no owner and pumped by its own lifetime, because this
+    /// runs before there is a main window to own anything. Choosing the default clears the
+    /// pointer, so the resolution that follows finds ~/.cairn — no restart needed, since the
+    /// root is worked out on every read rather than once at startup.
+    /// </summary>
+    private static bool AcceptedDefault(IClassicDesktopStyleApplicationLifetime desktop, string problem)
+    {
+        var window = new HomeProblemWindow
+        {
+            DataContext = new HomeProblemViewModel(problem, CairnHome.Resolve().Root),
+        };
+
+        // The window is the application until it closes: without this the lifetime has no
+        // main window, so nothing pumps and the dialog never appears.
+        desktop.MainWindow = window;
+        window.ShowDialog(window);
+
+        if (!window.UseDefault) return false;
+
+        CairnHome.SetPointer(null);
+        return true;
+    }
+
     public override void OnFrameworkInitializationCompleted()
     {
         // Before any window is built, so the first one opens at the chosen size rather
@@ -31,6 +58,16 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // Before the model, which reads packs the moment it is built. If the setting
+            // names a directory that is not there — an unplugged disk, a share that is down —
+            // starting anyway would show an empty launcher, and an empty launcher does not
+            // read as "that disk is not connected". It reads as "everything is gone", and
+            // the next thing offered is downloading the game again beside data that is fine.
+            //
+            // cairn-cli refuses the same way. It can print a line and exit; here it takes a
+            // window, because there is nowhere else to say it.
+            if (CairnHome.Preflight() is { } problem && !AcceptedDefault(desktop, problem)) return;
+
             var model = new MainViewModel();
             _model = model;
 

@@ -201,6 +201,101 @@ public partial class PreferencesViewModel : ViewModelBase
     /// <summary>Set by the view; the same confirmation dialog the pack delete uses.</summary>
     public Func<ConfirmViewModel, Task<bool>>? Confirm { get; set; }
 
+    /// <summary>
+    /// Asks for a directory, returning null if the user thought better of it. Set by the
+    /// view because picking a folder is the platform's job and this is a view model —
+    /// which also means a test can answer it without a dialog.
+    /// </summary>
+    public Func<Task<string?>>? PickFolder { get; set; }
+
+    /// <summary>True while the tree is being copied. See <see cref="IsCleaningUp"/>.</summary>
+    [ObservableProperty] public partial bool IsMovingHome { get; set; }
+
+    [ObservableProperty] public partial string MoveStage { get; set; } = "";
+
+    /// <summary>
+    /// What to do with the old copy, once there is an old copy. Empty until then.
+    ///
+    /// Left on screen rather than said once in a toast: somebody who has just moved 40 GB
+    /// off a full disk needs to know that the 40 GB is still on it, and needs to be able to
+    /// read it again after they have gone and looked.
+    /// </summary>
+    [ObservableProperty] public partial string MoveAftermath { get; set; } = "";
+
+    /// <summary>
+    /// Moves everything Cairn keeps to a directory the user chooses.
+    ///
+    /// Every rule is <see cref="HomeMigration"/>'s — what can be refused, what gets copied,
+    /// what gets rewritten, and that Cairn is repointed only once it has all arrived. This
+    /// asks where, shows what it will cost, and reports what happened.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotCleaningUp))]
+    private async Task MoveHome()
+    {
+        if (PickFolder is null) return;
+
+        if (await PickFolder() is not { } chosen) return;
+
+        var plan = await Task.Run(() => HomeMigration.Plan(chosen));
+
+        // A refusal is the ordinary outcome of choosing the wrong folder, not an error —
+        // the picker will happily offer a disk with no room on it, or the directory Cairn
+        // is already using.
+        if (!plan.CanMove)
+        {
+            MoveStage = "";
+            MoveAftermath = plan.Problem!;
+            return;
+        }
+
+        var message = $"Copies everything Cairn keeps to:\n\n  {plan.To}\n\n"
+                      + $"{plan.Files} files, {HomeMigration.Describe(plan.Bytes)}"
+                      + (plan.Links > 0 ? $", and {plan.Links} links kept as links" : "")
+                      + ".\n\nThe copy at " + plan.From + " is left exactly where it is, and "
+                      + "Cairn is not repointed until everything has arrived and been checked. "
+                      + "You can delete the old copy yourself afterwards.";
+
+        if (Confirm is not null
+            && !await Confirm(new ConfirmViewModel("Move Cairn's files?", message, "Move")))
+            return;
+
+        IsMovingHome = true;
+        MoveAftermath = "";
+
+        try
+        {
+            var progress = new Progress<MoveProgress>(p =>
+                MoveStage = $"{(p.BytesTotal == 0 ? 100 : 100 * p.Bytes / p.BytesTotal)}% — "
+                            + $"{p.Files} of {p.FilesTotal} files");
+
+            var result = await Task.Run(() => HomeMigration.Move(plan, progress));
+
+            MoveAftermath =
+                $"Moved to {plan.To}. The old copy is still at {result.OldRoot}, is no longer "
+                + $"read, and is using {HomeMigration.Describe(result.Bytes)} — delete it "
+                + "yourself once you are satisfied."
+                + (result.KeepInOldRoot is { } keep
+                    ? $"\n\nKeep {keep}. That one file is what points Cairn at the new "
+                      + "location, so deleting the whole directory would undo this."
+                    : "");
+        }
+        catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)
+        {
+            // Nothing was repointed — that is the whole design — so the old root is still
+            // live and saying so is the useful half of the message.
+            // CairnPaths.Root, not CairnHome.Resolve() — this class has a CairnHome property
+            // of its own, which shadows the type. Same answer either way.
+            MoveAftermath = $"{e.Message}\n\nCairn is still using {CairnPaths.Root}.";
+        }
+        finally
+        {
+            IsMovingHome = false;
+            MoveStage = "";
+            OnPropertyChanged(nameof(CairnHome));
+            Refresh();
+        }
+    }
+
     [ObservableProperty] public partial string CleanupSummary { get; set; } = "";
 
     /// <summary>
@@ -211,12 +306,23 @@ public partial class PreferencesViewModel : ViewModelBase
 
     [ObservableProperty] public partial string CleanupStage { get; set; } = "";
 
-    public bool NotCleaningUp => !IsCleaningUp;
+    /// <summary>
+    /// Gates every button that touches files, the move included, so none of them can start
+    /// while another is running. A sweep deleting game versions while a copy is reading them
+    /// is not a case worth having.
+    /// </summary>
+    public bool NotCleaningUp => !IsCleaningUp && !IsMovingHome;
 
-    partial void OnIsCleaningUpChanged(bool value)
+    partial void OnIsCleaningUpChanged(bool value) => BusyChanged();
+
+    partial void OnIsMovingHomeChanged(bool value) => BusyChanged();
+
+    private void BusyChanged()
     {
         OnPropertyChanged(nameof(NotCleaningUp));
         CleanUpCommand.NotifyCanExecuteChanged();
+        RemoveBuildTreesCommand.NotifyCanExecuteChanged();
+        MoveHomeCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>

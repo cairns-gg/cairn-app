@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.HomeProblemWindow"
+        x:DataType="vm:HomeProblemViewModel"
+        Title="Cairn cannot find its files"
+        Width="520" SizeToContent="Height"
+        MinHeight="200" MaxHeight="460"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <DockPanel Margin="18" LastChildFill="True">
+
+        <TextBlock DockPanel.Dock="Top" Text="Cairn cannot find its files"
+                   FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"
+                   Margin="0,0,0,10" />
+
+        <!-- Docked before the message, so a long path scrolls rather than pushing the
+             only two ways out of this window off the bottom of it. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    Spacing="8" Margin="0,14,0,0">
+            <Button Name="QuitButton" Content="Quit" Classes="accent" Padding="16,5"
+                    Click="OnQuit" IsCancel="True" />
+            <Button Name="DefaultButton" Content="Use the default location" Padding="16,5"
+                    Click="OnUseDefault" />
+        </StackPanel>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <TextBlock Name="ProblemText" Text="{Binding Problem}"
+                           FontSize="12" TextWrapping="Wrap" />
+
+                <TextBlock Name="ReassuranceText" Text="{Binding Reassurance}"
+                           FontSize="12" TextWrapping="Wrap" Opacity="0.8" />
+
+                <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
+                           Text="Quit, reconnect it, and start Cairn again to carry on where you left off. Using the default location starts empty and leaves everything where it is." />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
