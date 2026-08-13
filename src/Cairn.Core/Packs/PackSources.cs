@@ -32,4 +32,29 @@ public static class PackSources
         Uri.TryCreate(source, UriKind.Absolute, out var uri)
         && uri.Scheme == "http"
         && !uri.IsLoopback;
+
+    /// <summary>
+    /// The address a response actually came from, which is not always the one it was asked
+    /// for.
+    ///
+    /// HttpClient follows redirects without saying so, and a redirect to another https host
+    /// is allowed — only a downgrade to http is refused. So a pack asked for at one host
+    /// can be answered by another, and every front-end here records the address it fetched
+    /// from as the pack's origin and shows it to somebody deciding whether to trust the
+    /// thing. Asking the response rather than remembering the request is the difference
+    /// between recording where a document came from and recording where somebody hoped it
+    /// would.
+    ///
+    /// <para>Falls back to the requested address when the response cannot say — which is
+    /// no worse than the behaviour this replaces, and is what a stubbed handler in a test
+    /// produces.</para>
+    ///
+    /// <para>Deliberately not a refusal. A redirect is how a host moves, and refusing one
+    /// would break an ordinary move to make a rare case visible; naming the real host does
+    /// both.</para>
+    /// </summary>
+    public static string LandingAddress(HttpResponseMessage response, string requested) =>
+        response.RequestMessage?.RequestUri?.ToString() is { Length: > 0 } landed
+            ? landed
+            : requested;
 }

@@ -916,8 +916,16 @@ public partial class MainViewModel : ViewModelBase
 
             response.EnsureSuccessStatusCode();
 
+            // Where the bytes came from, not where they were asked for. Redirects are
+            // followed silently, and https to another https host is allowed — only a
+            // downgrade to http is refused — so the address typed and the address answered
+            // are not the same fact. Showing the first while recording it as the origin
+            // would put a trusted-looking host on screen for a document served by another,
+            // which is the whole of what this screen is for.
+            var landed = PackSources.LandingAddress(response, documentUrl);
+
             var bundle = PackBundle.Parse(await response.Content.ReadAsStringAsync());
-            var offer = new ImportViewModel(bundle, documentUrl, id => _store.Exists(id));
+            var offer = new ImportViewModel(bundle, landed, id => _store.Exists(id));
 
             if (ConfirmImport is null || !await ConfirmImport(offer))
             {
@@ -927,7 +935,7 @@ public partial class MainViewModel : ViewModelBase
 
             Added(_store.Import(
                 bundle, PackId.FromOrFallback(offer.AsId),
-                sourceUrl: documentUrl, intent: offer.Intent));
+                sourceUrl: landed, intent: offer.Intent));
         }
         catch (Exception e)
         {

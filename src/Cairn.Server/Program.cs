@@ -146,15 +146,27 @@ public static class Program
         // and that address serves HTML — the same rule the update check applies. Fetching
         // it raw got a web page and reported it as invalid JSON, which is true and tells
         // whoever pasted the URL nothing about what to paste instead.
-        var json = PackSources.IsRemote(source)
-            ? await http.GetStringAsync(PackUpdateCheck.DocumentUrl(source))
-            : File.ReadAllText(source);
+        string json;
+        string? fetchedFrom = null;
+
+        if (PackSources.IsRemote(source))
+        {
+            using var response = await http.GetAsync(PackUpdateCheck.DocumentUrl(source));
+            response.EnsureSuccessStatusCode();
+
+            // The address it actually came from, so a follow is recorded against that
+            // rather than against whatever the document names itself — and against where
+            // the fetch landed rather than where it was aimed, because a redirect crosses
+            // hosts silently. See PackSources.LandingAddress. A file gets none.
+            fetchedFrom = PackSources.LandingAddress(response, PackUpdateCheck.DocumentUrl(source));
+            json = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            json = File.ReadAllText(source);
+        }
 
         var bundle = PackBundle.Parse(json);
-
-        // The address it actually came from, so a follow is recorded against that rather
-        // than against whatever the document names itself. A file gets none.
-        var fetchedFrom = PackSources.IsRemote(source) ? source : null;
 
         ImportIntent? intent = args.Contains("--fork") ? ImportIntent.Fork
             : args.Contains("--follow") ? ImportIntent.Follow

@@ -884,6 +884,7 @@ internal static class Program
 
         var source = args[1];
         string json;
+        string? landed = null;
 
         try
         {
@@ -896,9 +897,21 @@ internal static class Program
             // reads and that address serves HTML. Fetching it raw reported invalid JSON,
             // which is true and tells whoever pasted the URL nothing about what to paste
             // instead. cairn-server has done this since it was written; this had not.
-            json = PackSources.IsRemote(source)
-                ? await http.GetStringAsync(PackUpdateCheck.DocumentUrl(source))
-                : File.ReadAllText(source);
+            if (PackSources.IsRemote(source))
+            {
+                using var response = await http.GetAsync(PackUpdateCheck.DocumentUrl(source));
+                response.EnsureSuccessStatusCode();
+
+                // Where it answered from, not where it was asked. Redirects are followed
+                // silently and may cross hosts, and this is the address recorded as the
+                // pack's origin — see PackSources.LandingAddress.
+                landed = PackSources.LandingAddress(response, PackUpdateCheck.DocumentUrl(source));
+                json = await response.Content.ReadAsStringAsync();
+            }
+            else
+            {
+                json = File.ReadAllText(source);
+            }
         }
         catch (Exception e) when (e is IOException or HttpRequestException)
         {
@@ -914,8 +927,9 @@ internal static class Program
             return Fail("--follow and --fork ask for opposite things; pass one");
 
         // The address it actually came from, so a follow is recorded against that rather
-        // than against whatever the document names itself.
-        var fetchedFrom = PackSources.IsRemote(source) ? source : null;
+        // than against whatever the document names itself — and against where the fetch
+        // landed rather than where it was aimed, since a redirect can move it.
+        var fetchedFrom = landed;
 
         ImportIntent? intent = args.Contains("--fork") ? ImportIntent.Fork
             : args.Contains("--follow") ? ImportIntent.Follow

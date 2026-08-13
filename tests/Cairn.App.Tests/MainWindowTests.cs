@@ -1905,6 +1905,53 @@ public class MainWindowTests : IDisposable
         Assert.Equal("https://cairns.gg/dizzyd/anego-page", link!.Url);
     }
 
+    /// <summary>
+    /// A redirect crosses hosts silently, and the pack's origin is recorded from the fetch
+    /// and shown to whoever is deciding whether to trust it. So the address that answered
+    /// is the one that counts — recording the address typed would put a trusted-looking
+    /// host against a document served by another.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_redirect_records_the_host_that_answered_not_the_one_asked()
+    {
+        var http = new OfflineHandler();
+
+        var reply = http.Serve("/dizzyd/moved.json", """
+            {"formatVersion":1,
+             "pack":{"id":"moved","gameVersion":"1.22.5","mods":[{"modid":"glassview"}]},
+             "publishedBy":"dizzyd",
+             "canonicalUrl":"https://cairns.gg/dizzyd/moved",
+             "revision":1}
+            """);
+
+        // What HttpClient leaves behind after following a redirect: the response carries
+        // the request that actually produced it, which is the last one in the chain.
+        reply.RequestMessage = new HttpRequestMessage(
+            HttpMethod.Get, "https://elsewhere.example/dizzyd/moved.json");
+
+        var (_, vm) = Show(http);
+
+        ImportViewModel? offered = null;
+        vm.ConfirmImport = o => { offered = o; return Task.FromResult(true); };
+
+        vm.BeginImportCommand.Execute(null);
+        vm.ImportText = "https://cairns.gg/dizzyd/moved";
+        await vm.ImportPackCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.ImportError);
+
+        // Shown as where it came from, not where it was asked for.
+        Assert.NotNull(offered);
+        Assert.Contains("elsewhere.example", offered!.Provenance);
+        Assert.DoesNotContain("cairns.gg", offered.Provenance);
+
+        // And followed there, so a later update goes back to whatever actually served it
+        // rather than to a host that only appeared to.
+        var link = new PackStore().LoadLink("moved");
+        Assert.NotNull(link);
+        Assert.Equal("https://elsewhere.example/dizzyd/moved", link!.Url);
+    }
+
     [AvaloniaFact]
     public void Importing_junk_reports_an_error_and_stays_on_the_form()
     {
