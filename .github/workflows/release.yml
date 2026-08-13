@@ -264,12 +264,20 @@ jobs:
       # command, and the packaging people download is not the place to find out whether
       # the notary minds a different one.
       - name: Package
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
+          # The version this job already worked out, rather than GITHUB_REF_NAME again.
+          # They agree on a tag and not otherwise: a manual run produced
+          # cairn-main-macos-arm64.zip, naming the branch as though it were a version —
+          # the same mistake `Work out the version` was written to stop, surviving in the
+          # step that names the file. The cross job's Package says "same rule as the macOS
+          # job", which was true of the rule and not of this.
           mkdir -p dist
           for arch in arm64 x64; do
             ditto -c -k --keepParent \
               "artifacts/osx-$arch/Cairn.app" \
-              "dist/cairn-${GITHUB_REF_NAME#v}-macos-$arch.zip"
+              "dist/cairn-$VERSION-macos-$arch.zip"
           done
           ls -lh dist
 
@@ -702,6 +710,32 @@ jobs:
             exit 0
           fi
 
+          # Notarisation says the build is sound. It says nothing about whether this
+          # version was meant to be the download, and a tag is free to be a rehearsal or a
+          # release candidate — so without this, v1.0.0-rc1 notarises like anything else
+          # and hands itself to every client's update check.
+          #
+          # The version's shape decides it, since a hyphen is semver's prerelease marker
+          # and nothing else here produces one. That also aligns with what a client would
+          # do with it: GameVersions.IsPlausibleVersion refuses anything that is not a bare
+          # version, so an offer of 1.0.0-rc1 is one the other end would not take anyway.
+          #
+          # Uploaded regardless, and reachable at its own immutable path. That is what
+          # makes a rehearsal tag useful: the whole path runs, the artifacts and the
+          # attestation are there to check, and the one irreversible act does not happen.
+          case "$version" in
+            *-*)
+              echo
+              echo "Uploaded, but NOT promoted: $version is a prerelease."
+              echo "  complete and reachable:  $public/releases/$version/"
+              echo "  describing it:           $public/releases/$version/manifest.json"
+              echo "  unchanged:               $public/releases/latest.json"
+              echo
+              echo "Tag a bare version to ship one, or promote this by hand if that is intended."
+              exit 0
+              ;;
+          esac
+
           # The same bytes at both paths rather than a pointer, so a reader needs one
           # request and cannot catch latest.json naming a manifest that is not up yet.
           # The signature first, then the document it vouches for. A reader that catches
@@ -851,7 +885,18 @@ jobs:
           # signed build — but nobody downloads from here: this is a record of what was
           # built and a copy of the artifacts, and the gate that matters is on promoting
           # latest.json in the spaces job, which is what people actually fetch.
+          # The same rule the r2 job promotes by, applied to the other place a version can
+          # claim to be the current one. GitHub marks the newest non-prerelease as "Latest
+          # release" on the repository front page, so a rehearsal tag would sit there
+          # announcing itself — pointing at builds the download channel deliberately did
+          # not promote, which is a worse contradiction than either alone.
+          prerelease=()
+          case "${GITHUB_REF_NAME#v}" in
+            *-*) prerelease=(--prerelease) ;;
+          esac
+
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md \
-            --generate-notes
+            --generate-notes \
+            ${prerelease+"${prerelease[@]}"}
