@@ -11,8 +11,16 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Read is what checkout needs and all any job here needs by default. The one job that
+# writes — `release`, which creates the GitHub release — declares `contents: write` for
+# itself and always did, so granting it to everybody bought nothing and cost a great deal:
+# actions/checkout persists the token into .git/config as an http.extraheader for the whole
+# job, so `test` handed repository write to every package `dotnet test` restores. One of
+# those could push a v* tag and originate a release from source of its choosing.
+#
+# Not `{}`: this repository is private, so a checkout with no permissions cannot clone it.
 permissions:
-  contents: write        # only the release job needs this; see its own permissions block
+  contents: read
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -27,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -42,21 +52,26 @@ jobs:
     needs: test
     runs-on: macos-latest
 
-    # Lifted to the job so the steps below can test them in `if`. A step's own `env` is not
-    # visible to that step's condition, which fails open — the step runs, and signing dies
-    # somewhere less obvious.
-    env:
-      CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-      NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-      NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+    # No job-level env here, deliberately. These were lifted to the job so the steps below
+    # could test them in `if`, because a step's own env is not visible to that step's
+    # condition — but the cost was that every step ran with a Developer ID private key and
+    # an App Store Connect notary key in its environment, including `Build the app
+    # bundles`, which runs `dotnet publish` and so executes MSBuild tasks and build targets
+    # out of every restored NuGet package. Those are arbitrary code by design; reading
+    # $CERTIFICATE needs no injection and no exploit. Both keys sign anything, not just
+    # Cairn, and revoking a Developer ID is a manual conversation with Apple.
+    #
+    # What the conditions test now is a step output from `Check the signing configuration`,
+    # which is visible to `if` and says the same thing without the secret being anywhere
+    # near the step that asks.
 
     outputs:
       notarised: ${{ steps.notarise.outputs.done }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -82,6 +97,13 @@ jobs:
       # not: it means somebody meant to sign, and finding out from a Gatekeeper dialog
       # weeks later is the worst place to learn it did not happen.
       - name: Check the signing configuration
+        id: config
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
         run: |
           missing() { echo "  missing: $1"; FAILED=1; }
           FAILED=0
@@ -91,6 +113,13 @@ jobs:
 
           have_notary=0
           [ -n "$NOTARY_KEY" ] || [ -n "$NOTARY_KEY_ID" ] || [ -n "$NOTARY_ISSUER" ] && have_notary=1
+
+          # Written before the branches below, both of which can leave early. These are
+          # what the later steps' `if` conditions read instead of the secrets themselves,
+          # and a step that never emitted them would fail closed — which is the right
+          # direction, but only if it is not also the ordinary path.
+          echo "have_cert=$have_cert" >> "$GITHUB_OUTPUT"
+          echo "have_notary=$have_notary" >> "$GITHUB_OUTPUT"
 
           if [ "$have_cert" = 0 ] && [ "$have_notary" = 0 ]; then
             echo "No signing secrets — building ad-hoc signed, as before."
@@ -129,7 +158,10 @@ jobs:
       # what turns signing on — no code change, no flag.
       - name: Import the signing certificate
         id: cert
-        if: env.CERTIFICATE != ''
+        if: steps.config.outputs.have_cert == '1'
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
           # A keychain of its own, unlocked only for this job, with a password nobody needs
           # to know because nothing outlives the runner.
@@ -180,7 +212,11 @@ jobs:
       # somebody whose first launch is offline.
       - name: Notarise and staple
         id: notarise
-        if: steps.cert.outputs.identity != '' && env.NOTARY_KEY != ''
+        if: steps.cert.outputs.identity != '' && steps.config.outputs.have_notary == '1'
+        env:
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
         run: |
           echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
 
@@ -242,6 +278,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -503,6 +541,39 @@ jobs:
           fi
 
           cat notes.md
+
+      # A second copy of the checksums, on a host the R2 credentials do not reach.
+      #
+      # SHA256SUMS, manifest.json and the artifacts they describe are all generated on the
+      # same runner and uploaded to the same bucket over the same credentials, so every one
+      # of them can be rewritten together and each check downstream still passes. That is
+      # not integrity, it is a consistency check — and a single credential is all of it.
+      #
+      # This does not fix that, and is not pretending to: whoever holds the R2 keys can
+      # still replace what people download. What it buys is detection. The same hashes now
+      # exist somewhere R2 cannot write, so a substitution stops being undetectable after
+      # the fact — which is the property that decides whether a compromise can be
+      # investigated or only guessed at. A real fix is a detached signature over
+      # manifest.json made with a key that never enters this workflow.
+      - name: Record the checksums
+        run: |
+          cd dist
+          sha256sum *.zip *.tar.gz > ../SHA256SUMS
+          cd ..
+          cat SHA256SUMS
+
+          {
+            echo
+            echo '### Checksums'
+            echo
+            echo 'Also published beside the downloads. These are recorded here as well'
+            echo 'because this repository and object storage are reached by different'
+            echo 'credentials, so the two copies cannot be rewritten by the same key.'
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> notes.md
 
       - name: Publish the release
         env:
