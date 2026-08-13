@@ -1234,9 +1234,41 @@ Three smaller things make the chain legible end to end:
 - **The build log is public.** Once this repository is, the run named in the manifest is
   readable by anyone, including everything the workflow did to produce the artifacts.
 
-**Tag releases with a signed tag** — `git tag -s` — so that tag → commit is attributable the
-same way the attestation makes commit → artifact attributable. It is the one link in the
-chain that is a habit rather than something the workflow enforces.
+**Tag releases with a signed tag**, so that tag → commit is attributable the same way the
+attestation makes commit → artifact attributable. It is the one link in the chain the
+workflow cannot enforce: the attestation faithfully records whatever commit the tag pointed
+at, including the wrong one.
+
+Signing is configured per clone, in `.git/config`, so it does not travel with the source and
+this is where it is written down. The key is an SSH key held in 1Password rather than a GPG
+key on disk — the same key that authenticates the push, and `op-ssh-sign` is what git calls
+to use it:
+
+```bash
+key="$(ssh-add -L | awk '$3=="Github"{print $1" "$2}')"   # via 1Password's agent
+
+git config gpg.format ssh
+git config user.signingkey "$key"
+git config gpg.ssh.program "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+git config tag.gpgsign true
+
+# Without this git makes signatures it cannot then verify, which reads as a broken key
+# rather than as a missing list of who is allowed to sign.
+printf '%s %s\n' "$(git config user.email)" "$key" > ~/.config/git/allowed_signers
+git config gpg.ssh.allowedSignersFile "$HOME/.config/git/allowed_signers"
+```
+
+`tag.gpgsign` means `git tag -a` signs too, so the release command in *Cutting a release*
+needs no change. Check one with `git verify-tag v1.2.3`.
+
+**GitHub keeps authentication keys and signing keys in separate lists**, and being in the
+first does not put a key in the second — so a tag signed by the key that pushed it still
+shows as unverified until the same public key is added again with type *signing*:
+
+```bash
+gh auth refresh -h github.com -s admin:ssh_signing_key
+gh ssh-key add --type signing --title "release signing" ~/.ssh/id_for_signing.pub
+```
 
 What none of this offers is a **reproducible build**. You cannot rebuild a commit and get a
 byte-identical artifact: the single-file bundle is compressed, and the macOS bundle carries
