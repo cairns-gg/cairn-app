@@ -21,9 +21,11 @@ It is not shipped in releases yet, so that is a door left open rather than a fea
 Cairn does not replace the game's ModDB integration; it fills the gap next to it.
 
 The source is here to be read, not forked: Cairn is **source-available**, under the
-[PolyForm Strict License 1.0.0](LICENSE.md) — noncommercial use, no redistribution, and one
-[additional permission](#licence) for proposing changes back. If what you want to check is
-that a download matches this source, that is
+[PolyForm Strict License 1.0.0](LICENSE.md) — noncommercial use and no redistribution, with
+two [added permissions](#licence): `cairn-server` may be run commercially, so a hosting
+provider is not shut out of the one component written for them, and changes may be made for
+the purpose of proposing them back. If what you want to check is that a download matches
+this source, that is
 [a different question with a real answer](#verifying-a-download-against-this-source).
 
 ## How it works
@@ -1468,9 +1470,14 @@ than one that happens to apply to some copies.
 
 Two consequences worth naming, because they are real:
 
-- **A commercial server host cannot run `cairn-server`.** Noncommercial means noncommercial,
-  and that boundary catches some people who would be good users. It is the price of the same
-  clause that stops the resale case, and it was chosen knowing that.
+- **A commercial server host may run `cairn-server`**, by an
+  [additional permission](LICENSE.md#additional-permission-for-running-a-server) that says
+  so. Strict permits noncommercial purposes only, which barred exactly the people
+  `cairn-server` was written for — somebody who hosts game servers for other people cannot
+  do it noncommercially — so the one component aimed at them was the one they could not use.
+  The permission covers running it and not passing it on: a host may run it on their own
+  machines, and may not ship it to customers in an image. The launcher is what these terms
+  are protecting; the server is infrastructure that makes packs worth publishing.
 - **Contributions need their own permission**, which they have. The licence grants no right
   to make changes, so fork-branch-pull-request would otherwise be an infringement before
   anybody had read the diff. The [additional permission](LICENSE.md#additional-permission-for-contributions)

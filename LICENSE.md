@@ -79,6 +79,34 @@ The **licensor** is the individual or entity offering these terms, and the **sof
 
 ---
 
+# Additional permission for running a server
+
+Granted separately by the licensor, in addition to the licence above. The PolyForm text is
+reproduced unmodified; this permission is not part of it.
+
+`cairn-server` follows a published pack and runs a dedicated Vintage Story server on a
+machine with nobody sitting at it. The licence above permits noncommercial purposes only,
+which would bar the people that program was written for: somebody whose business is running
+game servers for other people cannot run a server noncommercially, so the one component
+aimed squarely at them was the one component they could not use. That was never the point of
+choosing these terms. So:
+
+**You may run `cairn-server` for any purpose, commercial or not** — including as part of a
+paid hosting service, and including on servers you run for a business of your own. This
+covers the parts of the software `cairn-server` contains, since running it is not otherwise
+possible.
+
+It covers running it, and that alone. Distributing `cairn-server`, distributing a changed
+version of it, and using the rest of Cairn commercially are all outside this permission and
+remain governed by the licence above — so a host may run it on their own machines, and may
+not hand it on to customers as part of an image or a download.
+
+The asymmetry is deliberate. The launcher is the thing this project is; the server is
+infrastructure that makes packs worth publishing, and a hosting provider running it costs
+nothing and serves the same people the launcher does.
+
+---
+
 # Additional permission for contributions
 
 Granted separately by the licensor, in addition to the licence above. The PolyForm text is
