@@ -28,17 +28,34 @@ publish() {
   local project="$1" name="$2" rid="$3"
   local dest="$OUT/$rid"
 
-  dotnet publish "$project" \
-    -c Release \
-    -r "$rid" \
-    --self-contained true \
-    ${VERSION_ARG+"${VERSION_ARG[@]}"} \
-    -p:PublishSingleFile=true \
-    -p:IncludeNativeLibrariesForSelfExtract=true \
-    -p:EnableCompressionInSingleFile=true \
-    -p:DebugType=none \
-    -o "$dest" \
-    --nologo -v quiet >/dev/null
+  # Quiet while it works, and everything it said when it does not — the same shape
+  # build-macos-app.sh uses, and for the reason written there. This redirected to
+  # /dev/null unconditionally, which on a build runner turns a failure into an exit code
+  # and no explanation. That was survivable while nothing here failed for an interesting
+  # reason; it stopped being so when the audit of restored packages started reporting
+  # known vulnerabilities as errors, because the one message worth reading was the one
+  # being discarded.
+  local log
+  log="$(mktemp)"
+
+  if ! dotnet publish "$project" \
+      -c Release \
+      -r "$rid" \
+      --self-contained true \
+      ${VERSION_ARG+"${VERSION_ARG[@]}"} \
+      -p:PublishSingleFile=true \
+      -p:IncludeNativeLibrariesForSelfExtract=true \
+      -p:EnableCompressionInSingleFile=true \
+      -p:DebugType=none \
+      -o "$dest" \
+      --nologo -v quiet > "$log" 2>&1; then
+    echo "  dotnet publish failed:"
+    sed 's/^/    /' "$log"
+    rm -f "$log"
+    exit 1
+  fi
+
+  rm -f "$log"
 
   # Both projects share a per-rid directory. With single-file publishing each is
   # effectively one executable, so there is nothing to collide.

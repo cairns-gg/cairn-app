@@ -6,4 +6,44 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+
+  <!--
+    What actually shipped.
+
+    Every PackageReference here is a minimum-version range, so the graph is decided at
+    restore time rather than by this repository — 33 packages resolved, including native
+    payloads that go inside the signed artifact (SkiaSharp.NativeAssets.*,
+    HarfBuzzSharp.NativeAssets.*, Avalonia.Angle.Windows.Natives, Tmds.DBus.Protocol) that
+    no .csproj names. Without a lock file there is no record of which versions a given
+    release was built from, so a compromise is neither detectable afterwards nor
+    reproducible.
+
+    Locked mode only under CI, which GitHub Actions signals with CI=true. Updating a package
+    locally should rewrite the lock file as a matter of course; a release build should fail
+    rather than quietly resolve something the lock does not name.
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <!--
+    NuGetAudit is on by default in the .NET 10 SDK, but it reports NU1901-NU1904 as
+    warnings — and the release publish ran with `-v quiet >/dev/null`, so a known-vulnerable
+    transitive was a warning written to a discarded log in the job that ships. Promoted to
+    errors so it stops something instead.
+
+    `all` rather than the default `direct`, because the packages most likely to carry an
+    advisory here are exactly the ones nothing names: the native asset packages arrive
+    transitively through Avalonia.
+
+    The cost is real and deliberate: a newly published advisory against anything in the
+    graph breaks the build until it is dealt with, including locally. That is the point —
+    the alternative is finding out from the log of a release that already happened.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
 </Project>

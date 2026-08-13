@@ -1,0 +1,15 @@
+{
+  "$comment": [
+    "Which SDK band builds this. The workflow asked for '10.0.x' and nothing else said",
+    "anything, so the SDK was whatever the runner had that day and no two builds were",
+    "obliged to agree.",
+    "",
+    "latestFeature rather than disable: pinning an exact patch means a release stops",
+    "building the day GitHub updates its images, which trades a real outage for a",
+    "reproducibility that the lock file already provides for the part that ships."
+  ],
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "latestFeature"
+  }
+}
