@@ -129,6 +129,13 @@ public sealed class PackManifest
                          + "Write a bare version like \"1.22.5\" — the game silently reads "
                          + "\">=1.22.5\" as major version 0, which matches everything.";
 
+        // The pack's connect address is handed to the game as the value of --connect, and
+        // it arrives from somebody else's pack. See ServerAddress: the point is not that a
+        // strange address would fail to connect, it is that a value beginning with '-' is
+        // read by the game's own parser as a further option.
+        if (ServerAddress.Problem(Connect) is { } connect)
+            yield return $"Pack 'connect' {connect}";
+
         // Deliberately no length check on the description. The cap belongs where one is
         // written — pack settings, `init --description`, and the server on publish — not
         // where one is read. Refusing to open somebody's pack over a blurb 281 characters

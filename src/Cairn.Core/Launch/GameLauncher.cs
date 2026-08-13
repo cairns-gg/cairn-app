@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Cairn.Core.Packs;
 using Cairn.Core.Runtime;
 
 namespace Cairn.Core.Launch;
@@ -77,7 +78,14 @@ public sealed class GameLauncher(GameInstall install)
             args.Add(modPath);
         }
 
-        if (!string.IsNullOrWhiteSpace(options.Connect))
+        // Checked here as well as in the manifest, because this is the boundary rather
+        // than the form. A manifest is validated when it is synced; a pack.json edited by
+        // hand afterwards, or one written by a future caller that forgets, reaches argv
+        // through this method and no other. Dropped rather than refused: a pack whose
+        // address is unusable should still start, at the main menu, which is where it would
+        // have ended up anyway.
+        if (!string.IsNullOrWhiteSpace(options.Connect)
+            && ServerAddress.IsValid(options.Connect))
         {
             args.Add("--connect");
             args.Add(options.Connect);
