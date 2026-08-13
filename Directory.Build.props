@@ -8,6 +8,42 @@
   </PropertyGroup>
 
   <!--
+    Which source this build came from.
+
+    The version says 1.2.3; it does not say which commit that was cut from, and a person
+    holding a binary and reading the repository has no way to line the two up. The SDK
+    appends "+<SourceRevisionId>" to the informational version, so setting it puts the
+    commit inside the assembly, where `cairn diagnostics` reports it — matching the commit
+    the release manifest and the build attestation both name.
+
+    Read from GITHUB_SHA rather than by shelling out to git: a build from a tarball, or one
+    in a container with no .git, would otherwise stamp nothing or fail. Empty off CI, which
+    is right — a local build is not from a commit in any useful sense, and one that claims
+    to be would be believed.
+
+    ContinuousIntegrationBuild normalises the source paths embedded by the compiler, so two
+    builds of the same commit produce the same managed assemblies instead of differing by
+    whatever directory the runner happened to use. It does not make the published artifact
+    byte-for-byte reproducible — the single-file bundle and, on macOS, a signature carrying
+    a timestamp and a stapled notarisation ticket, all see to that — but it is what lets
+    somebody rebuild a commit and compare the assemblies inside.
+  -->
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">$(GITHUB_SHA)</SourceRevisionId>
+  </PropertyGroup>
+
+  <!--
+    Carried into the assembly so the terms travel with the binary. Cairn is source-available
+    under the PolyForm Strict License 1.0.0 — see LICENSE.md, which is the document that
+    governs; this is metadata, not a grant.
+  -->
+  <PropertyGroup>
+    <Company>Dave Smith</Company>
+    <Copyright>Copyright 2026 Dave Smith. PolyForm Strict License 1.0.0.</Copyright>
+  </PropertyGroup>
+
+  <!--
     What actually shipped.
 
     Every PackageReference here is a minimum-version range, so the graph is decided at

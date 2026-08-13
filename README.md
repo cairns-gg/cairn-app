@@ -20,6 +20,12 @@ It is not shipped in releases yet, so that is a door left open rather than a fea
 
 Cairn does not replace the game's ModDB integration; it fills the gap next to it.
 
+The source is here to be read, not forked: Cairn is **source-available**, under the
+[PolyForm Strict License 1.0.0](LICENSE.md) — noncommercial use, no redistribution, and one
+[additional permission](#licence) for proposing changes back. If what you want to check is
+that a download matches this source, that is
+[a different question with a real answer](#verifying-a-download-against-this-source).
+
 ## How it works
 
 A **pack** is a manifest plus a lockfile plus a directory of mod zips:
@@ -1160,6 +1166,88 @@ which it names a manifest that is not up yet:
 That is what a downloads page on the site should read, rather than a hardcoded list that
 goes stale the release after somebody remembers to update it.
 
+### Verifying a download against this source
+
+The source is published so it can be read. That is worth very little on its own: reading it
+tells you what Cairn *would* do, and the thing on your disk is a binary somebody else built.
+Three separate mechanisms close that gap, and they are worth keeping distinct, because each
+answers a question the other two cannot.
+
+**1. The manifest says what the bytes should be, and is signed.** `manifest.json` carries a
+SHA-256 for every artifact, and `manifest.json.minisig` is a detached signature over it made
+in the `manifest` job — which holds the signing key and no credential that can write to
+object storage. The public half is [`cairn.pub`](cairn.pub), committed here.
+
+```bash
+minisign -Vm manifest.json -p cairn.pub
+sha256sum -c SHA256SUMS
+```
+
+That proves the download is intact and is what the key holder meant to ship. It proves
+nothing about where it came from, and a reader who has no reason to trust the key holder
+gains nothing from it at all.
+
+**2. The build attestation says which commit it was built from, and GitHub signs that.**
+Every release artifact is attested with `actions/attest`: GitHub mints a Sigstore
+certificate against the workflow's own OIDC identity and signs a SLSA statement binding the
+artifact's digest to this repository, this workflow file, this commit and this run.
+
+```bash
+gh attestation verify cairn-1.2.3-linux-x64.tar.gz --repo dizzyd/cairn-app
+```
+
+This is the one that answers the inspector's question, and it is the only one here that
+does not rest on trusting whoever cut the release. Nobody can forge it by hand — not
+whoever holds the R2 credentials, not whoever holds the minisign key, not the account
+owner. The only thing that produces one is that workflow actually running on that commit.
+The bundle is published beside the downloads as `cairn-<version>.intoto.jsonl` and named by
+the manifest, so it also verifies offline, for somebody who took the file from
+`download.cairns.gg` and never touched GitHub:
+
+```bash
+gh attestation verify cairn-1.2.3-linux-x64.tar.gz \
+  --repo dizzyd/cairn-app --bundle cairn-1.2.3.intoto.jsonl
+```
+
+Public repositories only, on every plan; a private one needs Enterprise Cloud. The step is
+skipped while this repository is private, and the manifest then carries no `attestation`
+field rather than naming a file nobody made.
+
+**3. The checksums exist in two places reached by different credentials.** `SHA256SUMS`
+goes to R2 with the artifacts and is also written into the GitHub release, which the R2
+token cannot touch. That is detection rather than prevention: whoever holds the R2 keys can
+still replace a download, but not without the two copies disagreeing.
+
+Three smaller things make the chain legible end to end:
+
+- **The commit is inside the binary.** CI sets `SourceRevisionId` from `GITHUB_SHA`, so the
+  informational version is `1.2.3+<sha>`, and the diagnostics report — *Copy diagnostics* in
+  the launcher, `cairn-cli diagnostics` on the command line — prints it beside the version.
+  The manifest and the attestation name that same commit, so a bug report identifies the
+  source that produced it, and the three either agree or visibly do not.
+- **The dependency graph is pinned.** Every project has a `packages.lock.json` and CI
+  restores in locked mode, so "built from this commit" also fixes the 33 resolved packages,
+  including the native payloads that end up inside the signed artifact and that no `.csproj`
+  names. Without that, the same commit could build from different code.
+- **The build log is public.** Once this repository is, the run named in the manifest is
+  readable by anyone, including everything the workflow did to produce the artifacts.
+
+**Tag releases with a signed tag** — `git tag -s` — so that tag → commit is attributable the
+same way the attestation makes commit → artifact attributable. It is the one link in the
+chain that is a habit rather than something the workflow enforces.
+
+What none of this offers is a **reproducible build**. You cannot rebuild a commit and get a
+byte-identical artifact: the single-file bundle is compressed, and the macOS bundle carries
+a signature with a timestamp in it and a stapled notarisation ticket that only Apple can
+issue. `ContinuousIntegrationBuild` is set under CI so the *managed assemblies* are
+deterministic, which is enough to rebuild a commit and diff the DLLs inside the bundle —
+useful, and short of a guarantee. The attestation is what stands in for one, and the
+difference is worth being plain about: it says GitHub watched this workflow build these
+bytes from this commit, not that anyone else can produce them again.
+
+And the obvious limit, since the whole section is about trust: none of it says the source is
+*good*. It says the binary is that source. Reading it is still your job.
+
 ### Signing and notarising the macOS builds
 
 This is the **direct-download** path, not the App Store one: somebody downloads a zip and
@@ -1312,3 +1400,40 @@ Requires .NET 10. The game is a framework-dependent apphost, so it needs a .NET 
 installed via Microsoft's `.pkg`, which writes `/etc/dotnet/install_location_x64` — for an
 older one. Cairn itself is architecture-agnostic: it only spawns the game, and reads
 `VintagestoryAPI.dll` metadata without loading it.
+
+## Licence
+
+Copyright 2026 Dave Smith, under the **PolyForm Strict License 1.0.0**. The full text is in
+[LICENSE.md](LICENSE.md), which is what governs; this section says why.
+
+**Source-available, not open source.** The distinction is worth making rather than letting
+someone discover it. Cairn installs software, writes into your game data and talks to the
+network on your behalf, and none of that should have to be taken on trust — so the source is
+published for anyone who runs it to read. That is the whole purpose. It is not published as
+an invitation to fork it or to build a business on it, and the licence says so.
+
+In short: **any noncommercial purpose is permitted**, and the grant excludes distributing
+Cairn or making changes to it. So a fork is not licensed, and neither is redistributing the
+binaries — which is also what keeps `download.cairns.gg` the only place Cairn comes from,
+and therefore what makes "check it against the attestation" a complete instruction rather
+than one that happens to apply to some copies.
+
+Two consequences worth naming, because they are real:
+
+- **A commercial server host cannot run `cairn-server`.** Noncommercial means noncommercial,
+  and that boundary catches some people who would be good users. It is the price of the same
+  clause that stops the resale case, and it was chosen knowing that.
+- **Contributions need their own permission**, which they have. The licence grants no right
+  to make changes, so fork-branch-pull-request would otherwise be an infringement before
+  anybody had read the diff. The [additional permission](LICENSE.md#additional-permission-for-contributions)
+  at the end of `LICENSE.md` allows a fork kept for the purpose of proposing a change, and
+  licenses what you propose to the licensor so it can actually ship in a release.
+
+PolyForm Strict is not on the SPDX licence list — only the Noncommercial and Small Business
+variants are — so GitHub shows no licence badge for this repository and no tooling will
+recognise an identifier for it. That is why the terms are stated here as well as in the file.
+
+The dependencies are all permissive and nothing here conflicts with them: Avalonia,
+CommunityToolkit.Mvvm and BouncyCastle are MIT or MIT-style. Vintage Story itself is neither
+bundled nor redistributed — Cairn downloads it from the publisher, under the publisher's own
+terms, and that is unaffected by any of this.

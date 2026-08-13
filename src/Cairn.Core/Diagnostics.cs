@@ -71,7 +71,13 @@ public static class Diagnostics
         text.AppendLine("Cairn diagnostics");
         text.AppendLine("=================");
         text.AppendLine();
-        text.AppendLine($"cairn      {CairnVersion.Current}");
+        // The commit alongside the version, when there is one. A report saying "1.2.3" is
+        // enough to look a release up; one saying which commit it was built from is enough
+        // to read the code that produced the behaviour being reported, without anyone
+        // having to work out whether the tag moved.
+        text.AppendLine(CairnVersion.Commit is { } commit
+            ? $"cairn      {CairnVersion.Current} ({commit})"
+            : $"cairn      {CairnVersion.Current}");
         text.AppendLine($"platform   {Platform()}");
         text.AppendLine($"os         {RuntimeInformation.OSDescription.Trim()}");
         text.AppendLine($"runtime    {RuntimeInformation.FrameworkDescription}");

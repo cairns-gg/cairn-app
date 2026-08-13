@@ -338,6 +338,16 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
+    # Job-level, so these replace the workflow's `contents: read` outright rather than
+    # adding to it — all three have to be named or the attestation step fails on the one
+    # that was left out. This job still holds no credential that can write to object
+    # storage, which is what the paragraph above is about; `attestations: write` writes to
+    # GitHub's attestation store and reaches nothing else.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
     env:
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -349,7 +359,52 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # What the minisign signature below cannot say.
+      #
+      # That signature is made with a key held by whoever cuts releases, so it answers "are
+      # these the bytes that were meant to ship" and nothing else. It says nothing about
+      # where they came from, and a reader who does not already trust the key holder gets
+      # nothing from it at all — which is the whole question somebody reading this source
+      # is asking: is the thing I downloaded built from what I just read?
+      #
+      # This answers that. GitHub mints a Sigstore certificate against the workflow's own
+      # OIDC identity and signs a SLSA statement binding each artifact's digest to this
+      # repository, this workflow file, this commit and this run. Nobody can produce one by
+      # hand: not whoever holds the R2 credentials, not whoever holds the minisign key, not
+      # the account owner. Only actually running this workflow on that commit produces it.
+      #
+      #   gh attestation verify cairn-1.2.3-linux-x64.tar.gz --repo dizzyd/cairn-app
+      #
+      # Public repositories only, on every plan; a private one needs Enterprise Cloud. So
+      # this is skipped while the repository is private rather than failing the release —
+      # and the manifest below then simply does not claim an attestation, instead of naming
+      # one that was never made.
+      - name: Attest what was built
+        id: attest
+        if: github.event.repository.private == false
+        uses: actions/attest@v4
+        with:
+          subject-path: 'dist/*.zip, dist/*.tar.gz'
+
+      # Into dist/ under a predictable name, so it travels with the artifacts to both R2
+      # and the GitHub release. Without this the provenance exists only in GitHub's
+      # attestation store, which is reachable by API and not by anybody who downloaded from
+      # cairns.gg — the channel people actually use. With it, verification works offline:
+      #
+      #   gh attestation verify cairn-1.2.3-linux-x64.tar.gz \
+      #     --repo dizzyd/cairn-app --bundle cairn-1.2.3.intoto.jsonl
+      - name: Keep the attestation beside the artifacts
+        id: bundle
+        if: steps.attest.outputs.bundle-path != ''
+        run: |
+          name="cairn-${GITHUB_REF_NAME#v}.intoto.jsonl"
+          cp "${{ steps.attest.outputs.bundle-path }}" "dist/$name"
+          echo "file=$name" >> "$GITHUB_OUTPUT"
+          echo "attestation: $name"
+
       - name: Describe what was built
+        env:
+          ATTESTATION: ${{ steps.bundle.outputs.file }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           public="${R2_PUBLIC_URL:-$R2_ENDPOINT/$R2_BUCKET}"
@@ -358,7 +413,9 @@ jobs:
           cd dist
 
           # Named explicitly rather than `*`, which would depend on whether the glob is
-          # expanded before the redirection creates the file it is writing to.
+          # expanded before the redirection creates the file it is writing to. It is also
+          # why the attestation bundle is not swept up: it vouches for these files and is
+          # not one of them.
           sha256sum *.zip *.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
@@ -366,6 +423,20 @@ jobs:
             echo "{"
             echo "  \"version\": \"$version\","
             echo "  \"publishedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+
+            # The commit these artifacts were built from, and the run that built them.
+            # Both are inside the signed manifest, so a reader gets from a download to the
+            # source it came from without trusting the page that linked it — and the
+            # attestation below is what makes that a check rather than a claim.
+            echo "  \"commit\": \"$GITHUB_SHA\","
+            echo "  \"run\": \"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\","
+
+            # Absent rather than null when there is none, so a client can only either find
+            # a bundle to verify against or find nothing — never a key promising one that
+            # is not there.
+            [ -n "$ATTESTATION" ] && \
+              echo "  \"attestation\": \"$public/releases/$version/$ATTESTATION\","
+
             echo "  \"files\": ["
             first=1
             for f in *.zip *.tar.gz; do
@@ -444,6 +515,9 @@ jobs:
 
           cat dist/manifest.json.minisig
 
+      # The bundle goes with them. It is what the `attestation` field in the manifest names,
+      # and the jobs that publish only ever see what is uploaded here — a manifest naming a
+      # file that never left this runner would be worse than no attestation at all.
       - uses: actions/upload-artifact@v4
         with:
           name: manifest
@@ -451,6 +525,7 @@ jobs:
             dist/manifest.json
             dist/manifest.json.minisig
             dist/SHA256SUMS
+            dist/*.intoto.jsonl
 
   # Object storage, which is where downloads actually come from — GitHub is not a public
   # distribution channel here, so this job is the one that reaches people.
