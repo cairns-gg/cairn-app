@@ -242,6 +242,19 @@ public static class HotkeyCatalog
         return string.Join("|", parts);
     }
 
+    /// <summary>
+    /// The most a mod assembly may be before the hotkey scan passes over it, and the most
+    /// assemblies one zip may hold before it stops looking.
+    ///
+    /// Both are far above anything real — mod assemblies run to hundreds of kilobytes and
+    /// mods ship a handful of them — and both exist because this reads an archive somebody
+    /// else produced, on a tab somebody opened, and neither the size of an entry nor the
+    /// number of them is anything Cairn chose.
+    /// </summary>
+    public const int MaxAssemblyBytes = 64 * 1024 * 1024;
+
+    public const int MaxAssembliesPerZip = 256;
+
     private static IEnumerable<string> Zips(string modsDir)
     {
         string[] files;
@@ -270,17 +283,36 @@ public static class HotkeyCatalog
             // What the mod calls itself, for the codes it builds out of its own id.
             var modId = ModIdIn(archive);
 
+            var scanned = 0;
+
             foreach (var entry in archive.Entries)
             {
                 if (!entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) continue;
 
-                // Read into memory: PEReader wants random access, and a mod assembly is
-                // measured in hundreds of kilobytes.
-                using var stream = entry.Open();
-                using var buffer = new MemoryStream();
-                stream.CopyTo(buffer);
+                // Two bounds, because a mod zip is somebody else's archive and this runs on
+                // opening a tab.
+                //
+                // The size, because the entry is read into memory whole — PEReader wants
+                // random access — and an entry that inflates has no natural stopping point.
+                // A real mod assembly is hundreds of kilobytes; the cap is far above the
+                // largest anybody ships and exists to stop an allocation rather than to
+                // judge an assembly.
+                if (entry.Length > MaxAssemblyBytes) continue;
 
-                var registrations = HotkeyScan.Read(buffer.ToArray(), out var missed, modId);
+                // The count, because the size bound alone says nothing about how many
+                // there are. A zip is free to hold tens of thousands of small entries, each
+                // individually reasonable, each costing a PE parse. Mods ship a handful.
+                if (++scanned > MaxAssembliesPerZip) break;
+
+                using var stream = entry.Open();
+
+                // Straight to an array rather than through a MemoryStream and then
+                // ToArray(): that was two copies of every assembly, and HotkeyScan made a
+                // third.
+                var image = BoundedRead.AtMost(stream, MaxAssemblyBytes + 1);
+                if (image.Length > MaxAssemblyBytes) continue;
+
+                var registrations = HotkeyScan.Read(image, out var missed, modId);
                 if (missed > 0) results.Add((null, null, null, HotkeyKind.Unknown, missed));
                 foreach (var r in registrations)
                     results.Add((r.Code, r.Name, r.Default, r.Kind, 0));

@@ -163,7 +163,7 @@ public static class ModDependencies
             // Counting anyway costs nothing and is what would hold if that ever changed.
             // Reading one byte past the cap distinguishes "exactly at the limit" from
             // "more than we will take", and bounds the allocation either way.
-            var bytes = ReadAtMost(stream, MaxModInfoBytes + 1);
+            var bytes = BoundedRead.AtMost(stream, MaxModInfoBytes + 1);
 
             if (bytes.Length > MaxModInfoBytes) return Empty(TooBig(null));
 
@@ -214,29 +214,6 @@ public static class ModDependencies
             + "not installed";
     }
 
-    /// <summary>
-    /// At most <paramref name="limit"/> bytes of <paramref name="stream"/>.
-    ///
-    /// The point is the ceiling on what gets allocated, so this grows a buffer as bytes
-    /// arrive rather than reserving the limit up front — the overwhelming majority of
-    /// these files are a few hundred bytes, and reserving a megabyte per mod to read 329
-    /// bytes would trade one memory problem for a smaller one.
-    /// </summary>
-    private static byte[] ReadAtMost(Stream stream, int limit)
-    {
-        using var buffer = new MemoryStream();
-        var chunk = new byte[8192];
-
-        while (buffer.Length < limit)
-        {
-            var read = stream.Read(chunk, 0, (int)Math.Min(chunk.Length, limit - buffer.Length));
-            if (read == 0) break;
-
-            buffer.Write(chunk, 0, read);
-        }
-
-        return buffer.ToArray();
-    }
 
     /// <summary>A string property, whatever case the author wrote it in.</summary>
     private static string? Text(JsonElement obj, string name)

@@ -28,7 +28,24 @@ public sealed class HotkeyLang
     /// Kept apart from the exact lookup so it is only consulted when that fails, and only
     /// when it is unambiguous.
     /// </summary>
-    private readonly Dictionary<string, List<string>> _tails = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Tail → the distinct sentences registered under it.
+    ///
+    /// A set rather than a list because this only ever answers "is there exactly one", and
+    /// because the list version asked <c>Contains</c> on every insert. That is linear per
+    /// add and quadratic over a file, which is invisible on a real lang file — a few
+    /// hundred keys — and is a mod's to choose: keys come out of an archive somebody else
+    /// wrote, and a couple of hundred thousand of them sharing a tail is around 2×10^10
+    /// string comparisons on a tab somebody opened.
+    /// </summary>
+    private readonly Dictionary<string, HashSet<string>> _tails = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The most a mod's <c>en.json</c> may be before it is passed over. A translation table
+    /// runs to tens of kilobytes; this is far enough above that to be about stopping an
+    /// allocation rather than judging a file.
+    /// </summary>
+    public const int MaxLangBytes = 8 * 1024 * 1024;
 
     public int Count => _entries.Count;
 
@@ -58,9 +75,20 @@ public sealed class HotkeyLang
             if (!entry.FullName.EndsWith("/lang/en.json", StringComparison.OrdinalIgnoreCase)) continue;
             if (!entry.FullName.StartsWith("assets/", StringComparison.OrdinalIgnoreCase)) continue;
 
+            // Bounded for the same reason modinfo.json is, and it was left out when that
+            // one was done: this parses a stream out of somebody else's archive, and
+            // JsonDocument over a DeflateStream reads to the end into a doubling buffer.
+            // A lang file is a translation table — the largest a mod ships is measured in
+            // tens of kilobytes — so the cap is orders of magnitude clear of anything real.
+            if (entry.Length > MaxLangBytes) continue;
+
             try
             {
-                using var stream = entry.Open();
+                using var raw = entry.Open();
+                var bytes = BoundedRead.AtMost(raw, MaxLangBytes + 1);
+                if (bytes.Length > MaxLangBytes) continue;
+
+                using var stream = new MemoryStream(bytes, writable: false);
                 using var document = JsonDocument.Parse(stream, new JsonDocumentOptions
                 {
                     AllowTrailingCommas = true,
@@ -99,8 +127,8 @@ public sealed class HotkeyLang
             if (at > 0 && at < key.Length - 1)
             {
                 var tail = key[(at + 1)..];
-                if (!_tails.TryGetValue(tail, out var list)) _tails[tail] = list = [];
-                if (!list.Contains(value)) list.Add(value);
+                if (!_tails.TryGetValue(tail, out var seen)) _tails[tail] = seen = [];
+                seen.Add(value);
             }
         }
     }
@@ -124,7 +152,7 @@ public sealed class HotkeyLang
         // "hotkey-editmode" while its file says "xlibfork:xpdrops-hotkey-editmode" is
         // reachable no other way, and two candidates mean we cannot say which.
         return _tails.TryGetValue(name, out var candidates) && candidates.Count == 1
-            ? candidates[0]
+            ? candidates.First()
             : null;
     }
 

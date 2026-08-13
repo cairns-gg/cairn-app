@@ -99,7 +99,12 @@ public static class HotkeyScan
         unreadable = 0;
         var found = new List<HotkeyRegistration>();
 
-        using var pe = new PEReader(ImmutableArray.Create(image));
+        // Wrapped rather than copied. ImmutableArray.Create duplicates the whole assembly
+        // for no benefit here: this method owns the array, never mutates it, and the
+        // wrapper does not outlive the call. That was the third full copy of every mod
+        // assembly the hotkey scan made.
+        using var pe = new PEReader(
+            System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(image));
         if (!pe.HasMetadata) return found;
 
         var md = pe.GetMetadataReader();
