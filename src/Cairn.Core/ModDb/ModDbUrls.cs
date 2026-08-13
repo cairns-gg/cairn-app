@@ -52,11 +52,30 @@ public static class ModDbUrls
     /// host that has since stopped serving. A caller that fails this check should resolve
     /// the mod again rather than refuse it.
     /// </summary>
-    public static bool IsKnownDownloadHost(string? url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
-        if (uri.Scheme != Uri.UriSchemeHttps) return false;
+    public static bool IsKnownDownloadHost(string? url) => DownloadProblem(url) is null;
 
-        return DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Why this URL is not one to fetch a mod from, phrased to finish "refusing a download
+    /// that …", or null when there is nothing wrong with it.
+    ///
+    /// The reasons are kept apart because they mean different things to whoever reads a
+    /// sync log. Plaintext transport is a fault in the URL itself and is never acceptable.
+    /// An unfamiliar host, on the other hand, is as likely to mean this list has gone stale
+    /// as it is to mean an attack — ModDB's CDN host is a config value in its own source
+    /// rather than a constant — so the message names the host, which is what tells the two
+    /// apart and what somebody would report.
+    /// </summary>
+    public static string? DownloadProblem(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return "does not give a usable address";
+
+        if (uri.Scheme != Uri.UriSchemeHttps)
+            return $"arrives over {uri.Scheme} rather than https, where anybody on the "
+                   + "network path could replace it";
+
+        return DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase)
+            ? null
+            : $"comes from {uri.Host}, which is not a host ModDB is known to serve mods from";
     }
 }

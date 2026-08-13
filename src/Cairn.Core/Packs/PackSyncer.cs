@@ -143,21 +143,35 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 locked.RequiredBy = [.. wanters.Order(StringComparer.OrdinalIgnoreCase)];
         }
 
-        // Anything in the directory we did not just account for is no longer part of the
-        // pack. Every kind of file Cairn installs, not only .zip: the set here and the set
-        // ModFileName will let through are the same set on purpose, because a file Cairn
-        // could write and could not sweep would sit in the mod path for ever, invisible to
-        // the lock and to everything that reads it.
+        // Cairn removes what Cairn installed, and nothing else.
         //
-        // Still files only, so a hand-dropped folder mod is left alone, and still only the
-        // kinds Cairn installs, so a readme or a config somebody parked here is not ours
-        // to delete.
+        // This used to sweep every file carrying an extension Cairn installs. That was
+        // right about the hazard it was written for — a file Cairn could write and could
+        // not remove would sit in the mod path for ever, invisible to the lock and to
+        // everything that reads it — and wrong about whose files it was deciding on.
+        // Widening it from *.zip to .dll and .cs made it start deleting the loose mods
+        // people hand-place in a pack, on every Play, because a loose file is how you run
+        // something ModDB does not serve. Nothing ever puts those back.
+        //
+        // The previous lock is Cairn's own record of what it put here, so it is exactly the
+        // set Cairn is entitled to take away — and it still covers the original hazard,
+        // because a mod dropped from the pack was named by the lock now being replaced.
+        // Everything Cairn writes reaches that record: DownloadAsync stages through a
+        // .partial and moves into place only on success, so a failed install leaves nothing
+        // behind to orphan.
+        //
+        // Matched against names read back from the directory rather than by combining a
+        // lock's filename with modsDir. A lock is a document, and building a path out of
+        // one is exactly what made Diagnostics an oracle for arbitrary files.
         var keep = newLock.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ours = previous?.Mods.Select(m => m.FileName)
+                       .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
         foreach (var stray in Directory.EnumerateFiles(modsDir))
         {
             var name = Path.GetFileName(stray);
 
-            if (keep.Contains(name) || !ModFileName.HasModExtension(name)) continue;
+            if (keep.Contains(name) || !ours.Contains(name)) continue;
 
             File.Delete(stray);
             Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray), "no longer in pack"));
@@ -284,6 +298,25 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId,
                     $"refusing a mod filename that {badName}: '{release.FileName}'"));
+                return null;
+            }
+
+            // And where it comes from, on every path rather than on one of them.
+            //
+            // This check used to sit only on the branch that reused a URL out of the
+            // lockfile, which meant the resolve path — the branch that one deliberately
+            // falls back to — downloaded whatever ModDB's JSON named, over any scheme,
+            // from any host. Clearing locations out of imported locks made that the path
+            // every shared pack takes, so the guarded branch was the one carrying the
+            // least attacker-influenced input and the unguarded one carried the most.
+            //
+            // Applied to the download rather than to a branch: a URL that reaches here
+            // from FromLock has passed this already, and paying for it twice is cheaper
+            // than reasoning about which callers are covered.
+            if (ModDbUrls.DownloadProblem(release.Url) is { } badUrl)
+            {
+                Record(new SyncStep(SyncAction.Failed, release.ModId, Explain(want,
+                    $"refusing a download that {badUrl} — mods are code")));
                 return null;
             }
 

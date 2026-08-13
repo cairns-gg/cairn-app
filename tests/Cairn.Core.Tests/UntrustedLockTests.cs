@@ -36,14 +36,24 @@ public class UntrustedLockTests : IDisposable
     private const string Cdn = "https://moddbcdn.vintagestory.at";
     private const string Evil = "https://attacker.example";
 
-    /// <summary>Serves ModDB's API, and counts what each host was asked for.</summary>
-    private sealed class Stub : HttpMessageHandler
+    /// <summary>
+    /// Serves ModDB's API, and counts what each host was asked for.
+    /// </summary>
+    /// <param name="extensions">
+    /// Per-mod file extension, defaulting to zip. ModDB takes dll and cs uploads too, so a
+    /// release filename can be any of the three, and a test that only ever sees zips cannot
+    /// tell whether the sweep handles the others.
+    /// </param>
+    private sealed class Stub(Dictionary<string, string>? extensions = null) : HttpMessageHandler
     {
         public int Lookups { get; private set; }
         public List<string> Downloaded { get; } = [];
 
         public int DownloadsFrom(string prefix) =>
             Downloaded.Count(u => u.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+        public string FileNameFor(string modId) =>
+            $"{modId}_1.0.0.{(extensions?.GetValueOrDefault(modId) ?? "zip")}";
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
@@ -52,13 +62,15 @@ public class UntrustedLockTests : IDisposable
             if (url.Contains("/api/mod/"))
             {
                 Lookups++;
+                var id = url[(url.LastIndexOf('/') + 1)..];
+                var file = FileNameFor(id);
                 var body = $$"""
                 {"statuscode":"200","mod":{
-                  "modid":1,"assetid":2,"name":"Olla","urlalias":"olla","side":"client",
+                  "modid":1,"assetid":2,"name":"{{id}}","urlalias":"{{id}}","side":"client",
                   "releases":[
-                    {"releaseid":1,"fileid":1,"modidstr":"olla","modversion":"1.0.0",
-                     "filename":"olla_1.0.0.zip",
-                     "mainfile":"{{Cdn}}/olla_1.0.0.zip","tags":["1.22.5"]}
+                    {"releaseid":1,"fileid":1,"modidstr":"{{id}}","modversion":"1.0.0",
+                     "filename":"{{file}}",
+                     "mainfile":"{{Cdn}}/{{file}}","tags":["1.22.5"]}
                   ]
                 }
                 }
@@ -77,9 +89,9 @@ public class UntrustedLockTests : IDisposable
         }
     }
 
-    private (PackSyncer Syncer, Stub Handler) Make()
+    private (PackSyncer Syncer, Stub Handler) Make(Dictionary<string, string>? extensions = null)
     {
-        var handler = new Stub();
+        var handler = new Stub(extensions);
         var http = new HttpClient(handler);
         return (new PackSyncer(new ModDbClient(http), http), handler);
     }
@@ -172,23 +184,78 @@ public class UntrustedLockTests : IDisposable
         // of the three — and the sweep used to look only for *.zip. Anything else Cairn
         // installed stayed in the mod path for ever: named by no lock, counted by nothing,
         // and still loaded by the game long after the mod was taken out of the pack.
-        var (syncer, _) = Make();
-        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+        //
+        // Installed through Cairn rather than written by hand, which is the whole point:
+        // the sweep works from its own record of what it put there, so a test that fakes
+        // the files proves nothing about the case it is named for — and would instead be
+        // asserting that Cairn deletes files somebody else placed.
+        var (syncer, stub) = Make(new Dictionary<string, string>
+        {
+            ["aaalib"] = "dll",
+            ["snippet"] = "cs",
+        });
 
-        var leftovers = new[] { "aaa_lib.dll", "snippet.cs", "old_mod.zip" };
-        foreach (var name in leftovers)
-            File.WriteAllText(Path.Combine(ModsDir, name), "code");
+        var full = new PackManifest
+        {
+            Id = "anego",
+            GameVersion = "1.22.5",
+            Mods =
+            [
+                new PackMod { ModId = "olla", Version = "1.0.0" },
+                new PackMod { ModId = "aaalib", Version = "1.0.0" },
+                new PackMod { ModId = "snippet", Version = "1.0.0" },
+            ],
+        };
 
-        // Something Cairn did not put there and would not install stays put.
+        await syncer.SyncAsync(full, ModsDir, LockPath);
+
+        var installed = new[] { "aaalib", "snippet" }.Select(stub.FileNameFor).ToArray();
+        foreach (var name in installed)
+            Assert.True(File.Exists(Path.Combine(ModsDir, name)), $"never installed: {name}");
+
+        // Something Cairn did not put there stays put, whatever it is called.
         var mine = Path.Combine(ModsDir, "notes.txt");
         File.WriteAllText(mine, "mine");
 
-        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+        // Now the pack drops back to one mod: the other two are Cairn's to take away.
+        var report = await syncer.SyncAsync(Pack(), ModsDir, LockPath);
 
-        foreach (var name in leftovers)
+        foreach (var name in installed)
             Assert.False(File.Exists(Path.Combine(ModsDir, name)), $"left behind: {name}");
 
+        // And said so, rather than removing them quietly.
+        var removed = report.Steps.Where(s => s.Action == SyncAction.Removed).ToList();
+        Assert.Equal(2, removed.Count);
+        Assert.All(removed, s => Assert.Equal("no longer in pack", s.Detail));
+
         Assert.True(File.Exists(mine));
+        Assert.True(File.Exists(Path.Combine(ModsDir, "olla_1.0.0.zip")));
+    }
+
+    /// <summary>
+    /// The other half of the same rule, and the defect the widened sweep introduced: a
+    /// loose mod somebody placed by hand is not Cairn's to delete. Running a mod ModDB does
+    /// not serve is exactly what a loose .dll or .cs in the mod path is for, sync runs on
+    /// every Play, and nothing puts one back.
+    /// </summary>
+    [Fact]
+    public async Task A_mod_file_placed_by_hand_survives_every_sync()
+    {
+        var (syncer, _) = Make();
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+
+        var mine = new[] { "handmade.dll", "tweak.cs", "sideloaded.zip", "notes.txt" };
+        foreach (var name in mine)
+            File.WriteAllText(Path.Combine(ModsDir, name), "mine");
+
+        // Twice, because the failure mode was "it goes on the next launch", and a sweep
+        // that consults the previous lock must not start counting them as its own.
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+
+        foreach (var name in mine)
+            Assert.True(File.Exists(Path.Combine(ModsDir, name)), $"deleted somebody's file: {name}");
+
         Assert.True(File.Exists(Path.Combine(ModsDir, "olla_1.0.0.zip")));
     }
 
