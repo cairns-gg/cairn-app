@@ -163,7 +163,8 @@ public sealed class UpdateChecker(
     /// the other. It is worth having on the copy kept elsewhere, which is a different file
     /// facing a different threat.</para>
     /// </summary>
-    public const string ManifestPublicKey = "";
+    public const string ManifestPublicKey =
+        "RWS0bJK+oSPwCCyuvDHsWGoVmjvikrie8g/wnrAqPJtZuKarHm/+roR/";
 
     /// <summary>
     /// How often the server is asked. Short enough that a release is noticed the same

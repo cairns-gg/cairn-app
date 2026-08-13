@@ -77,8 +77,12 @@ public class UpdateCheckerTests : IDisposable
         // live on this host too, and an offer is only followed when they agree — a fixture
         // that served the manifest from somewhere else was modelling a combination that
         // does not occur and would now, rightly, be refused.
+        // Signature checking off for these: they are about when somebody is interrupted
+        // and where a button points, and the stub answers every request with the manifest
+        // — including the one for the signature. The signed path has its own fixtures
+        // below, which is where arming it belongs.
         return (new UpdateChecker(new HttpClient(handler), UpdateChecker.DefaultManifest,
-                                  StatePath, () => clock, running), handler);
+                                  StatePath, () => clock, running, publicKey: ""), handler);
     }
 
     [Fact]
@@ -446,5 +450,25 @@ public class UpdateCheckerTests : IDisposable
             StatePath, () => DateTimeOffset.UtcNow, "0.2.1", publicKey: "");
 
         Assert.NotNull(await checker.CheckAsync());
+    }
+
+    /// <summary>
+    /// The key Cairn actually ships with, checked for being a key at all. A signing scheme
+    /// is only as good as the constant it is pinned to, and that constant is pasted by
+    /// hand: a truncated or mistyped one would not fail loudly, it would quietly refuse
+    /// every release forever, which looks exactly like nobody having published one.
+    /// </summary>
+    [Fact]
+    public void The_shipped_public_key_is_a_usable_minisign_key()
+    {
+        Assert.NotEqual("", UpdateChecker.ManifestPublicKey);
+
+        var raw = Convert.FromBase64String(UpdateChecker.ManifestPublicKey);
+
+        Assert.Equal(42, raw.Length);                                  // 2 + 8 + 32
+        Assert.Equal("Ed", Encoding.ASCII.GetString(raw, 0, 2));       // Ed25519
+
+        // And it is the key it is meant to be, rather than merely a well-formed one.
+        Assert.Equal("08F023A1BE926CB4", Convert.ToHexString(raw[2..10].Reverse().ToArray()));
     }
 }

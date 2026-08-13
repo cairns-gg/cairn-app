@@ -3608,9 +3608,12 @@ public class MainWindowTests : IDisposable
         ConfirmViewModel? shown = null;
         vm.Confirm = c => { shown = c; return Task.FromResult(false); };
 
+        // publicKey: "" — this is about what the dialog says, and the stub serves no
+        // signature. Whether an unsigned manifest is refused is UpdateChecker's business
+        // and is asserted there.
         await vm.CheckForUpdateAsync(new UpdateChecker(
             new HttpClient(http), "https://cairns.test/latest.json",
-            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1"));
+            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1", publicKey: ""));
 
         // The dialog names the version and the button says what pressing it fetches — the
         // whole point of reading the platform out of the manifest rather than sending
@@ -3642,9 +3645,10 @@ public class MainWindowTests : IDisposable
         var prompts = 0;
         vm.Confirm = _ => { prompts++; return Task.FromResult(false); };
 
+        // publicKey: "" — see above; this one is about the check interval.
         UpdateChecker Checker() => new(
             new HttpClient(http), "https://cairns.test/latest.json",
-            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1");
+            Path.Combine(_home, "last-update-check"), currentVersion: "0.2.1", publicKey: "");
 
         await vm.CheckForUpdateAsync(Checker());
         Assert.Equal(1, prompts);
