@@ -247,6 +247,51 @@ public class GameCatalogTests
                 keys);
         }
     }
+    // ---- the filename the catalogue names ----
+
+    /// <summary>
+    /// The filename decides where the download lands, and on Windows the same path is what
+    /// gets handed to Process.Start. Dropped at Parse, which is the only place a
+    /// GameRelease is constructed, so no caller can hold one carrying a path.
+    /// </summary>
+    [Theory]
+    [InlineData(@"..\\..\\..\\evil.exe")]
+    [InlineData("../../evil.exe")]
+    [InlineData("/tmp/evil.exe")]
+    [InlineData("sub/dir/vs.tar.gz")]
+    [InlineData("vs.tar.gz:hidden")]
+    [InlineData("")]
+    public void An_artifact_whose_filename_is_not_a_plain_one_is_dropped(string fileName)
+    {
+        var json =
+            """{"1.22.5":{"linux":{"filename":"""
+            + JsonSerializer.Serialize(fileName)
+            + ""","filesize":"590.2 MB","md5":"ff","urls":"""
+            + """{"cdn":"https://cdn.vintagestory.at/vs_client_linux-x64_1.22.5.tar.gz"}}}}""";
+
+        var raw = JsonSerializer.Deserialize<
+            Dictionary<string, Dictionary<string, JsonElement>>>(json);
+
+        Assert.Empty(GameCatalog.Parse(raw, ["linux"]));
+    }
+
+    /// <summary>
+    /// A whole version is lost rather than installed to the wrong place — the same
+    /// direction Parse already takes for an artifact whose URL is not one Cairn will fetch
+    /// from. Losing a version is recoverable; writing an executable outside the store is
+    /// not.
+    /// </summary>
+    [Fact]
+    public void An_ordinary_filename_still_parses()
+    {
+        var raw = JsonSerializer.Deserialize<
+            Dictionary<string, Dictionary<string, JsonElement>>>(Manifest);
+
+        var releases = GameCatalog.Parse(raw, ["linux"]);
+
+        Assert.Contains(releases, r => r.Artifact.FileName == "vs_client_linux-x64_1.22.5.tar.gz");
+    }
+
 }
 
 public class GameStoreTests : IDisposable

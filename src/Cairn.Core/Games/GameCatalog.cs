@@ -220,7 +220,17 @@ public sealed class GameCatalog(HttpClient http)
                     continue;
                 }
 
-                if (artifact is null || string.IsNullOrWhiteSpace(artifact.FileName)) continue;
+                if (artifact is null) continue;
+
+                // The filename decides where the download lands — GameInstaller combines
+                // it with the store root — and on Windows that same path is what gets
+                // handed to Process.Start. A name of "..\..\..\evil.exe" would therefore
+                // both escape the store and choose what runs. Checked at the one place a
+                // GameRelease is constructed, so no caller can hold one whose filename
+                // never passed: the same reason DownloadUrl filters inside the property
+                // rather than at the call site.
+                if (!BareFileName.IsBare(artifact.FileName)) continue;
+
                 if (artifact.DownloadUrl is null) continue;
 
                 releases.Add(new GameRelease(version, platform, artifact));
