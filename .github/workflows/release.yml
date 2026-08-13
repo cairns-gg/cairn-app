@@ -395,6 +395,9 @@ jobs:
       - name: Sign the manifest
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          # Optional. Unset is correct for a key with no password or an empty one; set it
+          # only if the key in MINISIGN_SECRET_KEY actually has a passphrase.
+          MINISIGN_KEY_PASSWORD: ${{ secrets.MINISIGN_KEY_PASSWORD }}
         run: |
           if [ -z "$MINISIGN_SECRET_KEY" ]; then
             echo "MINISIGN_SECRET_KEY is not set — publishing an unsigned manifest."
@@ -409,36 +412,35 @@ jobs:
           printf '%s' "$MINISIGN_SECRET_KEY" | base64 --decode > "$key"
           trap 'rm -f "$key"' EXIT
 
-          # The key must have no password, and this checks rather than hopes.
+          # The password goes in on stdin, which is the only way there is.
           #
-          # minisign reads a password from the terminal and has no environment variable or
-          # flag for one — so an encrypted key here does not fail, it blocks on a prompt
-          # nobody can answer until the job hits its timeout, which is the least
-          # informative way for a release to break. The second field of a secret key is the
-          # KDF: 0000 for a key generated with -W, "Sc" for a scrypt-encrypted one.
+          # minisign has no environment variable and no flag for one: it asks the terminal,
+          # and falls back to stdin when there is no terminal — which is the case here.
+          # That fallback is what makes this work at all, and it has one sharp edge worth
+          # naming, because getting it wrong looks like a broken key rather than a broken
+          # command: stdin at EOF is not an empty password. Closing it produces
+          # "Password: get_password()" and exit 2, while a single newline produces
+          # "Password: (empty)" and a signature. So the line below is fed even when there
+          # is nothing to feed it.
           #
-          # A password would buy nothing here in any case. It would have to live beside
-          # this one as a second repository secret, handed to this same step — so anything
-          # that can read one can read the other. Where a password is worth having is on
-          # the copy kept off this machine, which is a different file with a different
-          # threat behind it.
-          kdf="$(sed -n '2p' "$key" | base64 --decode | od -An -tx1 -j2 -N2 | tr -d ' \n')"
-
-          if [ "$kdf" != "0000" ]; then
-            echo "MINISIGN_SECRET_KEY is password-protected (kdf=$kdf)."
-            echo "minisign can only take a password from a terminal, and there is none here."
-            echo "Use a key made with 'minisign -G -W', or strip the password with 'minisign -C -W'."
-            exit 1
-          fi
-
+          # This accepts every shape of key: one made with -W, one encrypted with an empty
+          # password, and one with a real password if MINISIGN_KEY_PASSWORD is set. A wrong
+          # password exits 2 and writes nothing, so it fails here rather than further on.
+          #
+          # A password on this copy earns little: it would live beside the key as a second
+          # repository secret handed to this same step, so whatever can read one can read
+          # the other. It is worth having on the copy kept elsewhere. Either way this does
+          # not care, which is the point — the release should not break over a choice that
+          # is somebody else's to make.
+          #
           # -t is the trusted comment, which the second signature covers, so it cannot be
-          # edited after the fact the way the untrusted one can. Stdin closed and a timeout
-          # around it, so any future prompt is a fast failure rather than a hung job.
-          timeout 60 minisign -S \
+          # edited after the fact the way the untrusted one can. Bounded, so a version that
+          # someday insists on a terminal fails fast instead of holding the job open.
+          printf '%s\n' "$MINISIGN_KEY_PASSWORD" | timeout 60 minisign -S \
             -s "$key" \
             -m dist/manifest.json \
             -t "cairn $GITHUB_REF_NAME" \
-            -c "cairn release manifest" < /dev/null
+            -c "cairn release manifest"
 
           cat dist/manifest.json.minisig
 
