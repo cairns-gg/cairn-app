@@ -67,7 +67,8 @@ public static class Program
         Console.WriteLine("""
             cairn-server - runs a Vintage Story server on a Cairn pack
 
-              cairn-server install <url|file> [--id <id>]   follow a pack and install its server
+              cairn-server install <url|file> [--id <id>] [--follow|--fork]
+                                                            follow a pack and install its server
               cairn-server run [<id>]                       sync, then run the server in the foreground
               cairn-server update [<id>]                    take the author's newer revision
               cairn-server command [<id>] <text>            send a console command to a running server
@@ -128,9 +129,13 @@ public static class Program
     private static async Task<int> Install(
         PackStore packs, GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-server install <url|file> [--id <id>]");
+        if (args.Length < 2)
+            return Fail("usage: cairn-server install <url|file> [--id <id>] [--follow|--fork]");
 
         var source = args[1];
+
+        if (args.Contains("--follow") && args.Contains("--fork"))
+            return Fail("--follow and --fork ask for opposite things; pass one");
 
         // A pack decides which mods get installed, so it must not arrive over a connection
         // anyone on the path can rewrite. The same rule the other front-ends apply.
@@ -146,14 +151,46 @@ public static class Program
             : File.ReadAllText(source);
 
         var bundle = PackBundle.Parse(json);
-        var manifest = packs.Import(
-            bundle, ArgValue(args, "--id"),
-            // The address it actually came from, so a follow is recorded against that
-            // rather than against whatever the document names itself. A file gets none.
-            sourceUrl: PackSources.IsRemote(source) ? source : null);
 
-        Console.WriteLine($"following '{manifest.Id}' for game {manifest.GameVersion} "
+        // The address it actually came from, so a follow is recorded against that rather
+        // than against whatever the document names itself. A file gets none.
+        var fetchedFrom = PackSources.IsRemote(source) ? source : null;
+
+        ImportIntent? intent = args.Contains("--fork") ? ImportIntent.Fork
+            : args.Contains("--follow") ? ImportIntent.Follow
+            : null;
+
+        // A published document out of a file, with nobody having said which they meant. It
+        // forks, because the only address on offer is the file's own word for where it
+        // lives. Said out loud rather than done quietly: this is a server, nobody is
+        // watching it, and `update` refuses outright on a pack that follows nothing — so
+        // an administrator who wanted the other answer would otherwise find out weeks
+        // later, from a pack that had silently stopped taking revisions.
+        var unaskedFork = intent is null && fetchedFrom is null && bundle.IsPublished;
+
+        var manifest = packs.Import(
+            bundle, ArgValue(args, "--id"), sourceUrl: fetchedFrom, intent: intent);
+
+        // What actually happened, read back rather than asserted. This used to say
+        // "following" whatever it had just done, which for a file was the one case where
+        // it had not.
+        var link = packs.LoadLink(manifest.Id);
+        var verb = link is { Role: PackRole.Follower } ? "following" : "installed";
+
+        Console.WriteLine($"{verb} '{manifest.Id}' for game {manifest.GameVersion} "
                           + $"({manifest.Mods.Count} mods)");
+
+        if (link is { Role: PackRole.Follower })
+        {
+            Console.WriteLine($"  taking revisions from {link.Url}");
+        }
+        else if (unaskedFork)
+        {
+            Console.WriteLine($"  this pack says it comes from {bundle.CanonicalUrl}");
+            Console.WriteLine("  installed as a copy of its own, so 'update' has nothing to "
+                              + "check back with");
+            Console.WriteLine("  pass --follow to keep it in step with that address instead");
+        }
 
         await Prepare(packs, games, runtimes, http, manifest.Id);
 

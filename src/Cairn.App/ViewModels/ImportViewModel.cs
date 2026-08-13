@@ -53,9 +53,13 @@ public sealed partial class ImportViewModel : ViewModelBase
         _idTaken = idTaken;
         Fetched = fetched;
 
-        FollowUrl = fetched
-            ? PackUpdateCheck.PageUrl(source)
-            : bundle.CanonicalUrl;
+        // Through PageUrl on both paths, because this is the address that will be written
+        // down and it has to be the one somebody was shown. PackStore.Import normalises
+        // whatever it is given the same way, so showing the document's raw claim here
+        // meant the dialog could name one address and the link record another — only for
+        // a claim ending in .json, which no real pack has, but the two must not be capable
+        // of disagreeing at all.
+        FollowUrl = PackUpdateCheck.PageUrl(fetched ? source : bundle.CanonicalUrl ?? "");
 
         // Preselected only where the address is one Cairn watched this arrive from.
         // Leaving it unanswered for a file is the point rather than an oversight: the only
