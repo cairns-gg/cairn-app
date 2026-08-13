@@ -1251,6 +1251,7 @@ git config gpg.format ssh
 git config user.signingkey "$key"
 git config gpg.ssh.program "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
 git config tag.gpgsign true
+git config commit.gpgsign true
 
 # Without this git makes signatures it cannot then verify, which reads as a broken key
 # rather than as a missing list of who is allowed to sign.
@@ -1259,7 +1260,20 @@ git config gpg.ssh.allowedSignersFile "$HOME/.config/git/allowed_signers"
 ```
 
 `tag.gpgsign` means `git tag -a` signs too, so the release command in *Cutting a release*
-needs no change. Check one with `git verify-tag v1.2.3`.
+needs no change. Check one with `git verify-tag v1.2.3`, and a commit with
+`git log --show-signature -1` or `git log --format='%h %G?'` — `G` for a good signature, `N`
+for none.
+
+Commits are signed as well, which is a smaller claim than the tag's and worth being clear
+about: it says an author's key stood behind each commit, while the tag is what a release is
+cut from and the attestation is what binds that commit to a binary. Everything before this
+was configured is unsigned, and stays that way — re-signing history would move every commit
+to a new hash, breaking the tags and the attestation that name them, to assert something
+about the past that was not true at the time.
+
+The cost is one signing operation per commit, which 1Password can prompt for. Everything
+that rewrites commits re-signs them, so a rebase over a long branch asks repeatedly unless
+the key is set to authorise without asking.
 
 **GitHub keeps authentication keys and signing keys in separate lists**, and being in the
 first does not put a key in the second — so a tag signed by the key that pushed it still
