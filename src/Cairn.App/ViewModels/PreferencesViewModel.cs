@@ -208,6 +208,27 @@ public partial class PreferencesViewModel : ViewModelBase
     /// </summary>
     public Func<Task<string?>>? PickFolder { get; set; }
 
+    /// <summary>
+    /// Whether CAIRN_HOME is what decided the root, in which case moving from here cannot
+    /// work: the pointer would be written and then outranked by the variable.
+    ///
+    /// Fully qualified because this class has a CairnHome property of its own, which
+    /// shadows the type.
+    /// </summary>
+    public bool HomeIsFromEnvironment =>
+        Cairn.Core.CairnHome.Resolve().Source is HomeSource.Environment;
+
+    /// <summary>
+    /// Refused before the folder picker rather than after it.
+    ///
+    /// It used to be enabled: you chose a directory, waited for the dialog, and were then
+    /// told the setting would be ignored. The people that wasted are precisely the ones who
+    /// wanted this — the README told them to set CAIRN_HOME to move the directory long
+    /// before there was a button, so the ones who worked around its absence are the ones who
+    /// had followed the advice.
+    /// </summary>
+    public bool CanMoveHome => NotCleaningUp && !HomeIsFromEnvironment;
+
     /// <summary>True while the tree is being copied. See <see cref="IsCleaningUp"/>.</summary>
     [ObservableProperty] public partial bool IsMovingHome { get; set; }
 
@@ -305,7 +326,7 @@ public partial class PreferencesViewModel : ViewModelBase
     /// what gets rewritten, and that Cairn is repointed only once it has all arrived. This
     /// asks where, shows what it will cost, and reports what happened.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(NotCleaningUp))]
+    [RelayCommand(CanExecute = nameof(CanMoveHome))]
     private async Task MoveHome()
     {
         if (PickFolder is null) return;
@@ -414,9 +435,11 @@ public partial class PreferencesViewModel : ViewModelBase
     private void BusyChanged()
     {
         OnPropertyChanged(nameof(NotCleaningUp));
+        OnPropertyChanged(nameof(CanMoveHome));
         CleanUpCommand.NotifyCanExecuteChanged();
         RemoveBuildTreesCommand.NotifyCanExecuteChanged();
         MoveHomeCommand.NotifyCanExecuteChanged();
+        DeleteOldCopyCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>

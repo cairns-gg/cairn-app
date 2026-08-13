@@ -220,6 +220,12 @@ shell does not reach a Start-menu launch, a `.desktop` entry, an `.app` bundle o
 at the default location and cannot live in `settings.json`, which is inside the root it
 would be configuring.
 
+**With `CAIRN_HOME` set, Move… is disabled and says why.** Writing a pointer the variable
+then outranks would look like it had worked and change nothing, so both front-ends refuse
+rather than pretend. Unset it to move from the launcher, or carry on as before and point it
+wherever you like — nothing about that path has changed. `home`, `home clear` and
+`home discard` work either way.
+
 **Preferences → Move…** copies everything to a directory you pick and then uses it. It is a
 copy, not a rename — the point is to cross onto another disk, where a rename fails. Cairn is
 repointed only once every file has arrived and been checked, so a failure at any stage

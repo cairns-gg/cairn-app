@@ -80,7 +80,46 @@ public class HomeMoveTests : IDisposable
             .FirstOrDefault(b => (b.Content as string) == "Move…");
 
         Assert.NotNull(button);
-        Assert.True(button!.IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void CAIRN_HOME_disables_the_button_and_says_why_before_the_picker()
+    {
+        // These tests run with CAIRN_HOME set, which is the case in question: the variable
+        // outranks the pointer, so a move from here would change nothing. It used to be
+        // enabled — you chose a folder, waited for the dialog, and were told afterwards.
+        var model = Model();
+        var window = ShowOverview(model);
+
+        Assert.True(model.HomeIsFromEnvironment);
+        Assert.False(model.CanMoveHome);
+        Assert.False(model.MoveHomeCommand.CanExecute(null));
+
+        var note = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "EnvironmentNote");
+
+        Assert.True(note.IsEffectivelyVisible);
+        Assert.Contains("CAIRN_HOME", note.Text);
+    }
+
+    [AvaloniaFact]
+    public void Without_CAIRN_HOME_the_button_is_live()
+    {
+        // Unset only long enough to read a computed property. Nothing here writes, so the
+        // developer's own root is read and left alone.
+        Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+
+        try
+        {
+            var model = Model();
+
+            Assert.False(model.HomeIsFromEnvironment);
+            Assert.True(model.CanMoveHome);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+        }
     }
 
     [AvaloniaFact]
