@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Cairn.Core;
 using System.Text;
 
 namespace Cairn.Server;
@@ -15,8 +16,14 @@ namespace Cairn.Server;
 ///
 /// A Unix socket rather than a FIFO because it answers the question that matters: connect
 /// fails when nothing is listening, so "the server is not running" is a result rather than
-/// a write that blocks or vanishes. It is created with owner-only permissions — anything
-/// that can write here can run any server command, including ones that grant privileges.
+/// a write that blocks or vanishes.
+///
+/// Anything that can write here can run any server command, including ones that grant
+/// privileges, so what keeps other accounts out is the directory it sits in rather than the
+/// socket's own mode. This used to say it was "created with owner-only permissions", which
+/// it was not: a socket's mode comes from the umask at bind(2) and was being narrowed
+/// afterwards, leaving a window in which a connection could be queued and then serviced.
+/// See <see cref="ListenAsync"/>.
 /// </summary>
 public static class ServerConsole
 {
@@ -24,7 +31,23 @@ public static class ServerConsole
     public static async Task ListenAsync(
         string socketPath, Func<string, Task> onCommand, CancellationToken ct)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(socketPath)!);
+        var directory = Path.GetDirectoryName(socketPath)!;
+
+        // The containing directory is what protects the socket, not the socket's own mode.
+        //
+        // A Unix socket's permissions are settled at bind(2) from the process umask, and
+        // there is no way to ask for a mode as part of binding. Narrowing it afterwards —
+        // which is what this did — leaves a window between listen(2) and the chmod in which
+        // the socket is reachable by anybody on the machine, and a connection made in that
+        // window is already queued: it is accepted and serviced after the mode changes,
+        // because the mode is only consulted at connect. Anything that gets through can run
+        // any server command, including ones that grant privileges.
+        //
+        // A directory nobody else can enter closes it, because the check happens on the
+        // path walk and there is no moment at which the directory is wider. The chmod on
+        // the socket stays as a second line, and now genuinely is one rather than being the
+        // only one.
+        OwnerOnly.CreateDirectory(directory);
 
         // A socket left behind by a process that did not shut down cleanly. Removing it is
         // safe here only because a second server for the same pack is refused before this
@@ -35,8 +58,7 @@ public static class ServerConsole
         listener.Bind(new UnixDomainSocketEndPoint(socketPath));
         listener.Listen(4);
 
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(socketPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        OwnerOnly.Tighten(socketPath);
 
         try
         {

@@ -45,11 +45,23 @@ public sealed class ModIconCache(HttpClient http, string? root = null)
 
         try
         {
-            using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+            // Headers first, then the body under the same bound rather than after it.
+            //
+            // Content-Length is a claim and is absent altogether on a chunked response, so
+            // checking it and then calling ReadAsByteArrayAsync meant the whole reply was
+            // already in memory by the time its size was known — the check happened after
+            // the thing it was checking. Streamed and counted instead, which makes the
+            // limit real for a response that declares nothing.
+            using var response = await http.GetAsync(
+                url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
             if (!response.IsSuccessStatusCode) return null;
             if (response.Content.Headers.ContentLength > MaxBytes) return null;
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            var bytes = await ReadAtMostAsync(
+                await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false),
+                MaxBytes + 1, ct).ConfigureAwait(false);
+
             if (bytes.Length == 0 || bytes.Length > MaxBytes) return null;
 
             Directory.CreateDirectory(Root);
@@ -68,6 +80,28 @@ public sealed class ModIconCache(HttpClient http, string? root = null)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// At most <paramref name="limit"/> bytes of a stream, so a reply that never ends is
+    /// bounded by this rather than by the machine's memory. One byte past the cap is read
+    /// so the caller can tell "exactly at the limit" from "more than we will take".
+    /// </summary>
+    private static async Task<byte[]> ReadAtMostAsync(Stream stream, int limit, CancellationToken ct)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+
+        while (buffer.Length < limit)
+        {
+            var want = (int)Math.Min(chunk.Length, limit - buffer.Length);
+            var read = await stream.ReadAsync(chunk.AsMemory(0, want), ct).ConfigureAwait(false);
+            if (read == 0) break;
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
     }
 
     /// <summary>Total bytes held, for reporting. 0 when nothing has been cached.</summary>

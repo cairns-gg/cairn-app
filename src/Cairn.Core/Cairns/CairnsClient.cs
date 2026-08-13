@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -68,22 +69,35 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
     public async Task<CairnsSession> AwaitSignInAsync(
         DeviceFlow flow, IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(flow.ExpiresIn);
-        var interval = TimeSpan.FromSeconds(Math.Max(1, flow.Interval));
+        // Both of these come from the server, and both decide how long this machine waits.
+        // expires_in is an int, so a hostile or broken one can name roughly sixty-eight
+        // years — and the CLI's sign-in is a foreground loop with a person watching it, so
+        // that is a hang rather than a long wait. Clamped to something longer than any real
+        // device flow and shorter than a lost afternoon; the interval likewise, since a
+        // server asking to be polled once an hour is asking for the same thing slowly.
+        var window = TimeSpan.FromSeconds(Math.Clamp(flow.ExpiresIn, 1, MaxSignInSeconds));
+        var deadline = DateTimeOffset.UtcNow + window;
+        var interval = TimeSpan.FromSeconds(Math.Clamp(flow.Interval, 1, MaxPollSeconds));
 
         while (DateTimeOffset.UtcNow < deadline)
         {
             ct.ThrowIfCancellationRequested();
-            await Task.Delay(interval, ct).ConfigureAwait(false);
 
             var response = await http.PostAsJsonAsync(
                 $"{Server}/api/auth/device/token", new { token = flow.DeviceCode }, ct)
                 .ConfigureAwait(false);
 
             // 428 is "keep waiting"; anything else is an answer, good or bad.
+            //
+            // The wait is after the ask rather than before it. Delaying first meant
+            // somebody who approved in the browser before this loop got going still sat
+            // through a full interval of "waiting for the browser…" with nothing left to
+            // wait for — and it let a server choose how long the very first request took
+            // by naming a large interval.
             if (response.StatusCode == HttpStatusCode.PreconditionRequired)
             {
                 progress?.Report("waiting for the browser…");
+                await Task.Delay(interval, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -195,6 +209,65 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
     /// of problems, and repeating them beats "the server said 400" — they are the reason,
     /// and they are usually actionable.
     /// </summary>
+    /// <summary>
+    /// The most of a server-supplied message worth repeating, and the only characters of it
+    /// worth printing.
+    ///
+    /// These strings end up on a terminal by way of the CLI writing them to stderr, and a
+    /// terminal treats some bytes as instructions rather than text: an escape sequence can
+    /// repaint the line, hide what came before, or set the window title. So a server that
+    /// answers a failed publish with the right bytes gets to write on somebody's screen
+    /// whatever it likes, in a place they are reading precisely because something went
+    /// wrong. Length matters for the same reason — an uncapped body scrolls the actual
+    /// error out of view.
+    ///
+    /// Tabs and newlines are kept, because problem lists are printed as lists.
+    /// </summary>
+    private static string Printable(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+
+        var clean = new System.Text.StringBuilder(Math.Min(text.Length, MaxServerMessage));
+
+        foreach (var ch in text)
+        {
+            if (clean.Length >= MaxServerMessage) break;
+
+            // Control characters other than the two that mean layout, and the Unicode
+            // separators a terminal may also act on.
+            // The two that mean layout are kept; anything a terminal might act on rather
+            // than draw is dropped. By category rather than by listing characters — that
+            // covers ESC and the C1 range, the line and paragraph separators, and the
+            // invisible formatting characters that can reorder a rendered line. Naming
+            // them as literals would also put invisible characters in this file.
+            if (ch is '\n' or '\t')
+            {
+                clean.Append(ch);
+                continue;
+            }
+
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) is UnicodeCategory.Control
+                or UnicodeCategory.Format
+                or UnicodeCategory.LineSeparator
+                or UnicodeCategory.ParagraphSeparator) continue;
+
+            clean.Append(ch);
+        }
+
+        return clean.Length == MaxServerMessage ? clean.Append('…').ToString() : clean.ToString();
+    }
+
+    private const int MaxServerMessage = 500;
+
+    /// <summary>
+    /// The longest a sign-in may be left waiting, whatever the server says. Fifteen minutes
+    /// is far more than a device flow needs and far less than a stuck program.
+    /// </summary>
+    private const int MaxSignInSeconds = 15 * 60;
+
+    /// <summary>The slowest poll a server may ask for before it is simply waiting.</summary>
+    private const int MaxPollSeconds = 30;
+
     private static async Task ThrowIfFailed(HttpResponseMessage response, string doing)
     {
         if (response.IsSuccessStatusCode) return;
@@ -210,10 +283,11 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
 
             if (problems?.Problems is { Length: > 0 })
                 throw new CairnsException(
-                    $"Could not {doing}:\n  " + string.Join("\n  ", problems.Problems));
+                    $"Could not {doing}:\n  "
+                    + string.Join("\n  ", problems.Problems.Select(Printable)));
 
             if (!string.IsNullOrWhiteSpace(problems?.Error))
-                throw new CairnsException($"Could not {doing}: {problems.Error}");
+                throw new CairnsException($"Could not {doing}: {Printable(problems.Error)}");
         }
         catch (JsonException)
         {

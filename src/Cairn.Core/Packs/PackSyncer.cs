@@ -28,6 +28,19 @@ public sealed record SyncReport(List<SyncStep> Steps, PackLock Lock)
 /// </summary>
 public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 {
+    /// <summary>
+    /// How many mods a pack may pull in beyond the ones it names, before Cairn stops
+    /// following the trail.
+    ///
+    /// Dependencies are declared inside a mod's own zip, so the set is discovered rather
+    /// than agreed to, and every unknown id costs a request to ModDB from the user's
+    /// machine. A pack asking for a few dozen libraries is ordinary; one asking for
+    /// thousands is either broken or using somebody else's bandwidth on purpose. Set far
+    /// above any real pack — the largest published ones name well under a hundred mods —
+    /// so this is a stop on absurdity rather than a budget anybody has to think about.
+    /// </summary>
+    public const int MaxDiscoveredDependencies = 500;
+
     /// <param name="modsDir">Directory handed to the game via --addModPath.</param>
     /// <param name="allowUpdates">
     /// Mod ids permitted to move to a newer release. Empty by default, which is the whole
@@ -102,6 +115,9 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             Record(new SyncStep(SyncAction.Failed,
                 string.IsNullOrWhiteSpace(mod.ModId) ? "(no modid)" : mod.ModId, problem));
 
+        // Said once rather than fifty thousand times.
+        var fanoutReported = false;
+
         while (queue.Count > 0)
         {
             var pending = queue.Dequeue();
@@ -129,6 +145,31 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     wanters.Add(pending.ModId);
 
                 if (carriesUpdates) movable.Add(dep);
+
+                // Deduped is not the same as bounded. `seen` stops a cycle and stops the
+                // same library being fetched twice, but nothing stopped one modinfo.json
+                // naming fifty thousand ids that do not exist — each of which is a resolve
+                // against ModDB, from the user's machine, at somebody else's expense. The
+                // README is explicit about whose bandwidth that is, and the mod is already
+                // downloaded by the time it gets to ask.
+                //
+                // Counted against discoveries rather than against the queue, so the cap is
+                // on what a pack can conjure and not on how large a pack may legitimately
+                // be: the manifest's own mods are seeded before this loop and never reach
+                // the check.
+                if (seen.Count >= MaxDiscoveredDependencies)
+                {
+                    if (!fanoutReported)
+                    {
+                        fanoutReported = true;
+                        Record(new SyncStep(SyncAction.Warned, pending.ModId,
+                            $"declares more dependencies than Cairn will follow "
+                            + $"({MaxDiscoveredDependencies}); the rest are ignored"));
+                    }
+
+                    continue;
+                }
+
                 if (seen.Add(dep)) queue.Enqueue(new PendingMod(dep, null, pending.ModId));
             }
         }

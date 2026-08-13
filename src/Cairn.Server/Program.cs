@@ -31,7 +31,7 @@ public static class Program
             return args.Length == 0 ? 1 : 0;
         }
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) }.Bounded();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn-server/0.1 (+https://github.com/dizzyd/cairn)");
 
         var packs = new PackStore();

@@ -99,7 +99,7 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     public MainViewModel(HttpMessageHandler? handler = null)
     {
-        _http = (handler is null ? new HttpClient() : new HttpClient(handler));
+        _http = (handler is null ? new HttpClient() : new HttpClient(handler)).Bounded();
         _http.Timeout = TimeSpan.FromMinutes(5);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1");
         _moddb = new ModDbClient(_http);

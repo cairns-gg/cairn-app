@@ -39,7 +39,7 @@ internal static class Program
             // An unusual console is not a reason to refuse to run.
         }
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) }.Bounded();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cairn/0.1 (+https://github.com/dizzyd/cairn)");
         var moddb = new ModDbClient(http);
         var store = new PackStore();
@@ -1155,7 +1155,15 @@ internal static class Program
     private static async Task<int> Login(HttpClient http, string[] args)
     {
         var client = new CairnsClient(http);
-        var flow = await client.StartSignInAsync();
+
+        // Ctrl-C ends the wait rather than the process mid-write. Without a token this loop
+        // is only bounded by what the server said, and the server is the party a hostile
+        // one would be — so somebody standing at a prompt that has stopped making progress
+        // had no way out but killing it.
+        using var cancel = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancel.Cancel(); };
+
+        var flow = await client.StartSignInAsync(cancel.Token);
 
         Console.WriteLine($"""
 
@@ -1171,7 +1179,16 @@ internal static class Program
         if (!args.Contains("--no-browser"))
             Browser.Open($"{flow.VerificationUri}?code={flow.UserCode}");
 
-        var session = await client.AwaitSignInAsync(flow);
+        CairnsSession session;
+        try
+        {
+            session = await client.AwaitSignInAsync(flow, ct: cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return Fail("stopped waiting; nothing was signed in");
+        }
+
         session.Save();
 
         Console.WriteLine($"signed in to {session.Server} as {session.Username}");

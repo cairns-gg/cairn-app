@@ -185,8 +185,50 @@ public sealed class PackUpdatePlan
         Changes.Where(c => c.Kind is ModChangeKind.Added or ModChangeKind.Removed
                                or ModChangeKind.Repinned);
 
-    /// <summary>Whether applying this would alter anything at all.</summary>
-    public bool AnyChange => GameVersionChanges || TheirChanges.Any() || Choices.Any();
+    /// <summary>
+    /// Whether the author's server address changes, and what to.
+    ///
+    /// A pack's connect address is what launching joins, so it decides which server a
+    /// person's client hands their session to. Import treats it as worth a warning box of
+    /// its own; taking a revision took it silently, and left it out of
+    /// <see cref="AnyChange"/> as well — so a revision that changed nothing but this
+    /// reported "matches the author's revision" and then rerouted the pack. An attacker who
+    /// cannot get a hostile address past the import screen publishes revision 2.
+    /// </summary>
+    public bool ConnectChanges => !string.Equals(
+        _mine.Connect ?? "", _theirs.Connect ?? "", StringComparison.OrdinalIgnoreCase);
+
+    public string? ConnectFrom => _mine.Connect;
+    public string? ConnectTo => _theirs.Connect;
+
+    /// <summary>
+    /// Whether the author's keybinds change. Not a security question the way the connect
+    /// address is — a keybind cannot reach anything — but it is a change to the pack that
+    /// was being applied without appearing anywhere, which is the same defect.
+    /// </summary>
+    public bool KeybindsChange
+    {
+        get
+        {
+            var mine = _mine.Keybinds ?? [];
+            var theirs = _theirs.Keybinds ?? [];
+
+            return mine.Count != theirs.Count
+                   || mine.Any(kv => !theirs.TryGetValue(kv.Key, out var v) || v != kv.Value);
+        }
+    }
+
+    /// <summary>
+    /// Whether applying this would alter anything at all.
+    ///
+    /// Includes the two fields above deliberately. They are taken from the author
+    /// unconditionally — there is no question to answer about them, which is why they are
+    /// not in <see cref="Choices"/> — but "nothing to do" has to mean nothing, or the
+    /// dialog that says so is how a change gets made.
+    /// </summary>
+    public bool AnyChange =>
+        GameVersionChanges || TheirChanges.Any() || Choices.Any()
+        || ConnectChanges || KeybindsChange;
 
     public string Summary()
     {
@@ -198,6 +240,18 @@ public sealed class PackUpdatePlan
         if (added > 0) parts.Add($"{added} added");
         if (removed > 0) parts.Add($"{removed} removed");
         if (repinned > 0) parts.Add($"{repinned} repinned");
+
+        // Named rather than counted, and after the mods so it is the last thing read. This
+        // is the one line somebody sees before agreeing, and where the pack points is not a
+        // detail to fold into a tally.
+        if (ConnectChanges)
+        {
+            parts.Add(string.IsNullOrWhiteSpace(ConnectTo)
+                ? "stops joining a server"
+                : $"joins {ConnectTo}");
+        }
+
+        if (KeybindsChange) parts.Add("changes keybinds");
 
         return parts.Count == 0
             ? $"Revision {ToRevision} changes no mods."
