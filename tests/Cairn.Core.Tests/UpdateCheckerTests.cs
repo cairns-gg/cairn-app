@@ -439,8 +439,10 @@ public class UpdateCheckerTests : IDisposable
             key: "RWQDiHgg9aatPFKkqUvPYNvMyNAevHIYjOOTWaN65OATfn8zQawEfQCZ").CheckAsync());
 
     /// <summary>
-    /// And with no key compiled in, nothing changes — which is the state this ships in
-    /// until a key exists, and the reason SR-011 is not closed by this alone.
+    /// And with no key compiled in, nothing changes: an unsigned manifest is accepted, as
+    /// it was before any of this existed. That is what makes <c>ManifestPublicKey</c> the
+    /// whole control rather than the code around it — unarmed, this is a mechanism and not
+    /// a check, so the released build having a key in it is the part that matters.
     /// </summary>
     [Fact]
     public async Task With_no_key_configured_an_unsigned_manifest_is_still_accepted()
