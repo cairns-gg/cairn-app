@@ -1059,7 +1059,9 @@ Silicon, and it still resolves an x64 runtime for the x64 game.
 ### Cutting a release
 
 Push a tag. `.github/workflows/release.yml` runs the tests, builds all four artifacts and
-opens a **draft** release with them attached.
+publishes a release with them attached. Not a draft: it was one so somebody could look
+before the world saw an unnotarised build, but nobody downloads from here. The gate that
+matters is on promoting `latest.json`, which is what people actually fetch.
 
 ```bash
 git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0

@@ -11,3 +11,9 @@ artifacts/
 # and was committed once by a careless `git add -A` before this line existed.
 *.key
 !packages.lock.json
+
+# Written while building this, and not part of what is published. The repository is public
+# so the code can be read; that is not the same as publishing everything that was written
+# alongside it — commercial planning, and the security review's working copy, which names
+# what is still open and where.
+private/

@@ -100,8 +100,10 @@ notarising the macOS builds*.
 
 ## Still outstanding
 
-- **No licence and no public source link.** The repo is private and has no LICENSE file,
-  so nothing in the listing claims open source or points at GitHub.
+- **A source link, once the repository is public.** There is a licence now — PolyForm
+  Strict, so the listing must say *source-available* and never *open source*; claiming the
+  latter to a modding audience would be read as a promise the terms do not make. Worth a
+  line either way, because "you can read what it does" is the point of publishing it.
 - **A logo image.** Nothing here supplies one.
 
 ## Screenshots
