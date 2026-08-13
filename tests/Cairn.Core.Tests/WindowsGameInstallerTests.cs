@@ -63,6 +63,52 @@ public class WindowsGameInstallerTests
     public void A_log_path_is_passed_only_when_asked_for()
     {
         Assert.DoesNotContain(WindowsGameInstaller.BuildArguments(@"C:\x"), a => a.StartsWith("/LOG"));
+    }
+
+    // ---- who signed the thing being run ----
+
+    /// <summary>
+    /// The signer pin, which is the half of the Authenticode check that is a policy rather
+    /// than a call into Windows. Asserted here because the rest of WindowsCodeSignature
+    /// needs Windows to run at all, and this is the part that decides whether a validly
+    /// signed installer from somebody else is accepted — which it must not be.
+    ///
+    /// Observed on the shipped installer: an SSL.com EV certificate issued to
+    /// "Anego Studios SIA".
+    /// </summary>
+    [Theory]
+    [InlineData("Anego Studios SIA", true)]
+    [InlineData("anego studios sia", true)]
+    [InlineData("  Anego Studios SIA  ", true)]
+    [InlineData("Anego Studios", false)]
+    [InlineData("Anego Studios SIA Ltd", false)]
+    [InlineData("Microsoft Corporation", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Only_the_vendors_own_signature_is_accepted(string? signer, bool expected) =>
+        Assert.Equal(expected, WindowsCodeSignature.IsExpectedSigner(signer));
+
+    /// <summary>
+    /// Off Windows there is nothing to verify and no path that reaches it — GameInstaller
+    /// refuses a Windows installer on any other platform well before this — so Require
+    /// must not throw on a file it cannot inspect.
+    /// </summary>
+    [Fact]
+    public void Verification_is_a_no_op_off_Windows()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        var path = Path.Combine(Path.GetTempPath(), "cairn-sig-" + Guid.NewGuid().ToString("n")[..8]);
+        File.WriteAllText(path, "not an executable");
+
+        try
+        {
+            Assert.Null(WindowsCodeSignature.Problem(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
         Assert.Contains(@"/LOG=C:\x\install.log",
             WindowsGameInstaller.BuildArguments(@"C:\x", @"C:\x\install.log"));
     }

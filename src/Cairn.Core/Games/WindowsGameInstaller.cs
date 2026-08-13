@@ -62,6 +62,14 @@ public static class WindowsGameInstaller
         string installerPath, string targetDirectory, string? logPath = null,
         CancellationToken ct = default)
     {
+        // Immediately before the only Process.Start in this file, rather than back where
+        // the download happened. The check belongs to the act of running the thing: a
+        // second caller arriving later gets it without having to remember, which is the
+        // failure mode that put the same guard in one branch of PackSyncer and nowhere
+        // else. Everything upstream binds the file to the catalogue that named it; this is
+        // the only step that binds it to the people who make the game.
+        WindowsCodeSignature.Require(installerPath);
+
         var psi = new ProcessStartInfo(installerPath)
         {
             UseShellExecute = false,
