@@ -125,4 +125,50 @@ public class ImportFollowChoiceTests
         Assert.True(vm.CanAdd);
         Assert.DoesNotContain("Follow it", AllText(window));
     }
+
+    /// <summary>
+    /// Built the way MainViewModel builds it for a file: the "source" it is handed is the
+    /// document's own canonicalUrl, because there is nothing else to hand it. The harness
+    /// above passes a filename instead, which is fine for the follow choice and wrong for
+    /// this — the whole question here is what happens when the claimed address is shown.
+    /// </summary>
+    private static (ImportWindow Window, ImportViewModel Vm) ShowFileAsMainWindowWould()
+    {
+        var bundle = Published();
+        var vm = new ImportViewModel(bundle, bundle.CanonicalUrl!, _ => false, fetched: false);
+        var window = new ImportWindow { DataContext = vm };
+        window.Show();
+
+        return (window, vm);
+    }
+
+    /// <summary>
+    /// The line somebody reads to decide whether a link they were sent is worth trusting.
+    /// For a file, both halves of it — who published this and where it came from — are
+    /// strings out of a document anybody can write, and nothing checked either.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_files_attribution_is_shown_as_the_files_claim()
+    {
+        var (window, vm) = ShowFileAsMainWindowWould();
+
+        Assert.Equal("the file says: by someone-else · from cairns.gg", vm.Provenance);
+
+        var text = AllText(window);
+        Assert.Contains("the file says:", text);
+        Assert.Contains("someone-else", text);
+    }
+
+    /// <summary>
+    /// And a fetched one is not hedged, because there the host is a fact about an exchange
+    /// that happened. Qualifying both equally would make the qualification meaningless.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_fetched_packs_attribution_is_not_hedged()
+    {
+        var (window, vm) = Show(fetched: true);
+
+        Assert.Equal("by someone-else · from cairns.gg", vm.Provenance);
+        Assert.DoesNotContain("the file says", AllText(window));
+    }
 }

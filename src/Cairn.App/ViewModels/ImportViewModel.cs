@@ -129,12 +129,36 @@ public sealed partial class ImportViewModel : ViewModelBase
 
     public string? PublishedBy { get; }
 
-    /// <summary>Where it was fetched from, which is the part a person can judge.</summary>
+    /// <summary>
+    /// The host this arrived from, or — for a file — the host it claims to have come from.
+    /// Only the first of those is something a person can judge, which is why
+    /// <see cref="Provenance"/> does not phrase them the same way.
+    /// </summary>
     public string Source { get; }
 
-    public string Provenance => PublishedBy is { Length: > 0 } who
-        ? $"by {who} · from {Source}"
-        : $"from {Source}";
+    /// <summary>
+    /// Who published it and where from, and whether either of those was checked.
+    ///
+    /// Fetched, both are facts about an exchange that happened: Cairn asked that address
+    /// and this is what came back. Out of a file nothing was asked and nothing was
+    /// checked — <c>publishedBy</c> and <c>canonicalUrl</c> are two strings inside a
+    /// document anybody can write, and they were being rendered in the same unqualified
+    /// sentence as the fetched case, in the one line somebody reads to decide whether a
+    /// link they were sent is worth trusting. The values are still worth showing;
+    /// presenting a claim as an observation is the part that misleads.
+    ///
+    /// The follow choice below says a version of this too, but only about the address, and
+    /// only when there is a choice to make. This line is always there.
+    /// </summary>
+    public string Provenance
+    {
+        get
+        {
+            var by = PublishedBy is { Length: > 0 } who ? $"by {who} · " : "";
+
+            return Fetched ? $"{by}from {Source}" : $"the file says: {by}from {Source}";
+        }
+    }
 
     public IReadOnlyList<ImportModViewModel> Mods { get; }
 
