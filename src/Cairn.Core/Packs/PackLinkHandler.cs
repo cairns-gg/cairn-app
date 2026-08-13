@@ -179,7 +179,10 @@ public static class PackLinkHandler
     {
         try
         {
-            var psi = new ProcessStartInfo("reg")
+            // By full path, never by name. CreateProcess searches the calling process's
+            // current directory before the system directory, and Cairn does not choose
+            // its own — see ExecutableLookup.SystemTool.
+            var psi = new ProcessStartInfo(ExecutableLookup.SystemTool("reg.exe"))
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

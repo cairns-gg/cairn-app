@@ -59,6 +59,37 @@ public static class ExecutableLookup
         Find(name, searchPath) is not null;
 
     /// <summary>
+    /// The full path to a Windows system tool, for launching one without a search.
+    ///
+    /// <c>CreateProcess</c> resolves a bare program name by searching, and the second place
+    /// it looks is the current directory of the *calling* process — ahead of the system
+    /// directory. Cairn does not choose its own working directory: for a <c>cairn://</c>
+    /// launch it inherits whatever the shell handed it, which can be a directory somebody
+    /// else can write to. A file called <c>reg.exe</c> sitting there would be found before
+    /// the real one, and Cairn runs <c>reg</c> while registering that very protocol handler
+    /// and again on each Windows game install.
+    ///
+    /// Setting <see cref="ProcessStartInfo.WorkingDirectory"/> does not help, which is worth
+    /// saying because it looks like it should: that sets the working directory of the child,
+    /// while the search uses the parent's.
+    ///
+    /// PATH is not the answer either — <see cref="Find"/> would consult it, and PATH can
+    /// itself carry a directory somebody can write to. A system tool has a known home, so
+    /// naming it outright removes the search rather than reordering it.
+    /// </summary>
+    /// <param name="name">A filename with its extension, e.g. "reg.exe".</param>
+    public static string SystemTool(string name)
+    {
+        if (!OperatingSystem.IsWindows()) return name;
+
+        // Empty on a platform without one, and nothing is gained by building a path from
+        // that — the bare name is no worse than what this replaces.
+        var system = Environment.SystemDirectory;
+
+        return string.IsNullOrWhiteSpace(system) ? name : Path.Combine(system, name);
+    }
+
+    /// <summary>
     /// The filenames to try for one command.
     ///
     /// Windows resolves <c>git</c> to <c>git.exe</c> via PATHEXT, and nothing on that
