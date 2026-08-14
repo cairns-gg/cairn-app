@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,9 +21,9 @@ public sealed class ImportModViewModel(
     /// <summary>In the lock but not the manifest: something a mod asked for in turn.</summary>
     public bool Dependency { get; } = dependency;
 
-    public string Note => Dependency ? "dependency"
+    public string Note => Dependency ? Lang.Get("import-note-dependency")
         : Exact ? ""
-        : Version.Length > 0 ? "asked for" : "newest";
+        : Version.Length > 0 ? Lang.Get("import-note-asked-for") : Lang.Get("import-note-newest");
 }
 
 /// <summary>
@@ -125,7 +126,7 @@ public sealed partial class ImportViewModel : ViewModelBase
     /// A pack that carries a server address will launch straight into somebody's server.
     /// That is usually the point, and it is still not something to discover afterwards.
     /// </summary>
-    public string ConnectNote => $"Launches into {Connect}";
+    public string ConnectNote => Lang.Get("import-connect-note", Connect);
 
     public string? PublishedBy { get; }
 
@@ -154,9 +155,11 @@ public sealed partial class ImportViewModel : ViewModelBase
     {
         get
         {
-            var by = PublishedBy is { Length: > 0 } who ? $"by {who} · " : "";
+            var by = PublishedBy is { Length: > 0 } who ? Lang.Get("import-by", who) : "";
 
-            return Fetched ? $"{by}from {Source}" : $"the file says: {by}from {Source}";
+            return Fetched
+                ? Lang.Get("import-from", by, Source)
+                : Lang.Get("import-file-says", by, Source);
         }
     }
 
@@ -164,8 +167,7 @@ public sealed partial class ImportViewModel : ViewModelBase
 
     public bool HasLock { get; }
 
-    public string Summary =>
-        $"{Mods.Count} mod{(Mods.Count == 1 ? "" : "s")} · game {GameVersion}";
+    public string Summary => Lang.Plural("import-summary", Mods.Count, Mods.Count, GameVersion);
 
     /// <summary>
     /// What the pack will install, stated rather than offered.
@@ -177,8 +179,8 @@ public sealed partial class ImportViewModel : ViewModelBase
     /// keeps --loose for the rare case, where asking for it is deliberate.
     /// </summary>
     public string VersionNote => HasLock
-        ? "Installs the exact versions the author tested, checked against their checksums."
-        : "This pack carries no lockfile, so sync will resolve the newest compatible releases.";
+        ? Lang.Get("import-has-lock")
+        : Lang.Get("import-no-lock");
 
     // ---- the choices ----
 
@@ -216,13 +218,10 @@ public sealed partial class ImportViewModel : ViewModelBase
     /// decide where this machine checks back for ever.
     /// </summary>
     public string FollowNote => Fetched
-        ? $"Keep in step with {FollowUrl}, where this came from."
-        : $"This file says it comes from {FollowUrl}. Cairn has not checked that — "
-          + "following takes the file's word for it.";
+        ? Lang.Get("import-follow-fetched", FollowUrl)
+        : Lang.Get("import-follow-file", FollowUrl);
 
-    public string ForkNote =>
-        "Start a pack of your own from it. Nothing checks back, and it is yours to "
-        + "change, publish or share.";
+    public string ForkNote => Lang.Get("import-fork-note");
 
     /// <summary>
     /// The two radio buttons, as plain bools.
@@ -274,9 +273,9 @@ public sealed partial class ImportViewModel : ViewModelBase
         {
             var id = (AsId ?? "").Trim();
 
-            if (id.Length == 0) return "Give it a name to install under.";
+            if (id.Length == 0) return Lang.Get("import-needs-name");
 
-            return _idTaken(id) ? $"You already have a pack called '{id}'." : null;
+            return _idTaken(id) ? Lang.Get("import-name-taken", id) : null;
         }
     }
 

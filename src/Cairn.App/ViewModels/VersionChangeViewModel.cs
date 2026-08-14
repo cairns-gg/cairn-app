@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Collections.Generic;
 using System.Linq;
 using Cairn.Core.Packs;
@@ -21,12 +22,12 @@ public sealed class ModVerdictViewModel(ModVerdict verdict)
     /// </summary>
     public string Label => Verdict.Outcome switch
     {
-        ModOutcome.Unchanged => "keeps",
-        ModOutcome.Moves => "updates",
-        ModOutcome.Approximate => "untested",
-        ModOutcome.Unavailable => "breaks",
-        ModOutcome.PinUnavailable => "pin fails",
-        _ => "unknown",
+        ModOutcome.Unchanged => Lang.Get("verdict-keeps"),
+        ModOutcome.Moves => Lang.Get("verdict-updates"),
+        ModOutcome.Approximate => Lang.Get("verdict-untested"),
+        ModOutcome.Unavailable => Lang.Get("verdict-breaks"),
+        ModOutcome.PinUnavailable => Lang.Get("verdict-pin-fails"),
+        _ => Lang.Get("verdict-unknown"),
     };
 }
 
@@ -49,7 +50,7 @@ public sealed class VersionChangeViewModel(VersionChangePlan plan)
 
     public string Summary => Plan.Summary();
 
-    public string ApplyLabel => $"Change to {Plan.To}";
+    public string ApplyLabel => Lang.Get("versionchange-apply", Plan.To);
 
     public bool AnythingBreaks => Plan.AnythingBreaks;
     public bool IsIncomplete => Plan.IsIncomplete;
@@ -57,23 +58,20 @@ public sealed class VersionChangeViewModel(VersionChangePlan plan)
 
     public bool HasMods => Mods.Count > 0;
 
-    public string WorldWarning =>
-        $"This pack has {Plan.Worlds.Count} world{(Plan.Worlds.Count == 1 ? "" : "s")} "
-        + $"({string.Join(", ", Plan.Worlds.Take(3))}"
-        + $"{(Plan.Worlds.Count > 3 ? ", …" : "")}). "
-        + "Vintage Story upgrades a save when a newer build opens it, and will not open one "
-        + $"saved by a build newer than {Plan.To}. Back them up before going back.";
+    public string WorldWarning => Lang.Plural(
+        "versionchange-world-warning", Plan.Worlds.Count, Plan.Worlds.Count,
+        string.Join(", ", Plan.Worlds.Take(3)) + (Plan.Worlds.Count > 3 ? ", …" : ""),
+        Plan.To);
 
     /// <summary>
     /// Said plainly because the alternative reading — "checked, nothing wrong" — is the
     /// one that gets acted on.
     /// </summary>
     public string IncompleteWarning =>
-        $"{Plan.Unchecked.Count()} mod{(Plan.Unchecked.Count() == 1 ? "" : "s")} could not be "
-        + "checked, so this is not the whole picture.";
+        Lang.Plural("versionchange-incomplete", Plan.Unchecked.Count(), Plan.Unchecked.Count());
 
+    // Two inflections in one sentence — the noun and the verb agreeing with it — which
+    // is exactly the shape that cannot survive being assembled from fragments.
     public string BreakWarning =>
-        $"{Plan.Breaking.Count()} mod{(Plan.Breaking.Count() == 1 ? "" : "s")} "
-        + $"ha{(Plan.Breaking.Count() == 1 ? "s" : "ve")} nothing published for {Plan.To}. "
-        + "Applying leaves them out of the pack until they are updated or removed.";
+        Lang.Plural("versionchange-breaking", Plan.Breaking.Count(), Plan.Breaking.Count(), Plan.To);
 }
