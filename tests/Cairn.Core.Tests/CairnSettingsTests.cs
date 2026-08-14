@@ -7,6 +7,7 @@ namespace Cairn.Core.Tests;
 /// <summary>
 /// The preferences file, and the bug that made it need a type of its own.
 /// </summary>
+[Collection(HomeEnvironment.Collection)]
 public class CairnSettingsTests : IDisposable
 {
     private readonly string _home = Path.Combine(

@@ -21,6 +21,7 @@ namespace Cairn.Core.Tests;
 /// root that changes mid-process and not how the change was decided. SetPointer would write
 /// to the running user's own home directory.
 /// </summary>
+[Collection(HomeEnvironment.Collection)]
 public class MovedRootTests : IDisposable
 {
     private readonly string _tmp = Directory.CreateTempSubdirectory("cairn-moved-root-").FullName;

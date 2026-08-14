@@ -12,6 +12,7 @@ namespace Cairn.Core.Tests;
 /// single byte is written. The copy itself has two properties that are invisible until
 /// somebody's install stops working — the executable bit, and links staying links.
 /// </summary>
+[Collection(HomeEnvironment.Collection)]
 public class HomeMigrationTests : IDisposable
 {
     private readonly string _tmp = Directory.CreateTempSubdirectory("cairn-move-").FullName;

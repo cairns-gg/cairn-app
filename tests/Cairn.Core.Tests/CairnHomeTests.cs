@@ -11,6 +11,7 @@ namespace Cairn.Core.Tests;
 /// running user's profile. A test that had to create ~/.cairn to check the default would be
 /// writing to the developer's actual home directory to prove a rule about paths.
 /// </summary>
+[Collection(HomeEnvironment.Collection)]
 public class CairnHomeTests
 {
     private const string Default = "/home/someone/.cairn";
