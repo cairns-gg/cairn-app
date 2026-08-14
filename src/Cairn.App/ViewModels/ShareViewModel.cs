@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Collections.Generic;
 using System.Linq;
 using Cairn.Core.Packs;
@@ -15,7 +16,7 @@ public sealed class PublishModViewModel(PublishMod mod)
     public bool Pinned => Mod.Pinned;
     public bool Missing => !Mod.OnModDb;
 
-    public string Note => Missing ? "not on ModDB" : Pinned ? "pinned" : "";
+    public string Note => Missing ? Lang.Get("share-not-on-moddb") : Pinned ? Lang.Get("share-pinned") : "";
 }
 
 /// <summary>
@@ -75,7 +76,7 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     public bool IsSignedIn => !string.IsNullOrWhiteSpace(Username);
 
-    public string SignedInAs => IsSignedIn ? $"Signed in as {Username}" : "";
+    public string SignedInAs => IsSignedIn ? Lang.Get("share-signed-in-as", Username) : "";
 
     public bool AlreadyPublished { get; }
 
@@ -90,9 +91,7 @@ public sealed partial class ShareViewModel : ViewModelBase
     /// </summary>
     public bool SlugFixed => AlreadyPublished;
 
-    public string SlugNote => SlugFixed
-        ? "The address is fixed once published — links to it are already out there."
-        : "";
+    public string SlugNote => SlugFixed ? Lang.Get("share-slug-fixed") : "";
 
     public IReadOnlyList<PublishModViewModel> Mods { get; init; } = [];
 
@@ -137,7 +136,7 @@ public sealed partial class ShareViewModel : ViewModelBase
         && !_published.WouldChange(_documentFor(StripConnect), IsPublic, StripConnect);
 
     public string UnchangedNote => NothingToPublish
-        ? $"Nothing has changed since revision {Revision}."
+        ? Lang.Get("share-unchanged", Revision)
         : "";
 
     /// <summary>
@@ -160,16 +159,15 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     // ---- what the window says ----
 
-    public string Title => $"Share \"{PackName}\"";
+    public string Title => Lang.Get("share-title", PackName);
 
     public string Summary => Plan.Summary();
 
-    public string PublishLabel => AlreadyPublished ? "Publish changes" : "Publish";
+    public string PublishLabel => AlreadyPublished ? Lang.Get("share-publish-changes") : Lang.Get("share-publish");
 
     public bool HasConnect => Plan.HasConnect;
 
-    public string ConnectWarning =>
-        $"This pack carries the server address {Plan.Connect}.";
+    public string ConnectWarning => Lang.Get("share-connect-warning", Plan.Connect);
 
     public bool AnythingUnresolvable => Plan.AnythingUnresolvable;
 

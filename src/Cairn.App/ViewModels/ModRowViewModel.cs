@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -68,7 +69,7 @@ public partial class ModRowViewModel : ViewModelBase
     public string? RequiredByFirst => Locked?.RequiredBy?.FirstOrDefault();
 
     public string RequiredByNote =>
-        IsDependency ? $"required by {string.Join(", ", Locked!.RequiredBy!)}" : "";
+        IsDependency ? Lang.Get("mods-required-by", string.Join(", ", Locked!.RequiredBy!)) : "";
 
     /// <summary>
     /// Whether this row's controls are offered at all.
@@ -150,8 +151,8 @@ public partial class ModRowViewModel : ViewModelBase
     }
 
     public string PinTip => IsPinned
-        ? $"Pinned to {Mod.Version}. Click to stop pinning and follow this mod again."
-        : "Pin this mod to a version, so it stays put when you update the others.";
+        ? Lang.Get("mods-pin-tip-pinned", Mod.Version)
+        : Lang.Get("mods-pin-tip");
 
     /// <summary>
     /// The version actually installed, per the lockfile. Meaningful again now that a
@@ -235,7 +236,7 @@ public partial class ModRowViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty] public partial bool ConfirmingRemove { get; set; }
 
-    public string RemovePrompt => $"Remove {ModId} from this pack?";
+    public string RemovePrompt => Lang.Get("mods-remove-prompt", ModId);
 
     [RelayCommand]
     private void RequestRemove()

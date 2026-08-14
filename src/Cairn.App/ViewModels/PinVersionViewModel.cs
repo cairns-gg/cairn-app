@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -29,7 +30,7 @@ public sealed class ReleaseChoiceViewModel(
     /// <summary>The one currently on disk, called out so "freeze what works" is one glance.</summary>
     public bool Installed { get; } = installed;
 
-    public string Note => Installed ? "installed now" : "";
+    public string Note => Installed ? Lang.Get("pin-installed-now") : "";
 
     /// <summary>
     /// The "follow this mod" row rather than a release.
@@ -106,14 +107,13 @@ public sealed partial class PinVersionViewModel : ViewModelBase
     /// here, so the answer is to say so rather than to forbid it.
     /// </summary>
     public string ConfirmLabel =>
-        Selected?.IsTrackNewest == true ? "Follow this mod" : "Pin this version";
+        Selected?.IsTrackNewest == true ? Lang.Get("pin-follow") : Lang.Get("pin-this-version");
 
     partial void OnSelectedChanged(ReleaseChoiceViewModel? value) =>
         OnPropertyChanged(nameof(ConfirmLabel));
 
     /// <summary>Said out loud, because an empty list otherwise reads as a failure to load.</summary>
-    public string EmptyNote =>
-        $"No release of {ModId} is marked for game {GameVersion}.";
+    public string EmptyNote => Lang.Get("pin-no-release", ModId, GameVersion);
 
     /// <summary>
     /// The version to pin, or null to follow the mod instead. Read by the caller after the
@@ -140,8 +140,8 @@ public sealed partial class PinVersionViewModel : ViewModelBase
         if (ordered.Count == 0) return null;
 
         return ordered.Count == 1
-            ? $"for {ordered[0]}"
-            : $"for {ordered[0]} – {ordered[^1]}";
+            ? Lang.Get("pin-for-version", ordered[0])
+            : Lang.Get("pin-for-range", ordered[0], ordered[^1]);
     }
 
     /// <summary>
@@ -160,12 +160,12 @@ public sealed partial class PinVersionViewModel : ViewModelBase
         return days switch
         {
             < 0 => null,
-            < 1 => "today",
-            < 2 => "yesterday",
-            < 14 => $"{(int)days} days ago",
-            < 60 => $"{(int)(days / 7)} weeks ago",
-            < 730 => $"{(int)(days / 30)} months ago",
-            _ => $"{(int)(days / 365)} years ago",
+            < 1 => Lang.Get("ago-today"),
+            < 2 => Lang.Get("ago-yesterday"),
+            < 14 => Lang.Plural("ago-days", (int)days, (int)days),
+            < 60 => Lang.Plural("ago-weeks", (int)(days / 7), (int)(days / 7)),
+            < 730 => Lang.Plural("ago-months", (int)(days / 30), (int)(days / 30)),
+            _ => Lang.Plural("ago-years", (int)(days / 365), (int)(days / 365)),
         };
     }
 }
