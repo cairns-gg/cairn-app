@@ -778,7 +778,30 @@ jobs:
         env:
           NOTARISED: ${{ needs.macos.outputs.notarised }}
         run: |
-          cat > notes.md <<'NOTES'
+          : > notes.md
+
+          # The changelog leads, because it is the only part anybody reads for its own sake.
+          # Written as the work lands rather than at the tag — by release day nobody
+          # remembers which of forty commits a player would notice, and a changelog
+          # assembled from commit subjects reads like one.
+          #
+          # Named by series (0.8.0 and 0.8.1 share docs/changelog-0.8.md), which is how the
+          # file is already named. Missing is not a failure: a release with nothing worth
+          # telling a player about is a real thing, and holding up a build over it would
+          # only teach somebody to write an empty one.
+          version="${GITHUB_REF_NAME#v}"
+          series="$(echo "$version" | cut -d. -f1,2)"
+          changelog="docs/changelog-$series.md"
+
+          if [ -f "$changelog" ]; then
+            echo "release notes from $changelog"
+            cat "$changelog" >> notes.md
+            printf '\n\n---\n\n' >> notes.md
+          else
+            echo "no $changelog — the notes will be the artifact list alone"
+          fi
+
+          cat >> notes.md <<'NOTES'
           Built artifacts, kept here as a record. **People download from cairns.gg** — this
           repository is not the distribution channel.
 

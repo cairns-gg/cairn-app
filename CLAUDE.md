@@ -174,6 +174,12 @@ the conformance tests.
   British spelling throughout ("notarised", "behaviour").
 - **Commit messages are sentences in the imperative, capitalised, no prefix or scope** —
   "Keep each version's manifest, not just the latest", "Stop shipping cairn-cli in releases".
+- **Write the changelog as the work lands, not at the tag.** `docs/changelog-<major.minor>.md`
+  plus a hand-written `.html` beside it, addressed to a player rather than a maintainer —
+  what changed for them, and what they need to do about it, which is usually nothing. The
+  release workflow puts it at the top of the GitHub release notes and says so in the log when
+  there is none. Left until release day it gets assembled out of commit subjects, and reads
+  like it.
 - Releases are cut by pushing a tag; `.github/workflows/release.yml` tests, builds all four
   artifacts, opens a draft GitHub release and publishes to Cloudflare R2. The version comes
   from the tag via `-p:Version` and is read back out of the assembly by `CairnVersion` —
