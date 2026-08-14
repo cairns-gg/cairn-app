@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Cairn.Core.Launch;
 
 namespace Cairn.Core.Packs;
 
@@ -99,6 +101,41 @@ public sealed class PackManifest
     /// </summary>
     [JsonPropertyName("keybinds")] public Dictionary<string, string>? Keybinds { get; set; }
 
+    /// <summary>
+    /// Values the pack sets in the mods' own config files, as path → the values it asserts:
+    /// <c>{ "terrainslabs.json": { "compatibleMods": ["footprints"] } }</c>. The path is
+    /// relative to the pack's <c>ModConfig/</c>, with <c>/</c> as the separator on every
+    /// platform, so a mod keeping its settings in a folder is reachable as
+    /// <c>"XLeveling/mining.json"</c>.
+    ///
+    /// Two mods often need a line in one of their configs to work together — Terrain Slabs
+    /// wants Footprints named in its list before the two behave — and the author works that
+    /// out once. This is where the answer goes, for the same reason
+    /// <see cref="Keybinds"/> is here: the value is entirely in reaching the people who did
+    /// not do the work.
+    ///
+    /// **Only the values the pack asserts, not the whole file.** A mod's config is its own
+    /// document, it versions with the mod, and a captured copy replayed into a pack whose
+    /// user has moved on a major version is how a mod ends up refusing to load. A sparse
+    /// object is also the only form a person can review before importing somebody's pack —
+    /// which for a file that changes how the game plays is the point.
+    ///
+    /// <see cref="ModConfigFiles"/> owns what happens to these at launch, and the rule is
+    /// not the one <see cref="ClientHotkeys"/> uses. Read it before changing this.
+    /// </summary>
+    [JsonPropertyName("modConfig")] public Dictionary<string, JsonObject>? ModConfig { get; set; }
+
+    /// <summary>
+    /// How much mod config one pack may carry, over every file together.
+    ///
+    /// Capped because this is a shared document: it is published, fetched by everyone who
+    /// imports the pack, and meant to be readable by eye. The values that earn their place
+    /// here are the handful that make mods agree with each other — in a real pack the median
+    /// config file is 600 bytes and the largest is a 149KB ore table, and a pack that
+    /// swallowed that one whole would have stopped being a manifest.
+    /// </summary>
+    public const int MaxModConfig = 64 * 1024;
+
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -136,12 +173,44 @@ public sealed class PackManifest
         if (ServerAddress.Problem(Connect) is { } connect)
             yield return $"Pack 'connect' {connect}";
 
+        // Checked here rather than at launch, so a pack naming ../../etc is refused by
+        // import — the moment it arrives from someone else — and not on the machine of
+        // whoever eventually presses Play. See ModConfigFiles.PathProblem.
+        foreach (var problem in ModConfigProblems()) yield return problem;
+
         // Deliberately no length check on the description. The cap belongs where one is
         // written — pack settings, `init --description`, and the server on publish — not
         // where one is read. Refusing to open somebody's pack over a blurb 281 characters
         // long would be a bad trade for a field that is decoration; strict about what is
         // sent, tolerant about what arrives.
 
+    }
+
+    /// <summary>
+    /// Everything wrong with the mod config this pack carries.
+    ///
+    /// A pack problem rather than a mod problem: these name files, not mods, so there is no
+    /// single entry to drop and carry on with. A manifest that asks to write outside
+    /// <c>ModConfig/</c> is one to refuse whole.
+    /// </summary>
+    public IEnumerable<string> ModConfigProblems()
+    {
+        if (ModConfig is null || ModConfig.Count == 0) yield break;
+
+        foreach (var (file, patch) in ModConfig)
+        {
+            if (ModConfigFiles.PathProblem(file) is { } problem)
+                yield return $"Pack 'modConfig' cannot use '{file}': {problem}.";
+
+            else if (patch is null)
+                yield return $"Pack 'modConfig' entry '{file}' has no values under it.";
+        }
+
+        var size = JsonSerializer.Serialize(ModConfig, JsonOptions).Length;
+        if (size > MaxModConfig)
+            yield return $"Pack 'modConfig' is {size / 1024}KB, over the {MaxModConfig / 1024}KB "
+                         + "limit. It carries the values that make mods agree with each other, "
+                         + "not a copy of each mod's whole config file.";
     }
 
     /// <summary>Problems with individual mod entries, each naming the entry it is about.</summary>

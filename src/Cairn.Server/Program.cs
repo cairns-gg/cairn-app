@@ -311,6 +311,18 @@ public static class Program
 
         var server = await Prepare(packs, games, runtimes, http, id);
 
+        // The pack's mod config, on the side that mostly owns it: a good half of these
+        // settings are server-side rules — who may loot a grave, how fast food spoils, what
+        // view distance a client may ask for — and an admin following a pack should get the
+        // author's answer without being told to go and edit files under ~/.cairn.
+        //
+        // ModConfigFiles directly rather than PackData.BeforeLaunch, which also merges a
+        // login and applies hotkeys into clientsettings.json. There is no keyboard here and
+        // no session to carry, and writing a client settings file next to a dedicated server
+        // would be a file that nothing ever reads.
+        foreach (var change in ModConfigFiles.Apply(packs.DataDir(id), packs.Load(id).ModConfig))
+            Console.WriteLine($"  {change.Describe()}");
+
         var options = new LaunchOptions
         {
             DataPath = packs.DataDir(id),

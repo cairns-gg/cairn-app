@@ -891,8 +891,9 @@ internal static class Program
 
         // Carried in now, so a pack does not ask for a fresh login.
         var bound = new List<string>();
+        var config = new List<ModConfigChange>();
 
-        foreach (var dropped in packData.BeforeLaunch(id, bound))
+        foreach (var dropped in packData.BeforeLaunch(id, bound, config))
             Console.WriteLine($"no longer loading mods from {dropped} — this pack has its own");
 
         // The pack's hotkeys, for the ones this copy has no binding of its own for. Said
@@ -901,6 +902,12 @@ internal static class Program
         if (bound.Count > 0)
             Console.WriteLine($"bound {bound.Count} hotkey{(bound.Count == 1 ? "" : "s")} "
                               + $"from the pack: {string.Join(", ", bound)}");
+
+        // Every line of it, rather than a count: these are values that change how the game
+        // plays, in files belonging to other people's mods, and the ones Cairn declined to
+        // write are the half somebody has to be able to act on. The wording is
+        // ModConfigChange.Describe so both front ends say the same thing.
+        foreach (var change in config) Console.WriteLine(change.Describe());
 
         var proc = launcher.Launch(options);
         Console.WriteLine($"started pid {proc.Id}");

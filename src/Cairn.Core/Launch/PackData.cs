@@ -111,7 +111,15 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     /// calling the obvious overload would have launched without the pack's hotkeys and
     /// said nothing.
     /// </param>
-    public IReadOnlyList<string> BeforeLaunch(string id, ICollection<string>? bound = null)
+    /// <param name="config">
+    /// Receives what became of the mod config values the pack declares — both the ones
+    /// written and the ones left alone because somebody had changed them since. Optional for
+    /// the same reason and with the same caveat as <paramref name="bound"/>, and reporting
+    /// matters more here: this writes into files belonging to other people's mods, and half
+    /// of what it does is decline to.
+    /// </param>
+    public IReadOnlyList<string> BeforeLaunch(
+        string id, ICollection<string>? bound = null, ICollection<ModConfigChange>? config = null)
     {
         EnsureDataPath(id);
 
@@ -132,9 +140,20 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
         // manifest on disk is what the pack currently declares.
         try
         {
-            foreach (var code in ClientHotkeys.Apply(
-                         SettingsIn(store.DataDir(id)), store.Load(id).Keybinds))
+            var manifest = store.Load(id);
+
+            foreach (var code in ClientHotkeys.Apply(SettingsIn(store.DataDir(id)), manifest.Keybinds))
                 bound?.Add(code);
+
+            // Before the pack's own values go in, so what an author is later shown as their
+            // own change is not something Cairn wrote a moment earlier.
+            ModConfigFiles.Capture(store.DataDir(id));
+
+            // Runs whether or not the manifest declares any, because the record of what the
+            // pack last asked for has to be brought up to date when the answer is "nothing
+            // any more" — that is what stops a removed value being reported forever.
+            foreach (var change in ModConfigFiles.Apply(store.DataDir(id), manifest.ModConfig))
+                config?.Add(change);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
                                       or System.Text.Json.JsonException)
@@ -206,6 +225,12 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
 
         var played = ClientSession.ReadFrom(SettingsIn(store.DataDir(id)));
         if (!played.IsEmpty) played.Save(SessionPath);
+
+        // Here as well as on the way in, because the first launch of a pack is exactly the
+        // one where the mods' config files do not exist yet when it starts. This is the
+        // first moment they can be seen at all, and a baseline recorded now is what lets the
+        // Mod config tab tell an author's edits from what the mod ships.
+        ModConfigFiles.Capture(store.DataDir(id));
     }
 
     /// <summary>
