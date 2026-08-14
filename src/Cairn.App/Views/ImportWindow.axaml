@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.ImportWindow"
         x:DataType="vm:ImportViewModel"
-        Title="Add this pack?"
+        Title="{l:Tr import-title}"
         Width="580" Height="520"
         MinWidth="440" MinHeight="340"
         WindowStartupLocation="CenterOwner"
@@ -48,7 +49,7 @@
                        TextWrapping="Wrap" />
 
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Install as" FontSize="12" Opacity="0.7"
+                <TextBlock Grid.Column="0" Text="{l:Tr import-install-as}" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
                 <TextBox Grid.Column="1" Name="IdBox" Text="{Binding AsId}" />
             </Grid>
@@ -60,12 +61,12 @@
             <!-- Neither is preselected for a file, so the address a follow would use is
                  read before it is agreed to rather than after. -->
             <StackPanel IsVisible="{Binding CanChooseFollow}" Spacing="6">
-                <TextBlock Text="This pack belongs to someone" FontSize="12" Opacity="0.7" />
+                <TextBlock Text="{l:Tr import-belongs}" FontSize="12" Opacity="0.7" />
 
                 <RadioButton Name="FollowChoice" GroupName="FollowOrFork" FontSize="12"
                              IsChecked="{Binding FollowChosen, Mode=TwoWay}">
                     <StackPanel Spacing="2">
-                        <TextBlock Text="Follow it" FontSize="12" />
+                        <TextBlock Text="{l:Tr import-follow}" FontSize="12" />
                         <TextBlock Text="{Binding FollowNote}" FontSize="11" Opacity="0.7"
                                    TextWrapping="Wrap" />
                     </StackPanel>
@@ -74,7 +75,7 @@
                 <RadioButton Name="ForkChoice" GroupName="FollowOrFork" FontSize="12"
                              IsChecked="{Binding ForkChosen, Mode=TwoWay}">
                     <StackPanel Spacing="2">
-                        <TextBlock Text="Make it mine" FontSize="12" />
+                        <TextBlock Text="{l:Tr import-make-mine}" FontSize="12" />
                         <TextBlock Text="{Binding ForkNote}" FontSize="11" Opacity="0.7"
                                    TextWrapping="Wrap" />
                     </StackPanel>
@@ -82,14 +83,14 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Name="AddButton" Content="Add pack" Classes="accent" Padding="16,5"
+                <Button Name="AddButton" Content="{l:Tr import-add}" Classes="accent" Padding="16,5"
                         Click="OnAdd" IsEnabled="{Binding CanAdd}" />
-                <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
                         Click="OnCancel" IsCancel="True" />
             </StackPanel>
 
             <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                       Text="Nothing downloads yet — adding this creates the pack, and the mods arrive when you sync it." />
+                       Text="{l:Tr import-nothing-yet}" />
         </StackPanel>
 
         <Border BorderBrush="{DynamicResource VsBorderBrush}" BorderThickness="1"

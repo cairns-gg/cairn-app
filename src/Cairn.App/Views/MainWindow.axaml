@@ -48,14 +48,14 @@
                                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                             </Style>
                         </Grid.Styles>
-                        <Button Grid.Row="0" Grid.Column="0" Content="New pack"
+                        <Button Grid.Row="0" Grid.Column="0" Content="{l:Tr sidebar-new-pack}"
                                 Command="{Binding BeginCreateCommand}" />
-                        <Button Grid.Row="0" Grid.Column="1" Content="Import…"
+                        <Button Grid.Row="0" Grid.Column="1" Content="{l:Tr sidebar-import}"
                                 Command="{Binding BeginImportCommand}" />
                         <!-- Application-level, so it is separated from the pack actions
                              above rather than sitting among them. -->
                         <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                Content="Preferences"
+                                Content="{l:Tr sidebar-preferences}"
                                 Command="{Binding ShowPreferencesCommand}" />
                     </Grid>
                 </StackPanel>
@@ -94,7 +94,7 @@
                  see. -->
             <StackPanel IsVisible="{Binding ShowProvisioning}" Margin="40"
                         VerticalAlignment="Center" Spacing="16" MaxWidth="520">
-                <TextBlock Text="Getting things ready" Classes="heading" FontSize="22"
+                <TextBlock Text="{l:Tr provision-heading}" Classes="heading" FontSize="22"
                            FontWeight="SemiBold" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding ProvisionStatus}" FontSize="13" TextWrapping="Wrap"
                            HorizontalAlignment="Center" TextAlignment="Center" />
@@ -103,25 +103,25 @@
                              IsIndeterminate="{Binding ProvisionIndeterminate}" />
                 <TextBlock FontSize="11" Opacity="0.6" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center"
-                           Text="The game and its .NET runtime are several hundred megabytes; this only happens once per version." />
-                <Button Content="Cancel" HorizontalAlignment="Center"
+                           Text="{l:Tr provision-explain}" />
+                <Button Content="{l:Tr common-cancel}" HorizontalAlignment="Center"
                         Command="{Binding CancelProvisionCommand}" />
             </StackPanel>
 
             <!-- Import a shared pack -->
             <DockPanel IsVisible="{Binding ShowImport}" LastChildFill="True" Margin="20">
                 <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
-                    <TextBlock Text="Import a pack" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Text="{l:Tr quickimport-heading}" Classes="heading" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap"
-                               Text="Paste a shared pack, or a URL to one. Someone else's export reproduces their exact mod versions." />
+                               Text="{l:Tr quickimport-explain}" />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,12,0,0">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Import as" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="0" Text="{l:Tr quickimport-import-as}" VerticalAlignment="Center"
                                    FontSize="12" Opacity="0.7" />
                         <TextBox Grid.Column="1" Text="{Binding ImportAsId}"
-                                 PlaceholderText="(keep the author's name)" />
+                                 PlaceholderText="{l:Tr quickimport-keep-name}" />
                     </Grid>
 
                     <Border IsVisible="{Binding HasImportError}" Padding="10,8" CornerRadius="1"
@@ -130,31 +130,31 @@
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Import" Classes="accent" Padding="18,6"
+                        <Button Content="{l:Tr quickimport-import}" Classes="accent" Padding="18,6"
                                 Command="{Binding ImportPackCommand}" />
-                        <Button Content="Cancel" Padding="14,6"
+                        <Button Content="{l:Tr quickimport-cancel}" Padding="14,6"
                                 Command="{Binding CancelImportCommand}" />
                     </StackPanel>
                 </StackPanel>
 
                 <TextBox Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="NoWrap"
                          FontFamily="monospace" FontSize="12"
-                         PlaceholderText="Paste the pack JSON here, or a https:// URL" />
+                         PlaceholderText="{l:Tr quickimport-placeholder}" />
             </DockPanel>
 
             <!-- Nothing selected -->
             <TextBlock IsVisible="{Binding ShowEmpty}"
-                       Text="No pack selected. Click “New pack” to create one."
+                       Text="{l:Tr empty-no-pack}"
                        HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
 
             <!-- New pack form -->
             <StackPanel IsVisible="{Binding ShowCreate}" Margin="24" Spacing="12" MaxWidth="440"
                         HorizontalAlignment="Left" VerticalAlignment="Top">
-                <TextBlock Text="New pack" Classes="heading" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="{l:Tr newpack-heading}" Classes="heading" FontSize="22" FontWeight="SemiBold" />
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Name" FontSize="12" Opacity="0.7" />
-                    <TextBox Text="{Binding NewPackName}" PlaceholderText="Anego Server" />
+                    <TextBlock Text="{l:Tr newpack-name}" FontSize="12" Opacity="0.7" />
+                    <TextBox Text="{Binding NewPackName}" PlaceholderText="{l:Tr newpack-name-placeholder}" />
                     <!-- Shown, not asked for: the id is a folder name and travels in
                          shared bundles, but nobody should have to invent one. -->
                     <TextBlock FontSize="11" Opacity="0.55"
@@ -163,23 +163,23 @@
                 </StackPanel>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
+                    <TextBlock Text="{l:Tr newpack-game-version}" FontSize="12" Opacity="0.7" />
                     <ComboBox ItemsSource="{Binding GameVersionChoices}"
                               SelectedItem="{Binding NewPackGameVersion}"
                               HorizontalAlignment="Stretch"
-                              PlaceholderText="choose a version" />
-                    <TextBlock Text="Loading published versions…" FontSize="11" Opacity="0.55"
+                              PlaceholderText="{l:Tr newpack-version-placeholder}" />
+                    <TextBlock Text="{l:Tr newpack-loading-versions}" FontSize="11" Opacity="0.55"
                                IsVisible="{Binding LoadingVersions}" />
                     <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                               Text="Anything you do not already have is downloaded for you, along with the .NET runtime it needs." />
+                               Text="{l:Tr newpack-download-note}" />
                 </StackPanel>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Server to auto-join on launch (optional)"
+                    <TextBlock Text="{l:Tr newpack-connect}"
                                FontSize="12" Opacity="0.7" />
-                    <TextBox Text="{Binding NewPackConnect}" PlaceholderText="host:42420" />
+                    <TextBox Text="{Binding NewPackConnect}" PlaceholderText="{l:Tr newpack-connect-placeholder}" />
                     <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                               Text="Leave blank to start at the main menu — you can still join servers from there." />
+                               Text="{l:Tr newpack-connect-note}" />
                 </StackPanel>
 
                 <Border IsVisible="{Binding HasNewPackError}" Padding="10,8" CornerRadius="1"
@@ -188,9 +188,9 @@
                 </Border>
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="Create" Command="{Binding CreatePackCommand}"
+                    <Button Content="{l:Tr newpack-create}" Command="{Binding CreatePackCommand}"
                             Classes="accent" Padding="18,6" />
-                    <Button Content="Cancel" Command="{Binding CancelCreateCommand}" Padding="14,6" />
+                    <Button Content="{l:Tr newpack-cancel}" Command="{Binding CancelCreateCommand}" Padding="14,6" />
                 </StackPanel>
             </StackPanel>
 
@@ -228,10 +228,10 @@
                                 BorderThickness="1"
                                 BorderBrush="{DynamicResource VsBorderBrush}"
                                 Background="{DynamicResource VsSunkenBrush}">
-                            <TextBlock Text="unlisted" FontSize="10" Opacity="0.75" />
+                            <TextBlock Text="{l:Tr pack-unlisted}" FontSize="10" Opacity="0.75" />
                         </Border>
 
-                        <Button Content="Open" Padding="8,1" FontSize="11"
+                        <Button Content="{l:Tr pack-open-link}" Padding="8,1" FontSize="11"
                                 Command="{Binding Detail.OpenSharePageCommand}" />
                     </StackPanel>
 
@@ -278,7 +278,7 @@
                              game leaves the pack unplayable and its save held open, and the
                              alternative is Activity Monitor. -->
                         <Button Grid.Column="0"
-                                Content="Force quit…" Command="{Binding Detail.ForceQuitCommand}"
+                                Content="{l:Tr pack-force-quit}" Command="{Binding Detail.ForceQuitCommand}"
                                 IsVisible="{Binding Detail.CanForceQuit, FallbackValue=False}"
                                 Classes="accent" Padding="22,6" FontWeight="SemiBold" MinWidth="96"
                                 HorizontalAlignment="Left" />
@@ -363,7 +363,7 @@
                                     <TextBlock Grid.Column="0" Text="{Binding Detail.LockedNote}"
                                                FontSize="11" Opacity="0.75" TextWrapping="Wrap"
                                                VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Content="Unlock" Padding="12,3"
+                                    <Button Grid.Column="1" Content="{l:Tr pack-unlock}" Padding="12,3"
                                             FontSize="11"
                                             Command="{Binding Detail.UnlockModsCommand}" />
                                 </Grid>
@@ -382,7 +382,7 @@
                                     <TextBlock Grid.Column="0" Text="{Binding Detail.UnlockedNote}"
                                                FontSize="11" Opacity="0.75" TextWrapping="Wrap"
                                                VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Content="Lock again" Padding="12,3"
+                                    <Button Grid.Column="1" Content="{l:Tr pack-lock-again}" Padding="12,3"
                                             FontSize="11"
                                             IsVisible="{Binding Detail.CanRelock}"
                                             Command="{Binding Detail.LockModsCommand}" />
@@ -392,7 +392,7 @@
                             <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto"
                                   IsVisible="{Binding Detail.CanEditMods}">
                                 <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
-                                         PlaceholderText="Search ModDB to add a mod…"
+                                         PlaceholderText="{l:Tr mods-search-placeholder}"
                                          Margin="0,0,6,0" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                     <!-- Always the default button, not only before the first
@@ -400,10 +400,10 @@
                                          appeared, so typing a second search and pressing
                                          enter did nothing at all — the one moment the key is
                                          most obviously meant to search again. -->
-                                    <Button Content="Search"
+                                    <Button Content="{l:Tr mods-search}"
                                             Command="{Binding Detail.SearchCommand}"
                                             IsDefault="True" />
-                                    <Button Content="Clear"
+                                    <Button Content="{l:Tr mods-search-clear}"
                                             IsVisible="{Binding Detail.ShowingSearch}"
                                             Command="{Binding Detail.ClearSearchCommand}" />
                                 </StackPanel>
@@ -425,15 +425,15 @@
                                          "mod" is in the label because a followed pack also has a
                                          Check for updates beside Play, and that one is the whole
                                          pack from its author — the two pull opposite ways. -->
-                                    <Button Content="Check for mod updates"
+                                    <Button Content="{l:Tr mods-check-updates}"
                                             IsVisible="{Binding Detail.ShowModUpdateCheck}"
                                             Command="{Binding Detail.CheckUpdatesCommand}"
                                             Padding="10,3" FontSize="11" />
-                                    <Button Content="Update all mods" Classes="accent"
+                                    <Button Content="{l:Tr mods-update-all}" Classes="accent"
                                             IsVisible="{Binding Detail.AnyUpdates}"
                                             Command="{Binding Detail.UpdateAllCommand}"
                                             Padding="10,3" FontSize="11" />
-                                    <Button Content="← back to the pack"
+                                    <Button Content="{l:Tr mods-back}"
                                             IsVisible="{Binding Detail.ShowingSearch}"
                                             Command="{Binding Detail.ClearSearchCommand}"
                                             Padding="10,3" FontSize="11" />
@@ -493,17 +493,17 @@
                                                                IsVisible="{Binding IsDependency}"
                                                                FontSize="11" Opacity="0.55"
                                                                VerticalAlignment="Center" />
-                                                    <TextBlock Text="server-side"
+                                                    <TextBlock Text="{l:Tr mods-server-side}"
                                                                IsVisible="{Binding IsServerSide}"
                                                                FontSize="11" VerticalAlignment="Center"
                                                                Foreground="{DynamicResource VsWarningBrush}" />
                                                 </StackPanel>
 
-                                                <TextBlock Grid.Column="2" Text="downloading…" FontSize="11"
+                                                <TextBlock Grid.Column="2" Text="{l:Tr mods-downloading}" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
                                                            IsVisible="{Binding Downloading}" />
 
-                                                <TextBlock Grid.Column="2" Text="loading…" FontSize="11"
+                                                <TextBlock Grid.Column="2" Text="{l:Tr mods-loading}" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
                                                            IsVisible="{Binding LoadingReleases}" />
 
@@ -561,7 +561,7 @@
                                                     </StackPanel>
                                                 </Button>
 
-                                                <Button Grid.Column="4" Content="View" Padding="10,4"
+                                                <Button Grid.Column="4" Content="{l:Tr mods-view}" Padding="10,4"
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
                                                 <!-- Removing a dependency while the mod that
@@ -583,10 +583,10 @@
                                                     <TextBlock Grid.Column="0" FontSize="12"
                                                                VerticalAlignment="Center"
                                                                Text="{Binding RemovePrompt}" />
-                                                    <Button Grid.Column="1" Content="Remove" Classes="accent"
+                                                    <Button Grid.Column="1" Content="{l:Tr mods-remove}" Classes="accent"
                                                             Padding="12,3"
                                                             Command="{Binding ConfirmRemoveCommand}" />
-                                                    <Button Grid.Column="2" Content="Keep" Padding="12,3"
+                                                    <Button Grid.Column="2" Content="{l:Tr mods-keep}" Padding="12,3"
                                                             Command="{Binding CancelRemoveCommand}" />
                                                 </Grid>
                                             </Border>
@@ -646,7 +646,7 @@
                                                                TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
 
-                                                <Button Grid.Column="2" Content="View" Padding="10,4"
+                                                <Button Grid.Column="2" Content="{l:Tr mods-hit-view}" Padding="10,4"
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
 
@@ -655,13 +655,13 @@
                                                      this version, and the confirmation says the
                                                      rest — a second warning in the button only
                                                      made the column wider. -->
-                                                <Button Grid.Column="3" Content="Add"
+                                                <Button Grid.Column="3" Content="{l:Tr mods-hit-add}"
                                                         Classes="accent"
                                                         Padding="14,4" MinWidth="64"
                                                         IsVisible="{Binding !AlreadyInPack}"
                                                         Command="{Binding AddCommand}"
                                                         VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="3" Text="✓ in pack" FontSize="11"
+                                                <TextBlock Grid.Column="3" Text="{l:Tr mods-hit-in-pack}" FontSize="11"
                                                            IsVisible="{Binding AlreadyInPack}"
                                                            Foreground="{DynamicResource VsParchmentBrush}"
                                                            HorizontalAlignment="Center"
@@ -685,7 +685,7 @@
                                     VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,10,0,0" Spacing="12" MaxWidth="460" HorizontalAlignment="Left">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Display name" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-name}" FontSize="12" Opacity="0.7" />
                                 <TextBox x:Name="SettingsName"
                                          Text="{Binding Detail.EditName}"
                                          LostFocus="OnSettingsFieldLostFocus" />
@@ -694,12 +694,12 @@
                             <!-- Travels with the pack, so it is worth writing before
                                  sharing rather than after somebody asks what it is. -->
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Description" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-description}" FontSize="12" Opacity="0.7" />
                                 <TextBox x:Name="SettingsDescription"
                                          Text="{Binding Detail.EditDescription}"
                                          LostFocus="OnSettingsFieldLostFocus"
                                          AcceptsReturn="True" TextWrapping="Wrap" Height="64"
-                                         Watermark="What is this pack for, and who is it for?" />
+                                         Watermark="{l:Tr packsettings-description-watermark}" />
                                 <TextBlock Text="{Binding Detail.DescriptionRoom}" FontSize="11"
                                            Opacity="0.55" HorizontalAlignment="Right" />
                             </StackPanel>
@@ -711,7 +711,7 @@
                                 — so the control always shows the version the pack is on.
                             -->
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Game version" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-game-version}" FontSize="12" Opacity="0.7" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ComboBox x:Name="GameVersionChoice" MinWidth="150"
                                               IsEnabled="{Binding !Detail.IsCheckingVersion}"
@@ -743,7 +743,7 @@
                             -->
                             <StackPanel Spacing="6"
                                         IsVisible="{Binding Detail.HasOptimumPanel, FallbackValue=False}">
-                                <TextBlock Text="Optimised client" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-optimum}" FontSize="12" Opacity="0.7" />
 
                                 <Button x:Name="BuildOptimum"
                                         Content="{Binding Detail.BuildOptimumLabel}"
@@ -751,14 +751,14 @@
                                         Command="{Binding Detail.BuildOptimumCommand}"
                                         HorizontalAlignment="Left" Padding="12,5" />
 
-                                <Button x:Name="UseOptimum" Content="Use Optimum"
+                                <Button x:Name="UseOptimum" Content="{l:Tr packsettings-use-optimum}"
                                         IsVisible="{Binding Detail.CanUseOptimum}"
                                         Command="{Binding Detail.UseOptimumCommand}"
                                         HorizontalAlignment="Left" Padding="12,5" />
 
                                 <!-- Without this, running a modified client would be a
                                      decision nothing on screen could undo. -->
-                                <Button x:Name="UseStockGame" Content="Use the stock game"
+                                <Button x:Name="UseStockGame" Content="{l:Tr packsettings-use-stock}"
                                         IsVisible="{Binding Detail.IsUsingVariant}"
                                         Command="{Binding Detail.UseStockGameCommand}"
                                         HorizontalAlignment="Left" Padding="12,5" />
@@ -776,17 +776,17 @@
                                      cost has been paid and describing it again is noise. -->
                                 <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
                                            IsVisible="{Binding Detail.CanBuildOptimum}"
-                                           Text="Compiles a faster community build of the game on this machine. Takes a while and needs several GB." />
+                                           Text="{l:Tr packsettings-optimum-explain}" />
                             </StackPanel>
 
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Server to auto-join on launch"
+                                <TextBlock Text="{l:Tr packsettings-connect}"
                                            FontSize="12" Opacity="0.7" />
                                 <TextBox x:Name="SettingsConnect"
                                          Text="{Binding Detail.EditConnect}"
                                          LostFocus="OnSettingsFieldLostFocus" />
                                 <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                                           Text="Leave blank to start at the main menu — you can still join servers from there." />
+                                           Text="{l:Tr packsettings-connect-note}" />
                             </StackPanel>
 
                             <!--
@@ -800,21 +800,21 @@
                                 Delete is deliberately not beside it; it lives with the
                                 other destructive affordance in the sidebar.
                             -->
-                            <Button Content="Save" Classes="accent" HorizontalAlignment="Left"
+                            <Button Content="{l:Tr packsettings-save}" Classes="accent" HorizontalAlignment="Left"
                                     Command="{Binding Detail.SaveSettingsCommand}" Padding="18,6" />
 
                             <StackPanel Spacing="2">
-                                <TextBlock Text="Mods directory" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-mods-dir}" FontSize="12" Opacity="0.7" />
                                 <TextBlock Text="{Binding Detail.ModsDirectory}" FontSize="11" Opacity="0.6"
                                            TextWrapping="Wrap" />
                             </StackPanel>
 
             <StackPanel Spacing="4">
-                                <TextBlock Text="Worlds and settings" FontSize="12" Opacity="0.7" />
+                                <TextBlock Text="{l:Tr packsettings-worlds}" FontSize="12" Opacity="0.7" />
                                 <TextBlock Text="{Binding Detail.DataDirectory}" FontSize="11" Opacity="0.6"
                                            TextWrapping="Wrap" />
                                 <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                                           Text="This pack's saves and mod configs are its own. Created on first launch." />
+                                           Text="{l:Tr packsettings-worlds-explain}" />
                             </StackPanel>
 
                             <!-- A pack's data path is its own, so a world in the player's
@@ -823,10 +823,10 @@
                                  because a pack that already exists has no other way to it. -->
                             <StackPanel Spacing="6" IsVisible="{Binding Detail.HasWorldsToImport,
                                                                        FallbackValue=False}">
-                                <TextBlock Text="Bring in a world" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Text="{l:Tr packsettings-bring-world}" FontWeight="SemiBold" FontSize="13" />
                                 <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
-                                           Text="Copies a world out of your own Vintage Story install and into this pack, where its mods are. Your copy stays where it is." />
-                                <Button Content="Choose a world…" HorizontalAlignment="Left"
+                                           Text="{l:Tr packsettings-bring-world-explain}" />
+                                <Button Content="{l:Tr packsettings-choose-world}" HorizontalAlignment="Left"
                                         Command="{Binding Detail.ImportWorldsCommand}" />
                             </StackPanel>
 
@@ -834,12 +834,12 @@
 
                             <StackPanel Spacing="6"
                                         IsVisible="{Binding Detail.CanShareFile, FallbackValue=True}">
-                                <TextBlock Text="Share this pack" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Text="{l:Tr packsettings-share}" FontWeight="SemiBold" FontSize="13" />
                                 <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
-                                           Text="Writes one file others can import. With the lockfile included they get the exact versions you have." />
+                                           Text="{l:Tr packsettings-share-explain}" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="Export…" Command="{Binding Detail.ExportCommand}" />
-                                    <CheckBox Content="include exact versions"
+                                    <Button Content="{l:Tr packsettings-export}" Command="{Binding Detail.ExportCommand}" />
+                                    <CheckBox Content="{l:Tr packsettings-include-lock}"
                                               IsChecked="{Binding Detail.ExportIncludesLock}" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding Detail.ExportedPath}"
@@ -856,9 +856,9 @@
                                  else's pack would reach the next person as an unowned one. -->
                             <StackPanel Spacing="6"
                                         IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}">
-                                <TextBlock Text="Share this pack" FontWeight="SemiBold" FontSize="13" />
+                                <TextBlock Text="{l:Tr packsettings-share-follower}" FontWeight="SemiBold" FontSize="13" />
                                 <TextBlock FontSize="11" Opacity="0.65" TextWrapping="Wrap"
-                                           Text="This pack is someone else's — pass on its link rather than a copy, so it stays theirs and whoever you send it to keeps getting your author's updates." />
+                                           Text="{l:Tr packsettings-share-follower-explain}" />
                                 <TextBlock Text="{Binding Detail.ShareUrlLine}" FontSize="11"
                                            Opacity="0.8" TextWrapping="Wrap" />
                             </StackPanel>
@@ -871,7 +871,7 @@
                                 belongs in the confirmation, where it is read.
                             -->
                             <StackPanel Spacing="6">
-                                <Button Content="Delete pack" HorizontalAlignment="Left" Padding="14,5"
+                                <Button Content="{l:Tr packsettings-delete}" HorizontalAlignment="Left" Padding="14,5"
                                         Command="{Binding RequestDeleteCommand}" />
                             </StackPanel>
                         </StackPanel>
@@ -895,7 +895,7 @@
                                      that matter are the ones colliding. -->
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
                                     <TextBox Grid.Column="0" Text="{Binding Detail.HotkeySearch}"
-                                             PlaceholderText="Search by name, mod or key" />
+                                             PlaceholderText="{l:Tr hotkeys-search-placeholder}" />
                                     <!-- The count rides on the control you would use next,
                                          rather than in a banner above a list that is about
                                          to show you the same thing. -->
@@ -915,7 +915,7 @@
                                         <ProgressBar Grid.Column="0" Width="90" Height="6"
                                                      IsIndeterminate="True" VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="1" FontSize="12" VerticalAlignment="Center"
-                                                   Text="Reading the pack's mods…" />
+                                                   Text="{l:Tr hotkeys-reading}" />
                                     </Grid>
                                 </Border>
 
@@ -926,7 +926,7 @@
                  away by selecting another pack. -->
                             <TextBlock DockPanel.Dock="Bottom" FontSize="11" Opacity="0.6"
                                        TextWrapping="Wrap" Margin="0,8,0,0"
-                                       Text="Saved into the pack as you go, so anyone who imports it gets them. They fill in bindings a player has not set; they never replace one." />
+                                       Text="{l:Tr hotkeys-footer}" />
 
                             <!-- Says which nothing this is: a search that found none, or a
                                  pack with no collisions left in it. -->
@@ -984,21 +984,21 @@
                                                         <!-- Movement and the mouse are held back rather than
                                                              forbidden: an author moving Sit down off G has a
                                                              reason, and saying so first makes it a decision. -->
-                                                        <Button Content="Unlock" Command="{Binding UnlockCommand}"
+                                                        <Button Content="{l:Tr hotkeys-unlock}" Command="{Binding UnlockCommand}"
                                                                 IsVisible="{Binding ShowUnlock}"
-                                                                ToolTip.Tip="A control the player's hands know. Unlock it if you mean to move it." />
+                                                                ToolTip.Tip="{l:Tr hotkeys-unlock-tip}" />
 
                                                         <!-- The third answer to a collision, and often the right
                                                              one: five mods want P and four of them do not need
                                                              a key at all. -->
-                                                        <Button Content="Unbind" Command="{Binding UnbindCommand}"
+                                                        <Button Content="{l:Tr hotkeys-unbind}" Command="{Binding UnbindCommand}"
                                                                 IsVisible="{Binding CanEdit}"
                                                                 IsEnabled="{Binding !IsUnbound}"
-                                                                ToolTip.Tip="Leave this hotkey on no key at all." />
+                                                                ToolTip.Tip="{l:Tr hotkeys-unbind-tip}" />
 
-                                                        <Button Content="Reset" Command="{Binding ClearCommand}"
+                                                        <Button Content="{l:Tr hotkeys-reset}" Command="{Binding ClearCommand}"
                                                                 IsVisible="{Binding IsOverridden}"
-                                                                ToolTip.Tip="Forget the pack's choice and use whatever the mod ships." />
+                                                                ToolTip.Tip="{l:Tr hotkeys-reset-tip}" />
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -1134,10 +1134,10 @@
                             -->
                             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                                         Spacing="8" Margin="0,8,0,0">
-                                <Button Content="Clear" Command="{Binding Detail.ClearLogCommand}" />
-                                <Button Content="Game log"
+                                <Button Content="{l:Tr log-clear}" Command="{Binding Detail.ClearLogCommand}" />
+                                <Button Content="{l:Tr log-game-log}"
                                         Command="{Binding Detail.ShowGameLogCommand}" />
-                                <Button Content="Open logs folder"
+                                <Button Content="{l:Tr log-open-folder}"
                                         Command="{Binding Detail.OpenLogsFolderCommand}" />
 
                                 <!--
@@ -1147,9 +1147,9 @@
                                     public tracker yet, and a button that opens one would be
                                     sending people somewhere that cannot receive them.
                                 -->
-                                <Button Content="Copy diagnostics"
+                                <Button Content="{l:Tr log-copy-diagnostics}"
                                         Command="{Binding Detail.CopyDiagnosticsCommand}"
-                                        ToolTip.Tip="Version, platform, game installs, every mod in this pack and the log — copied for you to paste wherever you report it. Nothing is sent." />
+                                        ToolTip.Tip="{l:Tr log-copy-diagnostics-tip}" />
                             </StackPanel>
                             <ScrollViewer>
                                 <ItemsControl ItemsSource="{Binding Detail.Log}" Margin="4">

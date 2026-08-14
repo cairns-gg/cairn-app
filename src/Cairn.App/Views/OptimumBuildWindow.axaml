@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.OptimumBuildWindow"
         x:DataType="vm:OptimumBuildViewModel"
@@ -19,10 +20,10 @@
                     Spacing="8" Margin="0,14,0,0">
             <!-- One button that changes meaning: while it runs the only useful action is
                  stopping, and afterwards the only one is leaving. -->
-            <Button Name="StopButton" Content="Stop" Padding="16,5"
+            <Button Name="StopButton" Content="{l:Tr optimum-stop}" Padding="16,5"
                     IsVisible="{Binding IsRunning}"
                     Command="{Binding CancelCommand}" />
-            <Button Name="CloseButton" Content="Close" Padding="16,5"
+            <Button Name="CloseButton" Content="{l:Tr common-close}" Padding="16,5"
                     Classes="accent" IsVisible="{Binding IsFinished}"
                     Click="OnClose" IsCancel="True" />
         </StackPanel>
@@ -48,7 +49,7 @@
 
             <!-- Collapsed by default: the log is reassurance for anybody who wants it, not
                  the thing being communicated. A failure opens it, because then it is. -->
-            <Expander Name="LogExpander" Header="Show build log"
+            <Expander Name="LogExpander" Header="{l:Tr optimum-show-log}"
                       IsExpanded="{Binding LogExpanded}">
                 <ScrollViewer Name="LogScroller" Height="260"
                               HorizontalScrollBarVisibility="Auto"

@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.PackUpdateWindow"
         x:DataType="vm:PackUpdateViewModel"
-        Title="Update this pack"
+        Title="{l:Tr packupdate-title}"
         Width="640" Height="540"
         MinWidth="460" MinHeight="340"
         WindowStartupLocation="CenterOwner"
@@ -20,7 +21,7 @@
         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
             <TextBlock Text="{Binding Summary}" FontSize="14" FontWeight="SemiBold"
                        TextWrapping="Wrap" />
-            <TextBlock Text="Nothing has changed yet." FontSize="11" Opacity="0.6" />
+            <TextBlock Text="{l:Tr packupdate-nothing}" FontSize="11" Opacity="0.6" />
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
@@ -41,7 +42,7 @@
 
             <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
                        IsVisible="{Binding ShowChoices}"
-                       Text="Mods you added yourself are left alone. Applying updates the pack; the next Play installs it." />
+                       Text="{l:Tr packupdate-explain}" />
 
             <!--
                 Last, and off by default. Everything above reconciles two sets of changes;
@@ -49,7 +50,7 @@
                 the answers rather than among them.
             -->
             <CheckBox IsChecked="{Binding Reset, Mode=TwoWay}" FontSize="11" MinHeight="0"
-                      Content="Reset to the author's pack exactly, discarding my changes" />
+                      Content="{l:Tr packupdate-reset}" />
 
             <TextBlock Text="{Binding ResetWarning}" IsVisible="{Binding ResetRemovesAnything}"
                        FontSize="11" TextWrapping="Wrap"
@@ -58,7 +59,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="ApplyButton" Content="{Binding ApplyLabel}"
                         Classes="accent" Padding="16,5" Click="OnApply" />
-                <Button Name="CancelButton" Content="Cancel" Padding="16,5" Click="OnCancel" />
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5" Click="OnCancel" />
             </StackPanel>
         </StackPanel>
 
@@ -104,7 +105,7 @@
                                     -->
                                     <CheckBox IsVisible="{Binding CanSilence}"
                                               IsChecked="{Binding Silence, Mode=TwoWay}"
-                                              Content="stop asking about this one"
+                                              Content="{l:Tr packupdate-stop-asking}"
                                               FontSize="11" Opacity="0.75"
                                               MinHeight="0" Padding="6,0,0,0" />
                                 </StackPanel>

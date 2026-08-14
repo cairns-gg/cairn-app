@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.ShareWindow"
         x:DataType="vm:ShareViewModel"
@@ -21,7 +22,7 @@
                        IsVisible="{Binding IsSignedIn}" />
 
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="URL" FontSize="12" Opacity="0.7"
+                <TextBlock Grid.Column="0" Text="{l:Tr share-url}" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
                 <!-- Read-only once published: on this server the URL is the pack, so a
                      different slug is a second pack rather than a move. -->
@@ -37,12 +38,12 @@
                        Margin="78,0,0,0" />
 
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Text="Visibility" FontSize="12" Opacity="0.7"
+                <TextBlock Grid.Column="0" Text="{l:Tr share-visibility}" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
                 <StackPanel Grid.Column="1" Spacing="2">
-                    <RadioButton GroupName="visibility" Content="Public — listed in browse"
+                    <RadioButton GroupName="visibility" Content="{l:Tr share-public}"
                                  IsChecked="{Binding IsPublic}" FontSize="12" />
-                    <RadioButton GroupName="visibility" Content="Unlisted — anyone with the link"
+                    <RadioButton GroupName="visibility" Content="{l:Tr share-unlisted}"
                                  IsChecked="{Binding !IsPublic}" FontSize="12" />
                 </StackPanel>
             </Grid>
@@ -65,9 +66,9 @@
                 <StackPanel Spacing="4">
                     <TextBlock Text="{Binding ConnectWarning}" FontSize="11" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="12">
-                        <RadioButton GroupName="connect" Content="Strip it" FontSize="11"
+                        <RadioButton GroupName="connect" Content="{l:Tr share-strip}" FontSize="11"
                                      IsChecked="{Binding StripConnect}" />
-                        <RadioButton GroupName="connect" Content="Include it" FontSize="11"
+                        <RadioButton GroupName="connect" Content="{l:Tr share-include}" FontSize="11"
                                      IsChecked="{Binding !StripConnect}" />
                     </StackPanel>
                 </StackPanel>
@@ -91,7 +92,7 @@
                 <Button Name="PublishButton" Content="{Binding PublishLabel}"
                         Classes="accent" Padding="16,5" Click="OnPublish"
                         IsEnabled="{Binding CanPublish}" />
-                <Button Name="CancelButton" Content="Cancel" Padding="16,5" Click="OnCancel" />
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5" Click="OnCancel" />
             </StackPanel>
         </StackPanel>
 

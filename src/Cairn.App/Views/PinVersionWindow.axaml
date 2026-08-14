@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.PinVersionWindow"
         x:DataType="vm:PinVersionViewModel"
-        Title="Pin a version"
+        Title="{l:Tr pin-title}"
         Width="460" SizeToContent="Height"
         MinHeight="200" MaxHeight="560"
         CanResize="False"
@@ -24,7 +25,7 @@
             <Button Name="PinButton" Content="{Binding ConfirmLabel}" Classes="accent" Padding="16,5"
                     IsEnabled="{Binding HasReleases}"
                     Click="OnPin" />
-            <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+            <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
                     Click="OnCancel" IsCancel="True" />
         </StackPanel>
 
@@ -53,7 +54,7 @@
                              old dropdown looking like one of them. -->
                         <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
                                    IsVisible="{Binding IsTrackNewest}"
-                                   Text="Do not pin — offer this mod for update when you check." />
+                                   Text="{l:Tr pin-do-not}" />
 
                         <StackPanel Orientation="Horizontal" Spacing="10"
                                     IsVisible="{Binding !IsTrackNewest}">

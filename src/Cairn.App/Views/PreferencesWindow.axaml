@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -9,7 +10,7 @@
         Width="880" Height="620" MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         Icon="/Assets/cairn.ico"
-        Title="Cairn Preferences">
+        Title="{l:Tr prefs-title}">
 
     <DockPanel LastChildFill="True" Margin="16">
 
@@ -22,23 +23,23 @@
                 version this is, where things live, and the one setting that is not about
                 any particular pack.
             -->
-            <TabItem Header="Overview">
+            <TabItem Header="{l:Tr prefs-tab-overview}">
                 <StackPanel Margin="0,14,0,0" Spacing="16">
                     <!-- First within the tab, because it is what somebody opens this
                          looking for when reporting that something is broken. -->
                     <StackPanel Spacing="3">
-                        <TextBlock Classes="label" Text="VERSION" />
+                        <TextBlock Classes="label" Text="{l:Tr prefs-version}" />
                         <TextBlock Classes="value" Text="{Binding Version}" />
                     </StackPanel>
 
                     <StackPanel Spacing="3">
-                        <TextBlock Classes="label" Text="CAIRN HOME" />
+                        <TextBlock Classes="label" Text="{l:Tr prefs-home}" />
                         <TextBlock Classes="value" Text="{Binding CairnHome}" />
                         <TextBlock Classes="hint"
-                                   Text="Packs, game versions, runtimes and caches — all of it lives here." />
+                                   Text="{l:Tr prefs-home-explain}" />
 
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,5,0,0">
-                            <Button Name="MoveHomeButton" Content="Move…" Padding="12,4"
+                            <Button Name="MoveHomeButton" Content="{l:Tr prefs-move}" Padding="12,4"
                                     Command="{Binding MoveHomeCommand}"
                                     IsEnabled="{Binding CanMoveHome}" />
 
@@ -52,7 +53,7 @@
                                    TextWrapping="Wrap" MaxWidth="460"
                                    HorizontalAlignment="Left" Margin="0,4,0,0"
                                    IsVisible="{Binding HomeIsFromEnvironment}"
-                                   Text="CAIRN_HOME is set, and it outranks anything chosen here — so moving from this window would change nothing. Unset it to use this, or carry on moving the directory yourself and pointing CAIRN_HOME at it." />
+                                   Text="{l:Tr prefs-home-env-set}" />
 
                         <!-- A bar rather than a percentage in prose. This copies gigabytes
                              across a disk boundary and takes minutes; a line of text that
@@ -81,14 +82,14 @@
                     <Separator Margin="0,4" />
 
                     <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Left">
-                        <TextBlock Classes="label" Text="INTERFACE SIZE" />
+                        <TextBlock Classes="label" Text="{l:Tr prefs-uiscale}" />
 
                         <ComboBox MinWidth="140"
                                   ItemsSource="{Binding ScaleChoices}"
                                   SelectedItem="{Binding SelectedScale}" />
 
                         <TextBlock Classes="hint"
-                                   Text="Scales everything — text, buttons, rows and spacing — rather than only the font, so nothing ends up cramped inside a control that stayed the same size. Applies straight away and is remembered." />
+                                   Text="{l:Tr prefs-uiscale-explain}" />
                     </StackPanel>
                 </StackPanel>
             </TabItem>
@@ -97,15 +98,15 @@
                 Play only ever adds game versions and runtimes, so this is the one place
                 that takes them back.
             -->
-            <TabItem Header="Storage">
+            <TabItem Header="{l:Tr prefs-tab-storage}">
                 <DockPanel LastChildFill="True" Margin="0,10,0,0">
 
                     <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,14">
                         <TextBlock FontSize="13">
-                            <Run Text="Cairn is using" />
+                            <Run Text="{l:Tr prefs-using}" />
                             <Run Text="{Binding TotalSize}" FontWeight="SemiBold"
                                  Foreground="{DynamicResource VsParchmentBrush}" />
-                            <Run Text="in" />
+                            <Run Text="{l:Tr prefs-using-in}" />
                             <Run Text="{Binding CairnHome}" />
                         </TextBlock>
 
@@ -131,20 +132,20 @@
                                 </Style>
                             </Grid.Styles>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Game versions" />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Tr prefs-game-versions}" />
                             <TextBlock Grid.Row="0" Grid.Column="1" Classes="size" Text="{Binding GamesSize}" />
                             <TextBlock Grid.Row="0" Grid.Column="2" Classes="detail" Text="{Binding GamesDetail}" />
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text=".NET runtimes" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Tr prefs-runtimes}" />
                             <TextBlock Grid.Row="1" Grid.Column="1" Classes="size" Text="{Binding RuntimesSize}" />
                             <TextBlock Grid.Row="1" Grid.Column="2" Classes="detail" Text="{Binding RuntimesDetail}" />
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cached icons and details" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{l:Tr prefs-cache}" />
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="size" Text="{Binding CacheSize}" />
                             <TextBlock Grid.Row="2" Grid.Column="2" Classes="detail"
-                                       Text="re-fetched as needed" />
+                                       Text="{l:Tr prefs-cache-note}" />
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Packs" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="{l:Tr prefs-packs}" />
                             <TextBlock Grid.Row="3" Grid.Column="1" Classes="size" Text="{Binding PacksSize}" />
                             <TextBlock Grid.Row="3" Grid.Column="2" Classes="detail" Text="{Binding PacksDetail}" />
 
@@ -154,13 +155,13 @@
                                 author has just published and Cairn is still repeating the
                                 answer it remembered.
                             -->
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Remembered update checks"
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="{l:Tr prefs-update-checks}"
                                        IsVisible="{Binding HasUpdateChecks}" />
                             <TextBlock Grid.Row="5" Grid.Column="2" Classes="detail"
                                        IsVisible="{Binding HasUpdateChecks}"
                                        Text="{Binding UpdateChecksDetail}" />
                             <Button Grid.Row="5" Grid.Column="3" x:Name="ClearUpdateChecks"
-                                    Content="Forget" Padding="14,4"
+                                    Content="{l:Tr prefs-forget}" Padding="14,4"
                                     VerticalAlignment="Center"
                                     IsVisible="{Binding HasUpdateChecks}"
                                     IsEnabled="{Binding NotCleaningUp}"
@@ -174,7 +175,7 @@
                                 comes back after twenty minutes of compiling rather than
                                 on its own.
                             -->
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Client build trees"
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="{l:Tr prefs-build-trees}"
                                        IsVisible="{Binding HasBuildTrees}" />
                             <TextBlock Grid.Row="4" Grid.Column="1" Classes="size"
                                        IsVisible="{Binding HasBuildTrees}"
@@ -183,7 +184,7 @@
                                        IsVisible="{Binding HasBuildTrees}"
                                        Text="{Binding BuildsDetail, StringFormat='{}{0} — kept so a rebuild is quick'}" />
                             <Button Grid.Row="4" Grid.Column="3"
-                                    Content="Remove" Padding="14,4"
+                                    Content="{l:Tr prefs-build-remove}" Padding="14,4"
                                     VerticalAlignment="Center"
                                     IsVisible="{Binding HasBuildTrees}"
                                     IsEnabled="{Binding NotCleaningUp}"
@@ -195,7 +196,7 @@
                                 rows it acts on rather than sitting on one of them.
                             -->
                             <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="3"
-                                    Content="Clean up" Padding="14,4"
+                                    Content="{l:Tr prefs-clean-up}" Padding="14,4"
                                     VerticalAlignment="Center"
                                     IsEnabled="{Binding NotCleaningUp}"
                                     Command="{Binding CleanUpCommand}" />
@@ -214,7 +215,7 @@
 
                         <Separator Margin="0,4" />
 
-                        <TextBlock Text="Installed game versions" FontWeight="SemiBold" FontSize="13" />
+                        <TextBlock Text="{l:Tr prefs-installed-versions}" FontWeight="SemiBold" FontSize="13" />
                     </StackPanel>
 
                         <Border DockPanel.Dock="Top" Margin="0,0,0,10" Padding="10,8" CornerRadius="1"
@@ -234,14 +235,14 @@
                         <Grid ColumnDefinitions="*,16,*">
 
                             <DockPanel Grid.Column="0" LastChildFill="True">
-                                <TextBlock DockPanel.Dock="Top" Text="Installed" FontWeight="SemiBold"
+                                <TextBlock DockPanel.Dock="Top" Text="{l:Tr prefs-installed}" FontWeight="SemiBold"
                                            Margin="0,0,0,6" />
                                 <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,6,0,0">
                                     <StackPanel Orientation="Horizontal" Spacing="6"
                                                 IsVisible="{Binding !Games.ConfirmingRemove}">
-                                        <Button Content="Remove"
+                                        <Button Content="{l:Tr prefs-version-remove}"
                                                 Command="{Binding Games.RequestRemoveCommand}" />
-                                        <Button Content="Install its .NET"
+                                        <Button Content="{l:Tr prefs-install-runtime}"
                                                 Command="{Binding Games.InstallRuntimeCommand}" />
                                     </StackPanel>
 
@@ -253,14 +254,14 @@
                                             <TextBlock Text="{Binding Games.RemoveConsequence}"
                                                        FontSize="12" TextWrapping="Wrap" />
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Button Content="Remove" Classes="accent" Padding="14,4"
+                                                <Button Content="{l:Tr prefs-version-remove-confirm}" Classes="accent" Padding="14,4"
                                                         Command="{Binding Games.RemoveSelectedCommand}" />
-                                                <Button Content="Keep" Padding="14,4"
+                                                <Button Content="{l:Tr prefs-version-keep}" Padding="14,4"
                                                         Command="{Binding Games.CancelRemoveCommand}" />
                                             </StackPanel>
                                         </StackPanel>
                                     </Border>
-                                    <TextBlock Text="private .NET runtimes" FontSize="11" Opacity="0.6" />
+                                    <TextBlock Text="{l:Tr prefs-private-runtimes}" FontSize="11" Opacity="0.6" />
                                     <ItemsControl ItemsSource="{Binding Games.ManagedRuntimes}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="x:String">
@@ -280,7 +281,7 @@
                                                 <TextBlock Text="{Binding Needs}" FontSize="11" Opacity="0.7" />
                                                 <TextBlock Text="{Binding RuntimeLine}" FontSize="11"
                                                            Opacity="0.6" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="no matching .NET runtime — cannot start"
+                                                <TextBlock Text="{l:Tr prefs-no-runtime}"
                                                            IsVisible="{Binding RuntimeMissing}"
                                                            FontSize="11" Foreground="{DynamicResource VsErrorBrush}" />
                                             </StackPanel>
@@ -290,17 +291,17 @@
                             </DockPanel>
 
                             <DockPanel Grid.Column="2" LastChildFill="True">
-                                <TextBlock DockPanel.Dock="Top" Text="Available" FontWeight="SemiBold"
+                                <TextBlock DockPanel.Dock="Top" Text="{l:Tr prefs-available}" FontWeight="SemiBold"
                                            Margin="0,0,0,6" />
                                 <!-- Wraps rather than spills: these three together are wider than
                                      half the pane at the window's minimum width. -->
                                 <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                                            ItemSpacing="6" LineSpacing="6" Margin="0,6,0,0">
-                                    <Button Content="Install" Classes="accent"
+                                    <Button Content="{l:Tr prefs-install}" Classes="accent"
                                             Command="{Binding Games.InstallSelectedCommand}" />
-                                    <Button Content="Refresh list"
+                                    <Button Content="{l:Tr prefs-refresh}"
                                             Command="{Binding Games.RefreshCatalogCommand}" />
-                                    <CheckBox Content="pre-releases"
+                                    <CheckBox Content="{l:Tr prefs-prereleases}"
                                               IsChecked="{Binding Games.IncludePreReleases}" />
                                 </WrapPanel>
                                 <ListBox ItemsSource="{Binding Games.Available}"

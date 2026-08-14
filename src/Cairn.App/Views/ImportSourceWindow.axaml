@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.ImportSourceWindow"
         x:DataType="vm:ImportSourceViewModel"
-        Title="Import a pack"
+        Title="{l:Tr importsrc-title}"
         Width="620" MinWidth="480" MaxHeight="760"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -23,16 +24,16 @@
     <DockPanel Margin="16" LastChildFill="True">
 
         <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,10">
-            <TextBlock Text="Where is it coming from?" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{l:Tr importsrc-where}" FontSize="16" FontWeight="SemiBold" />
 
             <!-- Named rather than guessed from what gets typed. The first of the three is
                  the one most people want and the one that used not to exist. -->
             <RadioButton GroupName="Source" IsChecked="{Binding FromInstall}"
-                         Content="From your Vintage Story install" FontSize="12" />
+                         Content="{l:Tr importsrc-from-install}" FontSize="12" />
             <RadioButton GroupName="Source" IsChecked="{Binding FromLink}"
-                         Content="From a link" FontSize="12" />
+                         Content="{l:Tr importsrc-from-link}" FontSize="12" />
             <RadioButton GroupName="Source" IsChecked="{Binding FromPaste}"
-                         Content="From pasted text or a file" FontSize="12" />
+                         Content="{l:Tr importsrc-from-text}" FontSize="12" />
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,10,0,0">
@@ -47,7 +48,7 @@
                  pack arrives with a name, and is renamed on the dialog that shows it. -->
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
                   IsVisible="{Binding FromInstall}">
-                <TextBlock Grid.Column="0" Text="Call it" FontSize="12" Opacity="0.7"
+                <TextBlock Grid.Column="0" Text="{l:Tr importsrc-call-it}" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
                 <TextBox Grid.Column="1" Name="NameBox" Text="{Binding PackName}" />
                 <TextBlock Grid.Column="2" Text="{Binding Slug}" FontSize="11" Opacity="0.6"
@@ -56,21 +57,21 @@
 
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8"
                   IsVisible="{Binding !FromInstall}">
-                <TextBlock Grid.Column="0" Text="Import as" FontSize="12" Opacity="0.7"
+                <TextBlock Grid.Column="0" Text="{l:Tr importsrc-import-as}" FontSize="12" Opacity="0.7"
                            VerticalAlignment="Center" MinWidth="70" />
                 <TextBox Grid.Column="1" Name="IdBox" Text="{Binding AsId}"
-                         PlaceholderText="(keep the author's name)" />
+                         PlaceholderText="{l:Tr importsrc-keep-name}" />
             </Grid>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="ImportButton" Content="{Binding ImportLabel}" Classes="accent"
                         Padding="16,5" Click="OnImport" IsEnabled="{Binding CanImport}" />
-                <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
                         Click="OnCancel" IsCancel="True" />
             </StackPanel>
 
             <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                       Text="Nothing downloads yet — this creates the pack, and the mods arrive when you sync it." />
+                       Text="{l:Tr importsrc-nothing-yet}" />
         </StackPanel>
 
         <!-- One body per source, only one of them ever visible. -->
@@ -86,7 +87,7 @@
                 -->
                 <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
                     <TextBlock FontSize="12" TextWrapping="Wrap" Opacity="0.8"
-                               Text="Builds a pack from the mods you already have, at the versions you are running. Your own Vintage Story is left exactly as it is." />
+                               Text="{l:Tr importsrc-install-explain}" />
 
                     <TextBlock Text="{Binding InstallNote}" FontSize="12" TextWrapping="Wrap" />
 
@@ -180,22 +181,22 @@
             <!-- From a link -->
             <StackPanel IsVisible="{Binding FromLink}" Spacing="8">
                 <TextBlock FontSize="12" TextWrapping="Wrap" Opacity="0.8"
-                           Text="Fetches what the link names and shows you what is in it — who published it, and every mod and version it would install — before anything is taken." />
+                           Text="{l:Tr importsrc-link-explain}" />
                 <TextBox Name="UrlBox" Text="{Binding Url}"
-                         PlaceholderText="https://cairns.gg/someone/their-pack" />
+                         PlaceholderText="{l:Tr importsrc-link-placeholder}" />
             </StackPanel>
 
             <!-- From pasted text or a file -->
             <DockPanel IsVisible="{Binding FromPaste}" LastChildFill="True">
                 <TextBlock DockPanel.Dock="Top" FontSize="12" TextWrapping="Wrap" Opacity="0.8"
                            Margin="0,0,0,8"
-                           Text="Paste an exported pack, or the path to one on this machine. Something in your hand is different from a link, and imports directly." />
+                           Text="{l:Tr importsrc-text-explain}" />
                 <!-- A pack is a few hundred lines of JSON. Room to see that something
                      arrived, and to scroll it; the window is no taller than it needs. -->
                 <TextBox Name="PasteBox" Text="{Binding Text}" AcceptsReturn="True"
                          MinHeight="220" MaxHeight="360"
                          TextWrapping="NoWrap" FontFamily="monospace" FontSize="12"
-                         PlaceholderText="Paste the pack JSON here, or a path to a .cairn.json file" />
+                         PlaceholderText="{l:Tr importsrc-text-placeholder}" />
             </DockPanel>
         </Panel>
     </DockPanel>

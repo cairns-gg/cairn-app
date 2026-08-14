@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
         xmlns:vm="using:Cairn.App.ViewModels"
         x:Class="Cairn.App.Views.ConfirmWindow"
         x:DataType="vm:ConfirmViewModel"
@@ -22,7 +23,7 @@
                     Spacing="8" Margin="0,14,0,0">
             <Button Name="ConfirmButton" Content="{Binding ConfirmLabel}"
                     Classes="accent" Padding="16,5" Click="OnConfirm" />
-            <Button Name="CancelButton" Content="Cancel" Padding="16,5"
+            <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
                     Click="OnCancel" IsCancel="True" />
         </StackPanel>
 
