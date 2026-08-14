@@ -50,6 +50,26 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p>Cairn learns what a mod ships by remembering what it wrote the first time it ran, so <strong>for packs you already have, the list starts empty</strong> &mdash; play the pack once and it fills in. It says so rather than pretending nothing has changed. There is a <strong>Show all</strong> box for every setting Cairn can read, which is also the way to find a value you changed during a pack's very first session, before there was anything to compare it against.</p>
 
+<h2>Cairn speaks more than English</h2>
+
+<p>Every word the launcher says now comes from a translation file rather than being written into the program, and there is a <strong>Language</strong> setting in Preferences to pick one. It applies as you choose it &mdash; no restart, the window you are looking at changes under you.</p>
+
+<p>By default Cairn works it out: it follows <strong>the language your Vintage Story is set to</strong>, then your system's, then English. If you already play in Spanish, Cairn starts in Spanish without being told.</p>
+
+<p><strong>The translations are drafts, and they say so.</strong> English is complete. Spanish, French and both Portuguese variants cover the interface you see most &mdash; tabs, buttons, the mod list, the Mod config tab, Preferences &mdash; and are waiting on a professional reviewer before anyone should trust them. Anything not translated yet shows in English rather than going blank, so a half-finished language reads as half-finished.</p>
+
+<p>Five to choose from:</p>
+
+<table>
+  <tr><td>English</td><td>complete</td></tr>
+  <tr><td>Español, Français</td><td>draft, awaiting review</td></tr>
+  <tr><td>Português (Portugal), Português (Brasil)</td><td>draft, awaiting review</td></tr>
+</table>
+
+<p>The two Portuguese variants are separate files rather than one with regional patches, because they differ throughout rather than in a handful of words.</p>
+
+<p><strong>If you want to fix something, or add a language:</strong> the files are the same flat JSON every Vintage Story mod ships in <code>assets/&lt;domain&gt;/lang/</code>, so if you have written one for a mod you have written one of these. Point <code>CAIRN_LANG_DIR</code> at a folder holding your own <code>de.json</code> and Cairn reads it in preference to the built-in ones and offers it in the picker &mdash; no need to build anything.</p>
+
 <h2>Upgrading</h2>
 
-<p>Nothing to do. A pack that carries no mod config behaves exactly as it did.</p>
+<p>Nothing to do. A pack that carries no mod config behaves exactly as it did, and Cairn stays in English unless it finds a reason not to.</p>

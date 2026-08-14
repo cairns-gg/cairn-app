@@ -235,9 +235,21 @@ required:
   repeated lines collapsed — a failing render call logs the same line dozens of times a
   second and would otherwise bury the cause.
 - **Preferences** is two tabs. **Overview** opens first: the version, where Cairn keeps its
-  own files, and the interface scale. **Storage** is the disk-usage screen. On macOS the
-  application menu's **About Cairn** opens Overview — it used to land on the disk-usage
-  screen, which made it look like the wrong menu entry.
+  own files, the interface scale and the language. **Storage** is the disk-usage screen. On
+  macOS the application menu's **About Cairn** opens Overview — it used to land on the
+  disk-usage screen, which made it look like the wrong menu entry.
+
+  **Language** defaults to working it out: `CAIRN_LANG`, then what was chosen here, then
+  the language Vintage Story itself is set to, then the system's, then English. Following
+  the game is the useful step — somebody running an English Windows in German has already
+  said which they would rather read. Changing it applies immediately; nothing restarts.
+
+  Strings live in `assets/cairn/lang/<code>.json`, flat key against text, which is the
+  format every Vintage Story mod already ships — so a translator has written one of these
+  before. `CAIRN_LANG_DIR` reads loose files in preference to the built-in ones and offers
+  them in the picker, so a translation can be written and seen without building anything.
+  English is complete; Spanish, French and the two Portuguese variants are drafts pending
+  review, and anything untranslated falls back to English rather than to a blank.
 
   The version is read from the assembly rather than kept in a constant, so there is one
   place a version is decided — the tag a release was cut from — and a build nobody stamped

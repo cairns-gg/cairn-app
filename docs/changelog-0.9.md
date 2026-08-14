@@ -92,6 +92,40 @@ so rather than pretending nothing has changed. There is a **Show all** box for e
 Cairn can read, which is also the way to find a value you changed during a pack's very first
 session, before there was anything to compare it against.
 
+## Cairn speaks more than English
+
+Every word the launcher says now comes from a translation file rather than being written into
+the program, and there is a **Language** setting in Preferences to pick one. It applies as
+you choose it — no restart, the window you are looking at changes under you.
+
+By default Cairn works it out: it follows **the language your Vintage Story is set to**, then
+your system's, then English. If you already play in Spanish, Cairn starts in Spanish without
+being told.
+
+**The translations are drafts, and they say so.** English is complete. Spanish, French and
+both Portuguese variants cover the interface you see most — tabs, buttons, the mod list, the
+Mod config tab, Preferences — and are waiting on a professional reviewer before anyone should
+trust them. Anything not translated yet shows in English rather than going blank, so a
+half-finished language reads as half-finished.
+
+Five to choose from:
+
+| | |
+|---|---|
+| English | complete |
+| Español, Français | draft, awaiting review |
+| Português (Portugal), Português (Brasil) | draft, awaiting review |
+
+The two Portuguese variants are separate files rather than one with regional patches, because
+they differ throughout rather than in a handful of words.
+
+**If you want to fix something, or add a language:** the files are the same flat JSON every
+Vintage Story mod ships in `assets/<domain>/lang/`, so if you have written one for a mod you
+have written one of these. Point `CAIRN_LANG_DIR` at a folder holding your own `de.json` and
+Cairn reads it in preference to the built-in ones and offers it in the picker — no need to
+build anything.
+
 ## Upgrading
 
-Nothing to do. A pack that carries no mod config behaves exactly as it did.
+Nothing to do. A pack that carries no mod config behaves exactly as it did, and Cairn
+stays in English unless it finds a reason not to.
