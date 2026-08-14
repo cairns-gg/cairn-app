@@ -635,7 +635,7 @@ revision is, what a withdrawn pack keeps, and why the button's label carries the
 
 ## Licence
 
-Copyright 2026 Dave Smith, under the **PolyForm Strict License 1.0.0**. The full text is in
+Copyright 2026 Dave (Dizzy) Smith, under the **PolyForm Strict License 1.0.0**. The full text is in
 [LICENSE.md](LICENSE.md), which is what governs; this section says why.
 
 **Source-available, not open source.** The distinction is worth making rather than letting

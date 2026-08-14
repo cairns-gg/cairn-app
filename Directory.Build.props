@@ -39,8 +39,8 @@
     governs; this is metadata, not a grant.
   -->
   <PropertyGroup>
-    <Company>Dave Smith</Company>
-    <Copyright>Copyright 2026 Dave Smith. PolyForm Strict License 1.0.0.</Copyright>
+    <Company>Dave (Dizzy) Smith</Company>
+    <Copyright>Copyright 2026 Dave (Dizzy) Smith. PolyForm Strict License 1.0.0.</Copyright>
   </PropertyGroup>
 
   <!--

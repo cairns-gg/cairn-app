@@ -1,6 +1,6 @@
 # Licence
 
-Copyright 2026 Dave Smith.
+Copyright 2026 Dave (Dizzy) Smith.
 
 Cairn is **source-available, not open source**. The source is published so that anyone who
 runs it can read what it does — it installs software, writes to your game data and talks to
