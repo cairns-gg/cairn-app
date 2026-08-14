@@ -1,6 +1,6 @@
 {
-  "_comment": "Rascunho. Escrito por uma máquina e ainda não revisto por um falante de português. O que faltar recorre ao inglês. À espera de revisão profissional antes de ser anunciado.",
-  "_language-name": "Português",
+  "_comment": "Rascunho. Escrito por uma máquina e ainda não revisto por um falante de português europeu. O português do Brasil está em pt-br.json. O que faltar recorre ao inglês. À espera de revisão profissional antes de ser anunciado.",
+  "_language-name": "Português (Portugal)",
 
   "tab-mods": "Mods", "tab-settings": "Definições", "tab-hotkeys": "Atalhos",
   "tab-modconfig": "Config. de mods", "tab-log": "Registo",

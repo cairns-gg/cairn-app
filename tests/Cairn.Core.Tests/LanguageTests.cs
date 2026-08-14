@@ -298,11 +298,13 @@ public class PluralRuleTests
     // English and Spanish: only one is singular.
     [InlineData("en", 0, "other")] [InlineData("en", 1, "one")] [InlineData("en", 2, "other")]
     [InlineData("es", 0, "other")] [InlineData("es", 1, "one")]
-    // French and Brazilian-leaning Portuguese: zero is singular too.
+    // French and Brazilian Portuguese: zero is singular too.
     [InlineData("fr", 0, "one")] [InlineData("fr", 1, "one")] [InlineData("fr", 2, "other")]
-    [InlineData("pt", 0, "one")] [InlineData("pt", 1, "one")] [InlineData("pt", 2, "other")]
-    // European Portuguese disagrees with its own base language about zero.
-    [InlineData("pt-pt", 0, "other")] [InlineData("pt-pt", 1, "one")] [InlineData("pt-pt", 2, "other")]
+    [InlineData("pt-br", 0, "one")] [InlineData("pt-br", 1, "one")] [InlineData("pt-br", 2, "other")]
+    // European Portuguese does not, and bare pt follows it because pt.json is the European
+    // text — deliberately unlike CLDR, whose bare pt is Brazilian. See PluralForm.
+    [InlineData("pt", 0, "other")] [InlineData("pt", 1, "one")] [InlineData("pt", 2, "other")]
+    [InlineData("pt-pt", 0, "other")] [InlineData("pt-pt", 1, "one")]
     public void A_count_selects_the_form_its_language_wants(string code, int count, string expected)
     {
         Assert.Equal(expected, For(code).Plural("n", count));
