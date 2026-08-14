@@ -470,3 +470,66 @@ anonymous and cacheable.
 - Should the pack page show which revision a visitor already has? It would need the client
   to say, which means sending something about a local install to the server. Probably not
   worth what it costs.
+
+## Publishing the same thing twice
+
+
+A revision that differs from its predecessor in nothing but its number tells every follower
+there is an update and then has none for them, so Publish is refused when nothing has
+changed — in the Share window, where the button dims and says which revision it matches,
+and in `cairn-cli publish`.
+
+"Changed" is not only the bytes. Visibility and whether the server address is included are
+part of what was published, so flipping a pack from unlisted to public is a real change
+with nothing to show for it in the document. That is also why the window still opens on an
+unchanged pack: those choices are the reason to come back to one. `PublishRecord.WouldChange`
+is the whole rule, and both front-ends ask it.
+
+**The address is fixed once published.** On cairns the URL *is* the pack, so publishing the
+same one under a different slug does not move it — it creates a second pack and leaves the
+first live under the same name, which is how you end up with two identical-looking packs
+and no idea which is which. The Share window makes the field read-only after the first
+publish; `cairn-cli publish --slug` refuses and points at `unpublish`.
+
+**Withdrawing is not deleting, and it is not permanent.** `cairn-cli unpublish` takes the
+pack down; the row survives on the site and the URL answers 410 with a tombstone rather
+than 404, because these links live in chat scrollback and committed `pack.json` files
+indefinitely. Publishing again revives the pack at the same address — that is what
+withdrawing means for an author, as against an administrator withdrawing one, which the
+server refuses to let a republish undo and says so.
+
+Coming back has to survive the unchanged-check above, which would otherwise refuse the one
+publish that matters: the pack is down, and republishing it byte-for-byte is exactly how it
+returns. So a withdrawal clears the local publish record and keeps the URL, and the pack
+reads as **Withdrawn** rather than as one never shared — the launcher says the address is
+still yours and offers **Publish again**. The slug is editable once more, which is also how
+a pack gets renamed: unshare, then re-share under the new name.
+
+**A withdrawal made on the site never reaches your machine**, and that is the case the
+refusal got wrong for longer. Nothing pushes to a launcher, and share state is a local
+projection on purpose — asking the server whether a pack has changed, on every pack, to
+draw a button would be a great deal of network for a question that is almost always "no".
+So the belief is checked at the one moment it is about to block somebody: publishing a pack
+the machine thinks is unchanged first asks whether it is still being served. A 410 there
+clears the record and the publish goes through. Anything else — including a server that
+cannot be reached — leaves the refusal standing, because not knowing is not the same as
+knowing it is gone, and inventing a withdrawal would throw away the record on a flaky
+connection.
+
+An **unlisted** pack is marked as such beside its URL, and on its page on the site. The two
+are indistinguishable from outside, and which one a pack is decides whether passing the
+link around is sharing it or publishing it.
+
+That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
+answer to "this could be anything" is to say plainly what it turned out to be. An address
+pasted into the import box gets the same treatment, since a URL from a chat message tells
+you no more about its contents than one on a page. Text or a file you are holding imports
+directly.
+
+A name already in use is caught on the form rather than after agreeing — it is the one
+thing on that dialog that was fixable, and finding out afterwards means the dialog is gone
+and an error is in its place.
+
+The link reaches the app two ways, and both are wired: macOS hands a *running* instance the
+URL through an activation event, while Windows and Linux launch the handler afresh with it
+in `argv`. Handling either alone leaves half the platforms dead.

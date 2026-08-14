@@ -1,0 +1,167 @@
+# Getting a game to launch
+
+Cairn installs Vintage Story itself and, when the machine has no .NET, a private runtime for
+it. That covers the ordinary case in a paragraph — see the README. This is the rest: what
+happens when the game is a Flatpak, when somebody wants the optimised community client, and
+what Cairn will and will not run without being told to.
+
+## Private .NET runtimes
+
+Each game version pins its own .NET major — 1.21 needs .NET 8, 1.22 needs .NET 10 — and
+the game bundles no runtime. Rather than requiring several system-wide installs, Cairn
+can keep private copies and point the game at the right one:
+
+```
+cairn-cli runtimes                  what cairn manages
+cairn-cli runtimes install 8        fetch a private .NET 8 (sha512-verified)
+cairn-cli runtimes remove 8.0.29
+```
+
+or **Install its .NET** in Preferences → Storage, enabled for an installed game whose
+runtime is missing.
+
+They live in `~/.cairn/runtimes/<version>-<rid>/` and are selected automatically at
+launch. Demonstrated on a machine with only .NET 10 installed:
+
+```
+$ .../games/1.21.5/Vintagestory --version        # no private runtime
+You must install or update .NET to run this application.
+Framework: 'Microsoft.NETCore.App', version '8.0.0' (x64)
+
+$ DOTNET_ROOT=~/.cairn/runtimes/8.0.29-osx-x64 .../Vintagestory --version
+1.21.5
+```
+
+This is safe rather than invasive: hostfxr falls back to the machine's registered install
+when `DOTNET_ROOT` holds no usable framework, so a private runtime can rescue a version
+that would not otherwise start but cannot break one that already works. Sources are
+Microsoft's public release metadata (`releases-index.json` → per-channel `releases.json`),
+which publishes a SHA512 per file.
+
+## The game as a Flatpak
+
+On Linux the game is commonly installed from Flathub, and on an immutable distribution —
+Bazzite, Silverblue, SteamOS — that is often the only way it can be. Cairn finds such an
+install and uses the .NET that comes inside it:
+
+```
+$ cairn-cli diagnostics
+Game installs
+  system   1.22.6     X64  /var/lib/flatpak/app/at.vintagestory.VintageStory/current/active/files/extra/vintagestory
+
+$ cairn-cli launch mypack --dry-run
+using runtime .NET 10.0.8 (x64) at .../current/active/files/lib/dotnet
+```
+
+The runtime is the part that matters. Such a machine can have no system .NET at all, so
+without reading the one inside the deploy Cairn concludes the game cannot start — and then
+downloads a private runtime to sit beside the perfectly good one it did not look at.
+
+Three things about this are less obvious than they look:
+
+**It is an ordinary install in an unusual place.** `/app` in the sandbox is `files` in the
+deploy on the host, and the Flatpak unpacks the shipped tarball as extra data rather than
+building it — so the game is at `files/extra/vintagestory` and its .NET at `files/lib/dotnet`,
+and everything in between is exactly what the tarball contains. Nothing special is done to
+read it; the directory is simply added to the list of places `GameInstall.TryAt` is pointed at.
+
+**Nothing goes through `flatpak run`.** The sandbox grants the app almost no filesystem
+access — on a stock install, `xdg-pictures/Vintagestory` and some GTK config — so a pack
+directory in `~/.cairn` is invisible to the game inside it and `--addModPath` would name
+nothing. `flatpak run --filesystem=<dir>` can grant it, but there is no need: the apphost
+and every native library the game bundles resolve against the host, so Cairn launches the
+binary directly with `DOTNET_ROOT` pointed into the deploy, exactly as it does for a
+tarball install. The sandbox is stepped around rather than negotiated with. The cost of
+this choice is a host that lacks the game's shared libraries, where the Flatpak would have
+worked and a direct launch will not.
+
+**Detection reads paths, never `flatpak`.** The obvious approach — `flatpak info
+--show-location` — resolves user and system installs alike, but answers with the
+content-hashed deploy directory, whose name changes on every `flatpak update`. Cairn walks
+`<installation>/app/<id>/current/active` instead: symlinks Flatpak repoints as it updates,
+so a path already recorded keeps working. Installations are the two standard roots plus
+anything declared in `/etc/flatpak/installations.d`, which is how a Steam Deck puts
+Flatpaks on the SD card.
+
+`VINTAGE_STORY` still overrides all of it, and pointing it at a deploy's
+`files/extra/vintagestory` picks the bundled runtime up too — the runtime is found from the
+layout, not from having discovered the directory ourselves.
+
+## Optimised clients, built on the machine
+
+[Optimum](https://mods.vintagestory.at/optimum) is not a mod. It is a fork of the client,
+distributed as ~95 patches that have to be applied to a *decompiled* copy of the game and
+recompiled — a procedure well beyond what most players will do, and the reason it is far
+less used than its performance would justify. Cairn can do it for them:
+
+```
+cairn-cli optimum                   what it would cost, without doing any of it
+cairn-cli optimum build [--yes]     clone, decompile, patch, compile, install
+cairn-cli optimum clean             delete the build tree, keeping the client
+```
+
+or **Build Optimum…** in a pack's Settings tab, which shows the same warning and then a
+window with the live build log.
+
+The warning matters more than it looks. Everything else Cairn installs is a download
+measured in minutes; this is a **15–30 minute compile needing 4–6 GB**, so starting it
+without saying so would be a trick. It can be cancelled at any point, and cancelling
+leaves packs and existing installs untouched.
+
+Five things about this are deliberate:
+
+- **The client is built for the machine, not for the stock download.** On Apple Silicon
+  that means a native arm64 client, which is most of the point of building one — and it is
+  decided by the machine's architecture rather than by Cairn's own, so an x64 Cairn under
+  Rosetta does not quietly produce an emulated client. It also means the build can need a
+  .NET the stock install does not; see [Requirements](#requirements).
+- **Optimum's own scripts do the work.** Cairn drives `bootstrap`, `dotnet build` and the
+  platform packager rather than reimplementing them. A second implementation of a
+  95-patch bootstrap would only ever prove it agrees with itself, and its failure mode is
+  a client that looks right and is not.
+- **The build is pinned to a commit**, not a branch — Cairn builds the revision that was
+  actually tested, so somebody else's push cannot turn into a Cairn feature that stopped
+  working. The pin carries the game version with it, because Optimum targets exactly one
+  Vintage Story version at a time.
+- **Cairn cannot install the prerequisites**, so it names all of them at once with a
+  reason and a command each. Windows needs only Git (`bootstrap.ps1` implements every
+  fixup natively); Linux and macOS additionally need perl, python3, curl and tar. A .NET
+  SDK is *not* a prerequisite — Cairn fetches a private one the same way it fetches a
+  private runtime.
+- **The result is a variant, and a variant never runs by accident.** See below.
+
+## A modified client only runs because you said so
+
+A fork reports the version it was forked from, so it is indistinguishable from the real
+game by metadata alone. An Optimum build of 1.22.5 answers "is 1.22.5 installed?" exactly
+as the stock game does — and would then be handed silently to every 1.22.5 pack on the
+machine. That is ruled out by construction rather than by care:
+
+- a build marks itself with a `.cairn-variant` file, and no automatic lookup ever returns
+  one — only a choice recorded against a specific pack;
+- the marker names **which executable to run**. Optimum ships a copy of the vanilla client
+  plus its own launcher, byte-identical game binaries and all, and does its patching at
+  startup from that launcher. An install without this runs the stock game while every
+  message says otherwise — which is exactly what happened before the marker carried it;
+- a recorded choice stops applying when the pack's game version moves away from it. The
+  pack's mods were resolved against the version it *now* targets, so a client nothing in
+  it was chosen for is not an override, it is a mismatch;
+- the diagnostics report says which install a pack actually runs, and marks a variant
+  loudly. "The game is behaving oddly" is unanswerable without it.
+
+The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
+another full decompile. It is a few gigabytes idle between pin bumps, hence
+`optimum clean`.
+
+## What a downgrade actually risks
+
+Retargeting a pack at an older game version warns about its worlds, and the warning is
+worth reading rather than fearing. The game is more forgiving here than it first appears:
+opening a save a newer build touched produces a warning — `"versionmismatch-savegame": "Was
+opened in a newer version of the game, might not load correctly"` — and not a refusal.
+
+The one-way step is the *file format* upgrade, which prompts separately ("This world uses an
+old file format that needs upgrading … It is also suggested to first back up your savegame")
+and is keyed on `GameVersion.DatabaseVersion` rather than on the version string. That number
+is still `2` and has not moved once in this source history. So it is a rare event, and not
+something a patch-level change brings on.

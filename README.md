@@ -89,104 +89,24 @@ Monitor. The exit is recorded as
 asked-for, so it reads as a quit rather than as the crash its non-zero exit code would
 otherwise make of it.
 
-### Each pack has its own worlds, but you only log in once
+### Each pack keeps to itself
 
-`Saves/`, `ModConfig/`, `Playerdata/` and `ModsByServer/` all live under the data path, and
-the game gives no way to relocate them individually — only `Logs` has an override. So packs
-share a data path or they share nothing.
+A pack gets its own data path at `packs/<id>/data`, so `Saves/`, `ModConfig/` and
+`Playerdata/` belong to that pack and not to every pack at once — opening a world against
+the wrong mod set is a leading way to ruin it. Because the worlds are inside the pack,
+**deleting a pack deletes its worlds**, and the confirmation itemises exactly what goes.
 
-Sharing one meant every world was reachable from every pack whatever its mods, and opening a
-save against a different mod set is a leading way to ruin it. Packs therefore get their own
-data path at `packs/<id>/data`.
+Your login still follows you. Seven session keys are kept in `~/.cairn/session.json` and
+merged into each pack at launch, so signing in anywhere signs you in everywhere while
+keybinds and graphics settings stay per-pack. Cairn only ever *reads* your own Vintage Story
+data path; your ordinary saves stay where they are and plain Vintage Story goes on working.
 
-Login lives under the data path too, which is why packs used to share one. Cairn carries the
-session instead: seven keys inside `clientsettings.json` — `sessionkey`, `sessionsignature`,
-`playeruid`, `mptoken`, `entitlements`, `useremail`, `playername` — are recorded in
-`~/.cairn/session.json` and merged into each pack before it launches. Merging *named keys*
-rather than copying the file is the point: the login follows you, while keybinds, graphics
-settings and dialog positions stay per-pack.
+A pack also does not inherit the Mods folder of the install it came from — otherwise a pack
+quietly contains mods it never listed, and the pack you tested is not the pack somebody else
+gets.
 
-Whichever copy was written most recently wins, so signing in inside any pack reaches the
-others, and a session the game rotates mid-play is not lost. Cairn only ever **reads** your
-own Vintage Story data path — it seeds from it and never writes to it.
-
-Because a pack's data is inside the pack, **deleting a pack deletes its worlds**. The
-confirmation itemises what goes — worlds by name and size, mods by count and size — and
-says how much disk it hands back. A world made under a pack's mod set generally cannot be
-opened without it, so leaving one behind would strand data nothing can read.
-
-This applies to every pack, with no way to turn it off. Sharing a data path was briefly a
-per-pack choice, for packs made before this existed — which presented the failure mode above
-as a supported way to run. Those packs simply get a data path on their next launch instead.
-
-Worlds already in your own Vintage Story data path stay there. They are your ordinary saves,
-Cairn cannot know which pack — if any — they belong to, and claiming them would take them
-away from plain Vintage Story too. They remain reachable by launching the game normally.
-
-There is one moment when that first objection does not hold: importing an install. The worlds
-in that folder were played with the mods being imported, so the import dialog lists them with
-their sizes, and a pack's Settings tab offers the same at any time afterwards — which is the
-only route for a pack that already exists. **Copied, never moved.** Cairn does not write to
-your data path, which is what makes "your plain Vintage Story goes on working" a fact rather
-than an intention, and a world moved out of it would open nowhere but the pack that took it.
-Nothing is ticked by default: the mods are the pack and arrive with it, while a world is
-gigabytes and the pack works without one. A world the pack already has is refused rather than
-overwritten — that is somebody's months of evenings, not a file to clobber on a checkbox.
-
-`--addModPath` is still *additive* — the game always also searches `<install>/Mods` and
-`<dataPath>/Mods` — but with a per-pack data path that second directory is the pack's own, so
-nothing leaks between packs.
-
-### The mods folder a pack used to inherit
-
-That was not the whole story, and the gap produced the most-reported bug there has been:
-install a mod in plain Vintage Story, add the same mod to a pack, and the game loaded **two
-copies of it**.
-
-The game does not work out where to look for mods purely from `--dataPath`. It keeps the
-list in `clientsettings.json`, as absolute paths, written the first time it ran:
-
-```json
-"stringListSettings": {
-  "modPaths": ["Mods", "/Users/you/Library/Application Support/VintagestoryData/Mods"]
-}
-```
-
-A new pack's settings are seeded by copying the player's own, so their keybinds and graphics
-carry over — and that copy brought the second path with it. `--addModPath` adds to that list
-rather than replacing it, so every pack searched the player's personal Mods folder as well
-as its own. The game's own log is unambiguous:
-
-```
-Will search the following paths for mods:
-    ~/.cairn/games/1.22.6.app/Mods
-    ~/Library/Application Support/VintagestoryData/Mods     <- not this pack's
-    ~/.cairn/packs/anego/Mods
-```
-
-`ClientModPaths` rewrites the setting to name only the game's own Mods directory and this
-pack's. It runs when a pack's settings are seeded and again on **every launch**, because
-every pack made before this existed still carries the copied value and a launch is the only
-thing that reaches into one. What it drops is reported — "no longer loading mods from …" —
-since the first launch after the fix has fewer mods in it than the last one did, and that is
-not a thing to discover in-game.
-
-The setting is written even when the file or the key is absent, rather than left to the
-game's default. The default is not the pack's: the log above is from a pack that had never
-been played, launched with `--dataPath` pointing at an empty directory.
-
-`<install>/Mods` stays in the list. It holds VSSurvivalMod, VSEssentials and VSCreativeMod —
-the game itself — and it is not where mods are added by hand; the game ships a
-`do_not_add_mods_here.txt` in it saying so.
-
-Two smaller things fell out of the same investigation. `PackStore.Create` makes the data
-directory, which is how a pack records that it has its own data path — and `EnsureDataPath`
-was keyed off that same directory existing, so packs created through the launcher were never
-seeded at all. And a seeded copy carries the player's login: since the newest session on the
-machine wins by file timestamp, and a file copied a moment ago is the newest by
-construction, making a pack would have signed every other pack back in as whoever the shared
-data path last was. The seed is stripped of session keys, which arrive a moment later from
-Cairn's own record.
+[docs/pack-isolation.md](docs/pack-isolation.md) has the reasoning for both, and the
+most-reported bug that came of getting the second one wrong.
 
 ### Where all this lives, and moving it
 
@@ -265,16 +185,10 @@ required:
   this is a bigger change than it looks: it can move several mods at once, or leave one
   behind entirely.
 
-  A downgrade additionally warns about the pack's own worlds. The game is more forgiving
-  here than it first appears — opening a save that a newer build touched produces a
-  warning, `"versionmismatch-savegame": "Was opened in a newer version of the game, might
-  not load correctly"`, not a refusal. The one-way step is the *file format* upgrade, which
-  prompts separately ("This world uses an old file format that needs upgrading … It is
-  also suggested to first back up your savegame") and is keyed on
-  `GameVersion.DatabaseVersion` rather than the version string. That number is still `2`
-  and has not moved once in this source history, so it is a rare event and not something a
-  patch-level change brings on. Mods that ModDB could not be asked about are reported as
-  *could not be checked* rather than as working — a preview is worth nothing if it guesses.
+  A downgrade warns about the pack's worlds as well, and mods ModDB could not be asked
+  about are reported as *could not be checked* rather than as working — a preview is worth
+  nothing if it guesses. What a downgrade actually risks is in
+  [docs/game-installs.md](docs/game-installs.md); it is less than it sounds.
 - **Log** tab — what Cairn did, plus the game's own log. **Game log** pulls the tail of
   `client-main.log` into the pane and **Open logs folder** opens the directory, because
   when the game closes on startup the answer is in its log and nobody should have to know
@@ -447,16 +361,18 @@ private runtimes. **Clean up** there sweeps every version no pack targets, plus
 any private runtime left with nothing to run and the icon and mod-detail caches — one sweep
 for everything that comes back on its own.
 
-A client built from source is deliberately **not** in that sweep, and neither is its build
-tree. Everything else there is a download that Play would fetch again; a built client is
-twenty minutes of compiling, so on the same rule it would vanish the moment the last pack
-using it was retargeted, from a button offering to tidy up. The build tree is listed with
-its size and removed by its own **Remove**, which says what it costs to undo. It lists each item with its size and what it
-frees, and asks first. Nothing it removes is irreplaceable, which is what makes it safe to
-offer: Play downloads whatever a pack needs. A pack whose manifest will not load blocks the
-sweep rather than being treated as needing nothing. Nothing nags about a missing version: pressing **Play** fetches
-whatever the pack needs, so that screen exists mainly to give the disk space back — it also
-reports what Cairn is using and can empty its caches.
+It itemises what would go, with sizes, and asks first. Everything on that list is
+replaceable — Play downloads whatever a pack needs — which is what makes it safe to offer at
+all. A pack whose manifest will not load stops the sweep rather than being read as needing
+nothing.
+
+A client built from source is the exception, along with its build tree. On the same rule it
+would vanish the moment the last pack using it was retargeted, and it is twenty minutes of
+compiling rather than a download. The build tree has its own **Remove**, listed with its
+size, so getting rid of it is a decision rather than a side effect.
+
+Nothing nags about a missing version. Pressing **Play** fetches whatever the pack needs, so
+that screen is really there to give disk space back.
 
 Both list the machine's own install alongside Cairn's, because a pack launches from it
 whenever the version matches — a list that omitted it would disagree with what actually
@@ -522,153 +438,17 @@ one the installer created is removed, one it overwrote is restored byte for byte
 `*.lnk` files whose name contains "vintage" are considered, so nothing else on the desktop
 can be disturbed by an install that runs for several minutes.
 
-### Private .NET runtimes
+### When it is not that simple
 
-Each game version pins its own .NET major — 1.21 needs .NET 8, 1.22 needs .NET 10 — and
-the game bundles no runtime. Rather than requiring several system-wide installs, Cairn
-can keep private copies and point the game at the right one:
+Three cases have their own answers, in [docs/game-installs.md](docs/game-installs.md):
+a machine with **no .NET at all**, where Cairn fetches a private runtime and points only the
+game at it; the game installed as a **Flatpak**, common on Bazzite and SteamOS, where the
+runtime comes from inside the sandbox; and the **Optimum** community client, which Cairn can
+build from source on the machine — a twenty-minute compile that nothing starts without an
+explicit yes.
 
-```
-cairn-cli runtimes                  what cairn manages
-cairn-cli runtimes install 8        fetch a private .NET 8 (sha512-verified)
-cairn-cli runtimes remove 8.0.29
-```
-
-or **Install its .NET** in Preferences → Storage, enabled for an installed game whose
-runtime is missing.
-
-They live in `~/.cairn/runtimes/<version>-<rid>/` and are selected automatically at
-launch. Demonstrated on a machine with only .NET 10 installed:
-
-```
-$ .../games/1.21.5/Vintagestory --version        # no private runtime
-You must install or update .NET to run this application.
-Framework: 'Microsoft.NETCore.App', version '8.0.0' (x64)
-
-$ DOTNET_ROOT=~/.cairn/runtimes/8.0.29-osx-x64 .../Vintagestory --version
-1.21.5
-```
-
-This is safe rather than invasive: hostfxr falls back to the machine's registered install
-when `DOTNET_ROOT` holds no usable framework, so a private runtime can rescue a version
-that would not otherwise start but cannot break one that already works. Sources are
-Microsoft's public release metadata (`releases-index.json` → per-channel `releases.json`),
-which publishes a SHA512 per file.
-
-### The game as a Flatpak
-
-On Linux the game is commonly installed from Flathub, and on an immutable distribution —
-Bazzite, Silverblue, SteamOS — that is often the only way it can be. Cairn finds such an
-install and uses the .NET that comes inside it:
-
-```
-$ cairn-cli diagnostics
-Game installs
-  system   1.22.6     X64  /var/lib/flatpak/app/at.vintagestory.VintageStory/current/active/files/extra/vintagestory
-
-$ cairn-cli launch mypack --dry-run
-using runtime .NET 10.0.8 (x64) at .../current/active/files/lib/dotnet
-```
-
-The runtime is the part that matters. Such a machine can have no system .NET at all, so
-without reading the one inside the deploy Cairn concludes the game cannot start — and then
-downloads a private runtime to sit beside the perfectly good one it did not look at.
-
-Three things about this are less obvious than they look:
-
-**It is an ordinary install in an unusual place.** `/app` in the sandbox is `files` in the
-deploy on the host, and the Flatpak unpacks the shipped tarball as extra data rather than
-building it — so the game is at `files/extra/vintagestory` and its .NET at `files/lib/dotnet`,
-and everything in between is exactly what the tarball contains. Nothing special is done to
-read it; the directory is simply added to the list of places `GameInstall.TryAt` is pointed at.
-
-**Nothing goes through `flatpak run`.** The sandbox grants the app almost no filesystem
-access — on a stock install, `xdg-pictures/Vintagestory` and some GTK config — so a pack
-directory in `~/.cairn` is invisible to the game inside it and `--addModPath` would name
-nothing. `flatpak run --filesystem=<dir>` can grant it, but there is no need: the apphost
-and every native library the game bundles resolve against the host, so Cairn launches the
-binary directly with `DOTNET_ROOT` pointed into the deploy, exactly as it does for a
-tarball install. The sandbox is stepped around rather than negotiated with. The cost of
-this choice is a host that lacks the game's shared libraries, where the Flatpak would have
-worked and a direct launch will not.
-
-**Detection reads paths, never `flatpak`.** The obvious approach — `flatpak info
---show-location` — resolves user and system installs alike, but answers with the
-content-hashed deploy directory, whose name changes on every `flatpak update`. Cairn walks
-`<installation>/app/<id>/current/active` instead: symlinks Flatpak repoints as it updates,
-so a path already recorded keeps working. Installations are the two standard roots plus
-anything declared in `/etc/flatpak/installations.d`, which is how a Steam Deck puts
-Flatpaks on the SD card.
-
-`VINTAGE_STORY` still overrides all of it, and pointing it at a deploy's
-`files/extra/vintagestory` picks the bundled runtime up too — the runtime is found from the
-layout, not from having discovered the directory ourselves.
-
-### Optimised clients, built on the machine
-
-[Optimum](https://mods.vintagestory.at/optimum) is not a mod. It is a fork of the client,
-distributed as ~95 patches that have to be applied to a *decompiled* copy of the game and
-recompiled — a procedure well beyond what most players will do, and the reason it is far
-less used than its performance would justify. Cairn can do it for them:
-
-```
-cairn-cli optimum                   what it would cost, without doing any of it
-cairn-cli optimum build [--yes]     clone, decompile, patch, compile, install
-cairn-cli optimum clean             delete the build tree, keeping the client
-```
-
-or **Build Optimum…** in a pack's Settings tab, which shows the same warning and then a
-window with the live build log.
-
-The warning matters more than it looks. Everything else Cairn installs is a download
-measured in minutes; this is a **15–30 minute compile needing 4–6 GB**, so starting it
-without saying so would be a trick. It can be cancelled at any point, and cancelling
-leaves packs and existing installs untouched.
-
-Five things about this are deliberate:
-
-- **The client is built for the machine, not for the stock download.** On Apple Silicon
-  that means a native arm64 client, which is most of the point of building one — and it is
-  decided by the machine's architecture rather than by Cairn's own, so an x64 Cairn under
-  Rosetta does not quietly produce an emulated client. It also means the build can need a
-  .NET the stock install does not; see [Requirements](#requirements).
-- **Optimum's own scripts do the work.** Cairn drives `bootstrap`, `dotnet build` and the
-  platform packager rather than reimplementing them. A second implementation of a
-  95-patch bootstrap would only ever prove it agrees with itself, and its failure mode is
-  a client that looks right and is not.
-- **The build is pinned to a commit**, not a branch — Cairn builds the revision that was
-  actually tested, so somebody else's push cannot turn into a Cairn feature that stopped
-  working. The pin carries the game version with it, because Optimum targets exactly one
-  Vintage Story version at a time.
-- **Cairn cannot install the prerequisites**, so it names all of them at once with a
-  reason and a command each. Windows needs only Git (`bootstrap.ps1` implements every
-  fixup natively); Linux and macOS additionally need perl, python3, curl and tar. A .NET
-  SDK is *not* a prerequisite — Cairn fetches a private one the same way it fetches a
-  private runtime.
-- **The result is a variant, and a variant never runs by accident.** See below.
-
-### A modified client only runs because you said so
-
-A fork reports the version it was forked from, so it is indistinguishable from the real
-game by metadata alone. An Optimum build of 1.22.5 answers "is 1.22.5 installed?" exactly
-as the stock game does — and would then be handed silently to every 1.22.5 pack on the
-machine. That is ruled out by construction rather than by care:
-
-- a build marks itself with a `.cairn-variant` file, and no automatic lookup ever returns
-  one — only a choice recorded against a specific pack;
-- the marker names **which executable to run**. Optimum ships a copy of the vanilla client
-  plus its own launcher, byte-identical game binaries and all, and does its patching at
-  startup from that launcher. An install without this runs the stock game while every
-  message says otherwise — which is exactly what happened before the marker carried it;
-- a recorded choice stops applying when the pack's game version moves away from it. The
-  pack's mods were resolved against the version it *now* targets, so a client nothing in
-  it was chosen for is not an override, it is a mismatch;
-- the diagnostics report says which install a pack actually runs, and marks a variant
-  loudly. "The game is behaving oddly" is unanswerable without it.
-
-The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
-another full decompile. It is a few gigabytes idle between pin bumps, hence
-`optimum clean`.
+A modified client is only ever run because you said so: an install Cairn did not put there
+is used when you point a pack at it, and never picked up on its own.
 
 ## Running a server: cairn-server
 
@@ -848,65 +628,10 @@ the link keeps it attributed, and keeps whoever you sent it to getting the autho
 
 ### Publishing the same thing twice
 
-A revision that differs from its predecessor in nothing but its number tells every follower
-there is an update and then has none for them, so Publish is refused when nothing has
-changed — in the Share window, where the button dims and says which revision it matches,
-and in `cairn-cli publish`.
-
-"Changed" is not only the bytes. Visibility and whether the server address is included are
-part of what was published, so flipping a pack from unlisted to public is a real change
-with nothing to show for it in the document. That is also why the window still opens on an
-unchanged pack: those choices are the reason to come back to one. `PublishRecord.WouldChange`
-is the whole rule, and both front-ends ask it.
-
-**The address is fixed once published.** On cairns the URL *is* the pack, so publishing the
-same one under a different slug does not move it — it creates a second pack and leaves the
-first live under the same name, which is how you end up with two identical-looking packs
-and no idea which is which. The Share window makes the field read-only after the first
-publish; `cairn-cli publish --slug` refuses and points at `unpublish`.
-
-**Withdrawing is not deleting, and it is not permanent.** `cairn-cli unpublish` takes the
-pack down; the row survives on the site and the URL answers 410 with a tombstone rather
-than 404, because these links live in chat scrollback and committed `pack.json` files
-indefinitely. Publishing again revives the pack at the same address — that is what
-withdrawing means for an author, as against an administrator withdrawing one, which the
-server refuses to let a republish undo and says so.
-
-Coming back has to survive the unchanged-check above, which would otherwise refuse the one
-publish that matters: the pack is down, and republishing it byte-for-byte is exactly how it
-returns. So a withdrawal clears the local publish record and keeps the URL, and the pack
-reads as **Withdrawn** rather than as one never shared — the launcher says the address is
-still yours and offers **Publish again**. The slug is editable once more, which is also how
-a pack gets renamed: unshare, then re-share under the new name.
-
-**A withdrawal made on the site never reaches your machine**, and that is the case the
-refusal got wrong for longer. Nothing pushes to a launcher, and share state is a local
-projection on purpose — asking the server whether a pack has changed, on every pack, to
-draw a button would be a great deal of network for a question that is almost always "no".
-So the belief is checked at the one moment it is about to block somebody: publishing a pack
-the machine thinks is unchanged first asks whether it is still being served. A 410 there
-clears the record and the publish goes through. Anything else — including a server that
-cannot be reached — leaves the refusal standing, because not knowing is not the same as
-knowing it is gone, and inventing a withdrawal would throw away the record on a flaky
-connection.
-
-An **unlisted** pack is marked as such beside its URL, and on its page on the site. The two
-are indistinguishable from outside, and which one a pack is decides whether passing the
-link around is sharing it or publishing it.
-
-That dialog, and not the scheme, is what makes a link from a stranger safe to click: the
-answer to "this could be anything" is to say plainly what it turned out to be. An address
-pasted into the import box gets the same treatment, since a URL from a chat message tells
-you no more about its contents than one on a page. Text or a file you are holding imports
-directly.
-
-A name already in use is caught on the form rather than after agreeing — it is the one
-thing on that dialog that was fixable, and finding out afterwards means the dialog is gone
-and an error is in its place.
-
-The link reaches the app two ways, and both are wired: macOS hands a *running* instance the
-URL through an activation event, while Windows and Linux launch the handler afresh with it
-in `argv`. Handling either alone leaves half the platforms dead.
+Publishing an unchanged pack does nothing and says so, rather than minting a revision
+nobody asked for — what counts as a change is the manifest and the lock, not the moment you
+pressed the button. [docs/sharing.md](docs/sharing.md) covers the whole model: what a
+revision is, what a withdrawn pack keeps, and why the button's label carries the state.
 
 ## Licence
 
