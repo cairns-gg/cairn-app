@@ -22,6 +22,9 @@ public enum UnitScope
 /// Rendered here rather than in the front-end so it can be tested on a machine with no
 /// systemd on it, which is every machine this is developed on.
 /// </summary>
+/// <para>Not translated. A unit file is systemd's format rather than prose:
+/// Description= is what systemctl and journalctl print and what scripts match
+/// against, so it is as fixed as the keys around it.</para>
 public sealed record ServerUnit
 {
     /// <summary>Where the cairn-server binary lives, as systemd will have to find it.</summary>

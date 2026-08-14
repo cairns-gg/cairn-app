@@ -68,14 +68,13 @@ public static class ModDbUrls
     public static string? DownloadProblem(string? url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return "does not give a usable address";
+            return Lang.Get("url-unusable");
 
         if (uri.Scheme != Uri.UriSchemeHttps)
-            return $"arrives over {uri.Scheme} rather than https, where anybody on the "
-                   + "network path could replace it";
+            return Lang.Get("url-not-https", uri.Scheme);
 
         return DownloadHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase)
             ? null
-            : $"comes from {uri.Host}, which is not a host ModDB is known to serve mods from";
+            : Lang.Get("url-wrong-host", uri.Host);
     }
 }

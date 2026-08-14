@@ -77,34 +77,29 @@ public sealed record OptimumBuildPlan
 
         var lines = new List<string>
         {
-            $"Cairn will build Optimum {Source.Version} for Vintage Story {Source.GameVersion}"
-            + " on this machine.",
+            Lang.Get("optimum-plan-intro", Source.Version, Source.GameVersion),
             "",
-            "This is a compile, not a download:",
-            "  • typically 15–30 minutes, and longer on a slow machine",
-            $"  • about {Gb(RequiredBytes)} of disk while it runs",
-            $"  • about {Gb(InstalledBytes)} for the finished client, plus"
-            + $" {Gb(BuildTreeBytes)} of working tree kept for future rebuilds",
+            Lang.Get("optimum-plan-compile"),
+            "  • " + Lang.Get("optimum-plan-time"),
+            "  • " + Lang.Get("optimum-plan-disk", Gb(RequiredBytes)),
+            "  • " + Lang.Get("optimum-plan-sizes", Gb(InstalledBytes), Gb(BuildTreeBytes)),
         };
 
-        if (NeedsSdk)
-            lines.Add($"  • a .NET SDK ({Gb(SdkBytes)}) will be downloaded first");
+        if (NeedsSdk) lines.Add("  • " + Lang.Get("optimum-plan-sdk", Gb(SdkBytes)));
 
         lines.Add("");
-        lines.Add("It can be cancelled at any point without affecting your packs or"
-                  + " your existing game installs.");
+        lines.Add(Lang.Get("optimum-plan-cancellable"));
 
         if (!EnoughSpace)
         {
             lines.Add("");
-            lines.Add($"There is not enough free space: {Gb(FreeBytes)} available,"
-                      + $" about {Gb(RequiredBytes)} needed.");
+            lines.Add(Lang.Get("optimum-plan-no-space", Gb(FreeBytes), Gb(RequiredBytes)));
         }
 
         return string.Join("\n", lines);
     }
 
     private static string Gb(long bytes) => bytes < 0
-        ? "an unknown amount"
+        ? Lang.Get("optimum-plan-unknown-size")
         : $"{bytes / 1024.0 / 1024 / 1024:0.#} GB";
 }

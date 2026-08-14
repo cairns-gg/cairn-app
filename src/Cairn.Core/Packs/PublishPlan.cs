@@ -119,10 +119,10 @@ public sealed record PublishPlan(
         PackManifest manifest, PackLock? locked, IReadOnlyList<SyncStep>? syncFailures)
     {
         if (manifest.Mods.Count == 0)
-            return (false, "This pack has no mods.");
+            return (false, Lang.Get("share-no-mods"));
 
         if (locked is null)
-            return (false, "This pack has never been synced, so there is nothing to publish.");
+            return (false, Lang.Get("share-never-synced"));
 
         if (!string.Equals(locked.GameVersion, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
             return (false,

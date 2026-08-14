@@ -163,8 +163,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     {
                         fanoutReported = true;
                         Record(new SyncStep(SyncAction.Warned, pending.ModId,
-                            $"declares more dependencies than Cairn will follow "
-                            + $"({MaxDiscoveredDependencies}); the rest are ignored"));
+                            Lang.Get("sync-too-many-deps", MaxDiscoveredDependencies)));
                     }
 
                     continue;
@@ -215,7 +214,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             if (keep.Contains(name) || !ours.Contains(name)) continue;
 
             File.Delete(stray);
-            Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray), "no longer in pack"));
+            Record(new SyncStep(SyncAction.Removed, Path.GetFileNameWithoutExtension(stray),
+                Lang.Get("sync-no-longer-in-pack")));
         }
 
         newLock.Save(lockPath);
@@ -294,12 +294,11 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     // "no release marked for 1.23.0" is true and says nothing about the
                     // note sitting in the manifest that used to make this work.
                     var stale = !accepted && !string.IsNullOrWhiteSpace(want.AcceptedFor)
-                        ? $"; it was accepted for game {want.AcceptedFor}, and this pack has "
-                          + "moved to a different release series since"
-                        : "";
+                        ? Lang.Get("sync-stale-acceptance", want.AcceptedFor)
+                                                : "";
 
                     Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want,
-                        $"no release marked for game {manifest.GameVersion}{stale}")));
+                        Lang.Get("sync-no-release-marked", manifest.GameVersion, stale))));
                     return null;
                 }
             }
@@ -313,8 +312,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
             if (!lockApplies && release.Quality == MatchQuality.SameMinor)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    $"{release.ModVersion} is not marked for {manifest.GameVersion} exactly, "
-                    + "only for another release in that minor series"));
+                    Lang.Get("sync-same-minor", release.ModVersion, manifest.GameVersion)));
 
             // Every sync, and regardless of whether the lock applied — unlike the
             // same-minor note above, which is about a choice being made now. This one is
@@ -323,14 +321,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             // added and never again.
             if (release.Quality == MatchQuality.Unmarked)
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    $"{release.ModVersion} is marked for "
-                    + $"{DescribeVersions(release.GameVersions)}, not {manifest.GameVersion} — "
-                    + "installed because the pack accepts it, and it may misbehave"));
+                    Lang.Get("sync-unmarked", release.ModVersion,
+                                            DescribeVersions(release.GameVersions), manifest.GameVersion)));
 
             if (ModSides.WrongSide(release.Side, side))
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    $"ModDB marks this as {release.Side}-side; installing it "
-                    + $"{ModSides.Describe(side)} may do nothing"));
+                    Lang.Get("sync-wrong-side", release.Side, ModSides.Describe(side))));
 
             // Reduced to a name a pack may hold before it touches the filesystem: this
             // arrives from a remote API, and Path.Combine with "../../evil.zip" would
@@ -338,7 +334,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             if (ModFileName.Problem(release.FileName) is { } badName)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId,
-                    $"refusing a mod filename that {badName}: '{release.FileName}'"));
+                    Lang.Get("sync-bad-filename", badName, release.FileName)));
                 return null;
             }
 
@@ -357,7 +353,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             if (ModDbUrls.DownloadProblem(release.Url) is { } badUrl)
             {
                 Record(new SyncStep(SyncAction.Failed, release.ModId, Explain(want,
-                    $"refusing a download that {badUrl} — mods are code")));
+                    Lang.Get("sync-bad-url", badUrl))));
                 return null;
             }
 

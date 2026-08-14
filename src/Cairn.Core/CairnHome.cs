@@ -134,8 +134,7 @@ public static class CairnHome
         // from a Dock tile or a protocol handler is not a place anybody chose.
         if (!Path.IsPathFullyQualified(trimmed))
             return new HomeResolution(defaultRoot, HomeSource.Default,
-                $"{pointerPath} names a relative path ({trimmed}); it has to be absolute, "
-                + "so the default is being used.");
+                Lang.Get("home-pointer-relative", pointerPath, trimmed));
 
         return new HomeResolution(trimmed, HomeSource.Pointer, null);
     }
@@ -166,9 +165,7 @@ public static class CairnHome
         // Only for a pointer. The default not existing yet is an ordinary first run, and
         // CAIRN_HOME is set by somebody who is looking at what they set it to.
         if (resolution.Source is HomeSource.Pointer && !exists(resolution.Root))
-            return $"{PointerPath} points at {resolution.Root}, which is not there. "
-                   + "If that is a disk or a share, connect it; if the location has moved, "
-                   + "repoint or remove the file. Nothing has been read or written.";
+            return Lang.Get("home-pointer-missing", PointerPath, resolution.Root);
 
         return null;
     }

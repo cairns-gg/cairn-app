@@ -132,17 +132,17 @@ public sealed class InstallImport(ModDbClient moddb)
     {
         if (mod.Problem is not null || string.IsNullOrWhiteSpace(mod.ModId))
             return new ImportCandidate(mod, ImportVerdict.Unreadable, null,
-                mod.Problem ?? "it declares no mod id");
+                mod.Problem ?? Lang.Get("mods-declares-no-id"));
 
         if (disabled is not null && (disabled.Contains(mod.ModId) || disabled.Contains(mod.FileName)))
             return new ImportCandidate(mod, ImportVerdict.Disabled, null,
-                "switched off in Vintage Story");
+                Lang.Get("import-switched-off"));
 
         // Two zips of the same mod — an old copy left behind beside the one being used. The
         // first wins, because that is the order the game itself resolves them in.
         if (!claimed.Add(mod.ModId))
             return new ImportCandidate(mod, ImportVerdict.Duplicate, null,
-                $"another zip in the folder is already '{mod.ModId}'");
+                Lang.Get("import-duplicate-zip", mod.ModId));
 
         List<ResolvedRelease> compatible;
         try
@@ -160,7 +160,7 @@ public sealed class InstallImport(ModDbClient moddb)
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             return new ImportCandidate(mod, ImportVerdict.Unreachable, null,
-                "could not reach ModDB about this one");
+                Lang.Get("import-unreachable"));
         }
 
         var mine = mod.Version is null
@@ -178,20 +178,18 @@ public sealed class InstallImport(ModDbClient moddb)
         if (mod.Version is not null && Testifies(playedOn, gameVersion)
             && await AcceptedAsync(mod, gameVersion, ct).ConfigureAwait(false) is { } unmarked)
             return new ImportCandidate(mod, ImportVerdict.Accepted, unmarked,
-                $"{unmarked.ModVersion} is not marked for game {gameVersion}, and is being "
-                + "imported because you are running it");
+                Lang.Get("import-accepted", unmarked.ModVersion, gameVersion));
 
         var newest = compatible.FirstOrDefault();
 
         if (newest is null)
             return new ImportCandidate(mod, ImportVerdict.Incompatible, null,
-                $"nothing published for game {gameVersion}");
+                Lang.Get("import-nothing-published", gameVersion));
 
         return new ImportCandidate(mod, ImportVerdict.Newest, null,
             mod.Version is null
-                ? $"will install {newest.ModVersion}"
-                : $"{mod.Version} is not available for game {gameVersion} — "
-                  + $"will install {newest.ModVersion}");
+                ? Lang.Get("import-will-install", newest.ModVersion)
+                                : Lang.Get("import-will-install-instead", mod.Version, gameVersion, newest.ModVersion));
     }
 
     /// <summary>

@@ -53,7 +53,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
         var response = await http.PostAsync($"{Server}/api/auth/device", EmptyJson(), ct)
             .ConfigureAwait(false);
 
-        await ThrowIfFailed(response, "start signing in").ConfigureAwait(false);
+        await ThrowIfFailed(response, Lang.Get("cairns-doing-sign-in")).ConfigureAwait(false);
 
         return await response.Content.ReadFromJsonAsync<DeviceFlow>(ct).ConfigureAwait(false)
                ?? throw new CairnsException(Lang.Get("cairns-no-signin-method"));
@@ -96,7 +96,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
             // by naming a large interval.
             if (response.StatusCode == HttpStatusCode.PreconditionRequired)
             {
-                progress?.Report("waiting for the browser…");
+                progress?.Report(Lang.Get("cairns-waiting-for-browser"));
                 await Task.Delay(interval, ct).ConfigureAwait(false);
                 continue;
             }
@@ -197,7 +197,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
 
         var response = await http.SendAsync(request, ct).ConfigureAwait(false);
-        await ThrowIfFailed(response, "withdraw the pack").ConfigureAwait(false);
+        await ThrowIfFailed(response, Lang.Get("cairns-doing-withdraw")).ConfigureAwait(false);
     }
 
     // ---- plumbing ----

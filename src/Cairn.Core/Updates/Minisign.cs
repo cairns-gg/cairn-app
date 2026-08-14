@@ -54,10 +54,10 @@ public static class Minisign
     /// </summary>
     public static string? Problem(byte[] content, string signature, string publicKey)
     {
-        if (content is null || content.Length == 0) return "there is nothing to check";
+        if (content is null || content.Length == 0) return Lang.Get("sig-nothing-to-check");
 
         if (!TryReadPublicKey(publicKey, out var keyId, out var key))
-            return "the public key it would be checked against is not readable";
+            return Lang.Get("sig-key-unreadable");
 
         var lines = (signature ?? "").Split('\n')
             .Select(l => l.TrimEnd('\r'))
@@ -65,29 +65,29 @@ public static class Minisign
             .ToList();
 
         // Four lines, and the two comments are not optional in anything minisign writes.
-        if (lines.Count < 4) return "the signature is not a minisign signature";
+        if (lines.Count < 4) return Lang.Get("sig-not-minisign");
 
-        if (!TryDecode(lines[1], 10 + 64, out var first)) return "the signature is unreadable";
-        if (!TryDecode(lines[3], 64, out var global)) return "the signature is unreadable";
+        if (!TryDecode(lines[1], 10 + 64, out var first)) return Lang.Get("sig-unreadable");
+        if (!TryDecode(lines[3], 64, out var global)) return Lang.Get("sig-unreadable");
 
         var algorithm = System.Text.Encoding.ASCII.GetString(first, 0, 2);
-        if (algorithm is not (Legacy or Prehashed)) return "the signature is of a kind Cairn cannot check";
+        if (algorithm is not (Legacy or Prehashed)) return Lang.Get("sig-unknown-kind");
 
         // Bound to the key Cairn was built with, not merely to a well-formed signature.
         if (!first.AsSpan(2, 8).SequenceEqual(keyId))
-            return "the signature was made with a different key";
+            return Lang.Get("sig-wrong-key");
 
         var sig = first[10..];
 
         var message = algorithm == Prehashed ? Blake2b512(content) : content;
-        if (!Ed25519Verify(key, message, sig)) return "the signature does not match the content";
+        if (!Ed25519Verify(key, message, sig)) return Lang.Get("sig-mismatch");
 
         // The trusted comment is signed too, and this is the signature that says so. Read
         // from the line rather than reconstructed, since the prefix is part of the format
         // and not part of what is signed.
         const string prefix = "trusted comment: ";
         if (!lines[2].StartsWith(prefix, StringComparison.Ordinal))
-            return "the signature is not a minisign signature";
+            return Lang.Get("sig-not-minisign");
 
         var comment = System.Text.Encoding.UTF8.GetBytes(lines[2][prefix.Length..]);
         var trusted = new byte[sig.Length + comment.Length];
@@ -96,7 +96,7 @@ public static class Minisign
 
         return Ed25519Verify(key, trusted, global)
             ? null
-            : "the signature does not match the content";
+            : Lang.Get("sig-mismatch");
     }
 
     /// <summary>Whether this signature vouches for this content.</summary>

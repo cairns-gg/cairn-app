@@ -27,6 +27,10 @@ namespace Cairn.Core;
 ///   absolute path here is a person's name in a public issue tracker. <see cref="Redact"/>
 ///   puts them back to <c>~</c>.
 /// </summary>
+/// <para>Deliberately not translated. This exists to be copied into an issue, and its
+/// audience is whoever reads that issue rather than whoever pastes it — a report in a
+/// language the maintainer cannot read, with labels nobody can search for, is worth
+/// less to both of them. Same rule as the guards in <see cref="Lang"/>.</para>
 public static class Diagnostics
 {
     /// <summary>

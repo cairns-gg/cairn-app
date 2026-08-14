@@ -85,37 +85,28 @@ public static class OptimumPrereqs
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return
             [
-                new BuildTool("git", "cloning Optimum and applying its patches",
-                    "Install Git for Windows: https://git-scm.com/download/win"),
+                new BuildTool("git", Lang.Get("tool-git-for"),
+                        Lang.Get("tool-git-windows-hint")),
             ];
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return
             [
                 // Both arrive together, which is why the hint is one command rather than two.
-                new BuildTool("git", "cloning Optimum and applying its patches",
-                    "Run: xcode-select --install"),
-                new BuildTool("python3", "the build's JSON reads and two source fixup scripts",
-                    "Run: xcode-select --install"),
-                new BuildTool("perl", "rewriting decompiled sources during the build",
-                    "perl ships with macOS; a PATH without it needs it restoring"),
-                new BuildTool("curl", "downloading the Vintage Story client archive",
-                    "curl ships with macOS; a PATH without it needs it restoring"),
-                new BuildTool("tar", "unpacking the client archive",
-                    "tar ships with macOS; a PATH without it needs it restoring"),
+                new BuildTool("git", Lang.Get("tool-git-for"), Lang.Get("tool-xcode-hint")),
+                    new BuildTool("python3", Lang.Get("tool-python-for"), Lang.Get("tool-xcode-hint")),
+                    new BuildTool("perl", Lang.Get("tool-perl-for"), Lang.Get("tool-ships-with-macos", "perl")),
+                    new BuildTool("curl", Lang.Get("tool-curl-for"), Lang.Get("tool-ships-with-macos", "curl")),
+                    new BuildTool("tar", Lang.Get("tool-tar-for"), Lang.Get("tool-ships-with-macos", "tar")),
             ];
 
         return
         [
-            new BuildTool("git", "cloning Optimum and applying its patches",
-                "Install it with your package manager, e.g. apt install git"),
-            new BuildTool("python3", "the build's JSON reads and two source fixup scripts",
-                "Install it with your package manager, e.g. apt install python3"),
-            new BuildTool("perl", "rewriting decompiled sources during the build",
-                "Install it with your package manager, e.g. apt install perl"),
-            new BuildTool("curl", "downloading the Vintage Story client archive",
-                "Install it with your package manager, e.g. apt install curl"),
-            new BuildTool("tar", "unpacking the client archive",
+            new BuildTool("git", Lang.Get("tool-git-for"), Lang.Get("tool-package-manager", "git")),
+                new BuildTool("python3", Lang.Get("tool-python-for"), Lang.Get("tool-package-manager", "python3")),
+                new BuildTool("perl", Lang.Get("tool-perl-for"), Lang.Get("tool-package-manager", "perl")),
+                new BuildTool("curl", Lang.Get("tool-curl-for"), Lang.Get("tool-package-manager", "curl")),
+                new BuildTool("tar", Lang.Get("tool-tar-for"),
                 "Install it with your package manager, e.g. apt install tar"),
         ];
     }

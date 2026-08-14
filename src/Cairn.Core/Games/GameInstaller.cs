@@ -63,7 +63,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
             using (var watch = new CancellationTokenSource())
             {
                 var watching = DirectoryGrowth.ReportAsync(
-                    staging, $"unpacking Vintage Story {release.Version}", progress, watch.Token);
+                    staging, Lang.Get("install-unpacking", release.Version), progress, watch.Token);
 
                 try
                 {
@@ -76,7 +76,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
                 }
             }
 
-            progress?.Report(new InstallProgress(InstallPhase.Finishing, 0, 0, "arranging files"));
+            progress?.Report(new InstallProgress(InstallPhase.Finishing, 0, 0, Lang.Get("games-arranging")));
             Flatten(staging);
             MakeExecutable(staging);
 
@@ -130,13 +130,13 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
             Directory.CreateDirectory(target);
 
             progress?.Report(new InstallProgress(
-                InstallPhase.Extracting, 0, 0, $"running {release.Artifact.FileName}"));
+                InstallPhase.Extracting, 0, 0, Lang.Get("install-running", release.Artifact.FileName)));
 
             // /VERYSILENT means the installer reports nothing at all for several minutes,
             // so the tree it is writing is the only available sign of life.
             using var watch = new CancellationTokenSource();
             var watching = DirectoryGrowth.ReportAsync(
-                target, $"installing Vintage Story {release.Version}", progress, watch.Token);
+                target, Lang.Get("install-installing", release.Version), progress, watch.Token);
 
             // The installer rewrites two things that belong to the player rather than to
             // this copy: their Add/Remove Programs entry and their desktop shortcut.
@@ -227,7 +227,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         if (string.IsNullOrWhiteSpace(expectedMd5))
             throw new GameInstallException(Lang.Get("install-no-md5"));
 
-        progress?.Report(new InstallProgress(InstallPhase.Verifying, 0, 0, "checking md5"));
+        progress?.Report(new InstallProgress(InstallPhase.Verifying, 0, 0, Lang.Get("install-checking-md5")));
 
         await using var fs = File.OpenRead(path);
         var hash = await MD5.HashDataAsync(fs, ct).ConfigureAwait(false);

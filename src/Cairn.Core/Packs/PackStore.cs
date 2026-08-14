@@ -298,9 +298,9 @@ public sealed class PackStore
     /// <summary>Explains why an id is unusable, or null when it is fine.</summary>
     public string? DescribeIdProblem(string? id)
     {
-        if (string.IsNullOrWhiteSpace(id)) return "Enter a pack id.";
-        if (!IsValidId(id)) return "Use letters, digits, '-' and '_' only (max 64 characters).";
-        if (Exists(id!)) return $"A pack called '{id}' already exists.";
+        if (string.IsNullOrWhiteSpace(id)) return Lang.Get("pack-id-enter");
+        if (!IsValidId(id)) return Lang.Get("pack-id-rules");
+        if (Exists(id!)) return Lang.Get("pack-id-taken", id);
         return null;
     }
 

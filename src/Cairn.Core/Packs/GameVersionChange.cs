@@ -154,7 +154,7 @@ public static class GameVersionChange
                 // success: 404 (Not Found)") is transport detail in a row about a mod, so
                 // it goes to the log instead.
                 verdicts.Add(new ModVerdict(want.ModId, installed, null, ModOutcome.Unknown,
-                    "could not be checked — ModDB did not answer"));
+                    Lang.Get("versionchange-no-answer")));
                 continue;
             }
 
@@ -171,9 +171,9 @@ public static class GameVersionChange
         if (release is null)
             return want.Version is null
                 ? new ModVerdict(want.ModId, installed, null, ModOutcome.Unavailable,
-                    $"no release marked for {target}")
+                    Lang.Get("versionchange-no-release", target))
                 : new ModVerdict(want.ModId, installed, null, ModOutcome.PinUnavailable,
-                    $"pinned to {want.Version}, which has no release for {target}");
+                    Lang.Get("versionchange-pin-no-release", want.Version, target));
 
         // Approximate is worth reporting when the move causes it, and not otherwise. A
         // release marked for 1.22.3 is no more approximate at 1.22.5 than it already was at
@@ -189,7 +189,7 @@ public static class GameVersionChange
 
         if (release.Quality == MatchQuality.SameMinor && !alreadyApproximate)
             return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Approximate,
-                $"marked for another {Minor(target)} release, not {target}");
+                Lang.Get("versionchange-other-minor", Minor(target), target));
 
         // Still worth a word when it stays approximate — it is a standing fact about the
         // mod — but as part of "nothing happens" rather than as a consequence.
@@ -199,13 +199,13 @@ public static class GameVersionChange
 
         if (string.Equals(installed, release.ModVersion, StringComparison.OrdinalIgnoreCase))
             return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Unchanged,
-                $"already on the release for {target}{stays}");
+                Lang.Get("versionchange-already-on", target, stays));
 
         return new ModVerdict(want.ModId, installed, release.ModVersion, ModOutcome.Moves,
             (installed is null
                 // Naming the version either way: the row shows this note and nothing else,
                 // so "not installed yet" alone would hide what is about to be installed.
-                ? $"not installed yet; would install {release.ModVersion}"
+                ? Lang.Get("versionchange-would-install", release.ModVersion)
                 : $"{installed} → {release.ModVersion}") + stays);
     }
 

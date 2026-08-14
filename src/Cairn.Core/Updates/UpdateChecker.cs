@@ -70,7 +70,8 @@ public sealed record UpdateAvailable(string Version, ReleaseFile? File, string? 
         && target.Port == manifest.Port;
 
     /// <summary>Names the platform, so the button says what pressing it fetches.</summary>
-    public string ButtonLabel => File is null ? "Open cairns.gg" : $"Download for {File.Label}";
+    public string ButtonLabel =>
+            File is null ? Lang.Get("update-open-site") : Lang.Get("update-download-for", File.Label);
 }
 
 /// <summary>
@@ -350,7 +351,7 @@ public sealed class UpdateChecker(
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            return "it is not signed";
+            return Lang.Get("sig-not-signed");
         }
 
         return Minisign.Problem(body, signature, _publicKey);

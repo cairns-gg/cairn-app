@@ -55,9 +55,9 @@ public static class ModFileName
     /// message would make a mod nobody can install look like an attack.
     /// </summary>
     public static string? Problem(string? name) =>
-        !IsBare(name) ? "is not a plain file name"
+        !IsBare(name) ? Lang.Get("modfile-not-plain")
         : !HasModExtension(name)
-            ? $"is not a kind of mod file Cairn installs ({string.Join(", ", Extensions)})"
+            ? Lang.Get("modfile-wrong-kind", string.Join(", ", Extensions))
             : null;
 
     /// <summary>

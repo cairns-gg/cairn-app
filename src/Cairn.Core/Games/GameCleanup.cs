@@ -51,7 +51,7 @@ public sealed record CleanupPlan(
         var lines = new List<string>();
 
         foreach (var v in Versions)
-            lines.Add($"Vintage Story {v.Label} ({Bytes.Human(v.Bytes)})");
+            lines.Add(Lang.Get("cleanup-game-line", v.Label, Bytes.Human(v.Bytes)));
 
         foreach (var r in Runtimes)
             lines.Add($".NET {r.Label} ({Bytes.Human(r.Bytes)}) — nothing left needs it");
@@ -81,7 +81,7 @@ public static class GameCleanup
         // guess rather than quietly treating the pack as needing nothing.
         if (unreadable.Count > 0)
             return new CleanupPlan([], [], [],
-                Blocked: $"Cannot read {string.Join(", ", unreadable)}, so what is unused is unknown.");
+                Blocked: Lang.Get("cleanup-unreadable", string.Join(", ", unreadable)));
 
         return Plan(games, runtimes, used) with { BuildTrees = BuildTreesUnder(CairnPaths.BuildsRoot) };
     }

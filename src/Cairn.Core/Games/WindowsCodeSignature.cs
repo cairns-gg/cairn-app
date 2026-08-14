@@ -94,12 +94,12 @@ public static class WindowsCodeSignature
             // WinVerifyTrust already said the signature was good, so this is a malformed
             // or unreadable certificate rather than an unsigned file. Refused all the
             // same: a signature nothing can name the signer of is not one to act on.
-            return $"its code signature could not be read ({e.Message}).";
+            return Lang.Get("sign-unreadable", e.Message);
         }
 
         return IsExpectedSigner(signer)
             ? null
-            : $"it is signed by '{signer}' rather than by {ExpectedSigner}.";
+            : Lang.Get("sign-wrong-signer", signer, ExpectedSigner);
     }
 
     /// <summary>
@@ -191,11 +191,11 @@ public static class WindowsCodeSignature
             // wintrust.dll is a Windows component and its absence is not a normal state.
             // Refused rather than waved through: "the check could not run" must not mean
             // "the check passed" for the one thing standing in front of Process.Start.
-            return "its signature could not be checked — wintrust.dll is unavailable.";
+            return Lang.Get("sign-no-wintrust");
         }
         catch (EntryPointNotFoundException)
         {
-            return "its signature could not be checked — WinVerifyTrust is unavailable.";
+            return Lang.Get("sign-no-winverifytrust");
         }
         finally
         {
@@ -221,27 +221,23 @@ public static class WindowsCodeSignature
         // looking for a vendor who had stopped signing when what they have is a broken
         // download, so this says both.
         TrustENoSignature =>
-            $"it carries no valid embedded Authenticode signature (0x{hresult:X8}) — either "
-            + "it was never signed, or it was altered after signing, which Windows reports "
-            + "the same way here. A failed or tampered download looks like this.",
+            Lang.Get("sign-no-signature", $"0x{hresult:X8}"),
 
         // Kept although the case above is what a tampered file actually produces through
         // this provider: other callers and other providers do return it.
         TrustEBadDigest =>
-            $"its contents do not match its signature (0x{hresult:X8}) — it has been altered "
-            + "since it was signed.",
+            Lang.Get("sign-altered", $"0x{hresult:X8}"),
 
         TrustEExplicitDistrust =>
-            $"its signature is explicitly distrusted on this machine (0x{hresult:X8}).",
+            Lang.Get("sign-distrusted", $"0x{hresult:X8}"),
         TrustESubjectNotTrusted =>
-            $"its signature is not trusted on this machine (0x{hresult:X8}).",
+            Lang.Get("sign-untrusted", $"0x{hresult:X8}"),
         CertEUntrustedRoot =>
-            $"its signing certificate does not chain to a trusted root (0x{hresult:X8}).",
-        CertEExpired => $"its signing certificate has expired (0x{hresult:X8}).",
-        CertEChaining =>
-            $"its signing certificate chain could not be built (0x{hresult:X8}).",
+            Lang.Get("sign-no-chain", $"0x{hresult:X8}"),
+        CertEExpired => Lang.Get("sign-expired", $"0x{hresult:X8}"),
+        CertEChaining => Lang.Get("sign-chain-failed", $"0x{hresult:X8}"),
 
-        _ => $"Windows rejected its signature (0x{hresult:X8}).",
+        _ => Lang.Get("sign-rejected", $"0x{hresult:X8}"),
     };
 
     // DllImport rather than LibraryImport: the source generator behind the latter emits

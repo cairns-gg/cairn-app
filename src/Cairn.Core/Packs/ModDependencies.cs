@@ -193,13 +193,12 @@ public static class ModDependencies
         {
             // The case worth naming: the file is there and we cannot read it, so any
             // dependency it declares is one this pack will not install.
-            return Empty($"its modinfo.json could not be read, so any mods it requires are "
-                         + $"not installed ({e.Message})");
+            return Empty(Lang.Get("deps-modinfo-unreadable", e.Message));
         }
         catch (Exception e) when (e is IOException or InvalidDataException
                                       or UnauthorizedAccessException)
         {
-            return Empty($"its zip could not be opened ({e.Message})");
+            return Empty(Lang.Get("deps-zip-unopenable", e.Message));
         }
 
         static ModInfoSummary Empty(string? problem) => new(null, null, null, null, [], [], problem);
@@ -207,11 +206,9 @@ public static class ModDependencies
         // Phrased like the other problems here: what was not read, and what that costs.
         // The declared size is quoted when there is one, because "declares 1.1 GB" and
         // "kept coming" are different things to whoever has to look at the mod.
-        static string TooBig(long? declared) =>
-            "its modinfo.json is "
-            + (declared is { } n ? $"{Bytes.Human(n)}, " : "")
-            + "far larger than any real one, so it was not read — any mods it requires are "
-            + "not installed";
+        static string TooBig(long? declared) => declared is { } n
+            ? Lang.Get("deps-modinfo-too-big-size", Bytes.Human(n))
+            : Lang.Get("deps-modinfo-too-big");
     }
 
 

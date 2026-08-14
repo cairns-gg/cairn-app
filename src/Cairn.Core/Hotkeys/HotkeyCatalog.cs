@@ -25,9 +25,9 @@ public sealed record HotkeyEntry(
     /// <summary>What to call that on the row, or empty for an ordinary hotkey.</summary>
     public string ControlLabel => Kind switch
     {
-        HotkeyKind.MovementControls => "movement control",
-        HotkeyKind.MouseControls => "mouse button",
-        HotkeyKind.MouseModifiers => "click modifier",
+        HotkeyKind.MovementControls => Lang.Get("hotkeys-kind-movement"),
+            HotkeyKind.MouseControls => Lang.Get("hotkeys-kind-mouse"),
+            HotkeyKind.MouseModifiers => Lang.Get("hotkeys-kind-modifier"),
         _ => "",
     };
 

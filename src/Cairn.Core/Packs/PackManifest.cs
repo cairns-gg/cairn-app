@@ -228,28 +228,25 @@ public sealed class PackManifest
         {
             if (string.IsNullOrWhiteSpace(m.ModId))
             {
-                yield return (m, "it has no modid — ModDB pages that publish no mod id, "
-                                 + "such as a download listing or a modified client, cannot "
-                                 + "be installed into a pack");
+                yield return (m, Lang.Get("pack-mod-no-modid"));
                 continue;
             }
 
             if (!seen.Add(m.ModId))
             {
-                yield return (m, "it is listed more than once");
+                yield return (m, Lang.Get("pack-mod-duplicate"));
                 continue;
             }
 
             if (m.Version is not null && !GameVersions.IsPlausibleVersion(m.Version))
-                yield return (m, $"its version pin '{m.Version}' is not a bare version "
-                                 + "like \"1.3.0\"");
+                yield return (m, Lang.Get("pack-mod-bad-pin", m.Version));
         }
     }
 
     private static string Describe(PackMod mod, string problem) =>
         string.IsNullOrWhiteSpace(mod.ModId)
-            ? $"A mod entry cannot be used: {problem}."
-            : $"'{mod.ModId}' cannot be used: {problem}.";
+            ? Lang.Get("pack-mod-unusable-anon", problem)
+            : Lang.Get("pack-mod-unusable", mod.ModId, problem);
 
     /// <summary>
     /// Synchronous by design. Manifests are small local files, and callers include UI

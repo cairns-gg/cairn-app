@@ -110,11 +110,11 @@ public static class WindowsGameInstaller
 
         var detail = exitCode switch
         {
-            1 => "the installer could not start (exit 1)",
-            3 or 4 => $"the installer failed while preparing to install (exit {exitCode})",
-            6 => "the installer was terminated (exit 6)",
-            7 or 8 => $"the installer decided it could not continue (exit {exitCode})",
-            _ => $"the installer exited with code {exitCode}",
+            1 => Lang.Get("installer-could-not-start"),
+                3 or 4 => Lang.Get("installer-preparing-failed", exitCode),
+                6 => Lang.Get("installer-terminated"),
+                7 or 8 => Lang.Get("installer-cannot-continue", exitCode),
+                _ => Lang.Get("installer-exit-code", exitCode),
         };
 
         throw new GameInstallException(logPath is null

@@ -178,7 +178,7 @@ public sealed class OptimumProvisioner
         // archive of it. Keeping it doubled the cost of the feature for nothing.
         DiscardPackagerOutput(both);
 
-        progress?.Report(new OptimumStep("ready", $"Optimum {source.Version} is installed.", 1));
+        progress?.Report(new OptimumStep("ready", Lang.Get("optimum-installed", source.Version), 1));
         return install;
     }
 
@@ -187,11 +187,11 @@ public sealed class OptimumProvisioner
     {
         if (FindSdk() is { } existing)
         {
-            progress?.Report(new OptimumStep("sdk", $"using the .NET SDK at {existing.Root}", 0.02));
+            progress?.Report(new OptimumStep("sdk", Lang.Get("optimum-using-sdk", existing.Root), 0.02));
             return existing;
         }
 
-        progress?.Report(new OptimumStep("sdk", "downloading a .NET SDK", 0.02));
+        progress?.Report(new OptimumStep("sdk", Lang.Get("optimum-downloading-sdk"), 0.02));
 
         var rid = DotnetRuntimeInstaller.RidFor(HostArch());
         var installer = new DotnetRuntimeInstaller(_http, _runtimes);
@@ -234,7 +234,7 @@ public sealed class OptimumProvisioner
         OptimumSource source, IProgress<OptimumStep>? progress, IProgress<string> log,
         CancellationToken ct)
     {
-        progress?.Report(new OptimumStep("cloning", $"fetching Optimum {source.Version}", 0.08));
+        progress?.Report(new OptimumStep("cloning", Lang.Get("optimum-fetching", source.Version), 0.08));
 
         if (!Directory.Exists(Path.Combine(WorkingTree, ".git")))
         {
@@ -268,7 +268,7 @@ public sealed class OptimumProvisioner
         IProgress<string> log, CancellationToken ct)
     {
         progress?.Report(new OptimumStep("bootstrap",
-            "decompiling the game and applying Optimum's patches — this is the long part", 0.15));
+            Lang.Get("optimum-decompiling"), 0.15));
 
         var windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var script = Path.Combine(WorkingTree, "scripts", windows ? "bootstrap.ps1" : "bootstrap.sh");
@@ -286,7 +286,7 @@ public sealed class OptimumProvisioner
         DotnetSdk sdk, IProgress<OptimumStep>? progress, IProgress<string> log,
         CancellationToken ct)
     {
-        progress?.Report(new OptimumStep("building", "compiling the patched client", 0.6));
+        progress?.Report(new OptimumStep("building", Lang.Get("optimum-compiling"), 0.6));
 
         await ProcessRunner.RunOrThrowAsync(sdk.Executable,
                 ["build", "VintageStory.slnx", "-c", "Release", "--nologo"],
@@ -312,7 +312,7 @@ public sealed class OptimumProvisioner
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            log?.Report($"could not remove {PackagerOutput}: {e.Message}");
+            log?.Report(Lang.Get("optimum-could-not-remove", PackagerOutput, e.Message));
         }
     }
 

@@ -75,7 +75,7 @@ public static class InstalledMods
 
             mods.Add(new InstalledMod(
                 entry, name, Trimmed(info.ModId), Trimmed(info.Name), Trimmed(info.Version),
-                info.Problem ?? (info.ModId is null ? "it declares no mod id" : null)));
+                info.Problem ?? (info.ModId is null ? Lang.Get("mods-declares-no-id") : null)));
         }
 
         return new InstalledModScan(mods, ignored);

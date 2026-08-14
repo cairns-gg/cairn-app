@@ -91,7 +91,7 @@ public static class InstalledWorlds
         var target = Path.Combine(saves, world.Name + Extension);
 
         if (File.Exists(target))
-            return new WorldCopy(world, false, $"this pack already has a world called '{world.Name}'");
+            return new WorldCopy(world, false, Lang.Get("worldimport-already-here", world.Name));
 
         // Copied beside the target and moved, so a cancelled or failed copy never leaves a
         // half-written world for the game to open.

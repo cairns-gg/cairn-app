@@ -42,29 +42,28 @@ public static class ServerAddress
         if (string.IsNullOrWhiteSpace(address)) return null;   // absent is fine; that is most packs
 
         if (address.Length > MaxLength)
-            return $"is {address.Length} characters long, which is not an address.";
+            return Lang.Get("address-too-long", address.Length);
 
         if (address != address.Trim())
-            return "has whitespace around it.";
+            return Lang.Get("address-whitespace-around");
 
         if (address.Any(char.IsWhiteSpace) || address.Any(char.IsControl))
-            return "contains whitespace or control characters.";
+            return Lang.Get("address-control-characters");
 
         // The reason this type exists. A value beginning with '-' is read by the game's
         // parser as another option rather than as this one's value.
         if (address.StartsWith('-'))
-            return "starts with '-', which the game would read as another command-line "
-                   + "option rather than as an address.";
+            return Lang.Get("address-starts-with-dash");
 
         var (host, port) = Split(address);
 
         if (port is not null && (!int.TryParse(port, out var number) || number is < 1 or > 65535))
-            return $"has '{port}' where a port number should be.";
+            return Lang.Get("address-bad-port", port);
 
-        if (string.IsNullOrEmpty(host)) return "has no host in it.";
+        if (string.IsNullOrEmpty(host)) return Lang.Get("address-no-host");
 
         return Uri.CheckHostName(host) == UriHostNameType.Unknown
-            ? $"has '{host}' where a host name or IP address should be."
+            ? Lang.Get("address-bad-host", host)
             : null;
     }
 

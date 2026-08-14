@@ -98,7 +98,7 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
 
         await EnsureRuntimeAsync(server, progress, ct).ConfigureAwait(false);
 
-        progress?.Report(new ProvisionStep("ready", $"Vintage Story {server.Version} server", 1));
+        progress?.Report(new ProvisionStep("ready", Lang.Get("provision-server", server.Version), 1));
         return server;
     }
 
@@ -130,7 +130,7 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
         IProgress<ProvisionStep>? progress,
         CancellationToken ct)
     {
-        progress?.Report(new ProvisionStep("resolving", $"looking up Vintage Story {gameVersion}"));
+        progress?.Report(new ProvisionStep("resolving", Lang.Get("provision-looking-up-game", gameVersion)));
 
         var catalog = new GameCatalog(http);
         var releases = await catalog
@@ -172,7 +172,7 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
         if (HasRuntime(install)) return;
 
         var major = install.RequiredFramework.Major;
-        progress?.Report(new ProvisionStep("resolving", $"looking up .NET {major}"));
+        progress?.Report(new ProvisionStep("resolving", Lang.Get("provision-looking-up-dotnet", major)));
 
         var rid = DotnetRuntimeInstaller.RidFor(install.Architecture);
         var runtimeInstaller = new DotnetRuntimeInstaller(http, runtimes);

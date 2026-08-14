@@ -134,8 +134,8 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
     /// <summary>The host worth naming in a refusal, or a description when there is none.</summary>
     private static string Origin(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            ? uri.Scheme == Uri.UriSchemeHttps ? uri.Host : $"{uri.Host} over {uri.Scheme}"
-            : "an address that is not a URL";
+            ? uri.Scheme == Uri.UriSchemeHttps ? uri.Host : Lang.Get("url-host-over-scheme", uri.Host, uri.Scheme)
+            : Lang.Get("url-not-a-url");
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 

@@ -81,7 +81,7 @@ public sealed record PackContents(
             lines.Add($"{Mods} downloaded mod{(Mods == 1 ? "" : "s")} ({Bytes.Human(ModsBytes)})");
 
         if (DataBytes > 0)
-            lines.Add("its settings and mod configs");
+            lines.Add(Lang.Get("delete-settings-and-configs"));
 
         return lines;
     }

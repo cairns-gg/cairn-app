@@ -93,15 +93,14 @@ public static class HomeMigration
         // Writing a pointer that is then ignored is the worst outcome available: it looks
         // like it worked, nothing changes, and the reason is invisible.
         if (!string.IsNullOrWhiteSpace(environment))
-            return No("CAIRN_HOME is set and wins over the pointer file, so moving the data "
-                      + "would not change where Cairn looks. Unset it first.");
+            return No(Lang.Get("move-env-wins"));
 
         if (!Path.IsPathFullyQualified(to))
             return No($"{to} is a relative path; it has to be absolute.");
 
         to = Path.GetFullPath(to);
 
-        if (!Directory.Exists(from)) return No($"there is nothing at {from} to move");
+        if (!Directory.Exists(from)) return No(Lang.Get("move-nothing-at", from));
 
         if (PathsEqual(from, to)) return No($"{to} is already where Cairn keeps its state");
 
@@ -117,8 +116,7 @@ public static class HomeMigration
         if (Directory.Exists(to)
             && Directory.EnumerateFileSystemEntries(to)
                 .Any(e => !PathsEqual(e, CairnHome.PointerPath)))
-            return No($"{to} is not empty. Moving into it would mix Cairn's state with "
-                      + "whatever is already there — give it a directory of its own.");
+            return No(Lang.Get("move-not-empty", to));
 
         // The last directory is made, the ones above it are not. A mistyped volume is the
         // reason: /Volumes/Bigdsik/cairn would otherwise be created on the boot disk, which
@@ -126,15 +124,13 @@ public static class HomeMigration
         // would look like it had worked right up until the disk filled.
         var parent = Path.GetDirectoryName(to);
         if (!Directory.Exists(to) && (parent is null || !Directory.Exists(parent)))
-            return No($"{parent ?? to} is not there, so {to} cannot be created. "
-                      + "Only the last directory is created — check the path above it.");
+            return No(Lang.Get("move-parent-missing", parent ?? to, to));
 
         // A server holding a socket is a server with files open, on a root about to be
         // copied out from under it.
         var running = RunningServers(from);
         if (running.Count > 0)
-            return No($"a server is running ({string.Join(", ", running)}). Stop it first — "
-                      + "copying a root while something is writing to it copies half of it.");
+            return No(Lang.Get("move-server-running", string.Join(", ", running)));
 
         var (files, links, bytes) = Measure(from);
 
