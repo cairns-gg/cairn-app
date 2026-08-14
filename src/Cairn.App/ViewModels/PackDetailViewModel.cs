@@ -100,7 +100,7 @@ public partial class SearchHitViewModel(
 /// Everything you can do to one pack. Held by MainViewModel and rebuilt when the
 /// selection changes.
 /// </summary>
-public partial class PackDetailViewModel : ViewModelBase
+public partial class PackDetailViewModel : ViewModelBase, IDisposable
 {
     private readonly PackStore _store;
     private readonly ModDbClient _moddb;
@@ -370,13 +370,31 @@ public partial class PackDetailViewModel : ViewModelBase
     /// </summary>
     public const int HotkeysTab = 2;
 
+    /// <summary>
+    /// Where the Mod config tab sits, so opening it re-reads the files. It has to be a read
+    /// on every visit rather than once: the values it shows are ones somebody just changed
+    /// in game, and the whole use of the tab is alt-tabbing out of a session to carry them.
+    /// </summary>
+    public const int ModConfigTab = 3;
+
     partial void OnSelectedTabChanged(int value)
     {
         // Leaving the tab abandons a capture in progress, rather than swallowing the next
         // keypress somewhere else entirely.
-        if (value != HotkeysTab) { CancelHotkeyCapture(); return; }
+        if (value != HotkeysTab) CancelHotkeyCapture();
 
-        _ = LoadHotkeysAsync();
+        if (value == HotkeysTab) _ = LoadHotkeysAsync();
+
+        else if (value == ModConfigTab)
+        {
+            LoadModConfig();
+            WatchModConfig();
+        }
+
+        // Only while the tab is showing. Nothing else in the window reads these files, and a
+        // watcher per pack running for the life of the app would be watching a hundred-odd
+        // files to update a list nobody is looking at.
+        else StopWatchingModConfig();
     }
 
     partial void OnShowingSearchChanged(bool value)
@@ -2392,8 +2410,9 @@ public partial class PackDetailViewModel : ViewModelBase
             // launch has fewer mods in it than the last one" is not something to discover
             // in-game.
             var bound = new List<string>();
+            var config = new List<ModConfigChange>();
 
-            foreach (var dropped in _packData.BeforeLaunch(Id, bound))
+            foreach (var dropped in _packData.BeforeLaunch(Id, bound, config))
                 _log($"no longer loading mods from {dropped} — this pack has its own");
 
             // A keyboard that changes behaviour without saying so is alarming in a way a
@@ -2402,6 +2421,12 @@ public partial class PackDetailViewModel : ViewModelBase
             if (bound.Count > 0)
                 _log($"bound {bound.Count} hotkey{(bound.Count == 1 ? "" : "s")} from the pack: "
                      + string.Join(", ", bound));
+
+            // Every line, not a count. These change how the game plays, they are written
+            // into files belonging to other people's mods, and the ones left alone are what
+            // somebody needs to see to know why the pack is not behaving as its author's
+            // copy does. Worded by Core so the CLI says the same thing.
+            foreach (var change in config) _log(change.Describe());
 
             var options = new LaunchOptions
             {
@@ -2937,6 +2962,362 @@ public partial class PackDetailViewModel : ViewModelBase
             IsBusy = false;
             ReloadMods();
         }
+    }
+
+    // ---- Mod config ----
+
+    /// <summary>
+    /// The mod settings this pack could carry, filtered by the search box.
+    ///
+    /// Two mods often need a line in one of their config files before they work together;
+    /// the author sorts that out once, in game, and without somewhere to put the answer
+    /// everybody who installs the pack finds out the hard way. This is that somewhere —
+    /// <see cref="ModConfigSurvey"/> works out what they changed, and
+    /// <see cref="ModConfigFiles"/> puts it back on everybody else's machine.
+    /// </summary>
+    public ObservableCollection<ModConfigRowViewModel> ModConfigSettings { get; } = [];
+
+    /// <summary>Every row the survey returned. <see cref="ModConfigSettings"/> is the visible part.</summary>
+    private readonly List<ModConfigRowViewModel> _allModConfig = [];
+
+    /// <summary>True while the rows are being built from the pack, rather than ticked.</summary>
+    private bool _adoptingModConfig;
+
+    [ObservableProperty] public partial string ModConfigSearch { get; set; } = "";
+
+    /// <summary>
+    /// Every readable setting rather than only the changed ones.
+    ///
+    /// The way out of the one thing the baseline cannot see: a value changed during the very
+    /// first session was already in the file before anything observed it, so it never reads
+    /// as changed. An author who knows they moved it needs to be able to find it anyway.
+    /// </summary>
+    [ObservableProperty] public partial bool ShowAllSettings { get; set; }
+
+    partial void OnModConfigSearchChanged(string value) => RefreshModConfigFilter();
+
+    /// <summary>
+    /// A filter over rows already read, not a reason to read them again.
+    ///
+    /// It was a reload at first, and that was wrong twice over: it silently unticked whatever
+    /// somebody had just chosen — and, because ticking saves, wrote that to the pack — and it
+    /// left the tab unable to tell "nothing has changed" from "this pack's mods have written
+    /// nothing at all", which are opposite things to say to somebody.
+    /// </summary>
+    partial void OnShowAllSettingsChanged(bool value) => RefreshModConfigFilter();
+
+    /// <summary>
+    /// Reads the pack's config files and builds the rows.
+    ///
+    /// Synchronous, unlike the hotkey scan, and for a reason rather than by omission. That
+    /// one opens seventy zip archives and walks IL; this one reads small JSON files already
+    /// on disk, bounded per file by <see cref="ModConfigFiles.MaxFileToSurvey"/>. Doing it on
+    /// a background thread would buy nothing and cost the race worth avoiding most — a reload
+    /// landing on top of somebody who has already started ticking.
+    /// </summary>
+    public void LoadModConfig()
+    {
+        _allModConfig.Clear();
+        _adoptingModConfig = true;
+
+        try
+        {
+            // Everything, always, and filtered for display. Reading only the changed ones
+            // would make Show all a second trip to disk, and would leave the empty tab unable
+            // to say which nothing it is looking at.
+            var settings = Survey();
+
+            foreach (var setting in settings)
+                _allModConfig.Add(new ModConfigRowViewModel(setting, OnModConfigEdited));
+
+            _modConfigSignature = Signature(settings);
+            ModConfigError = null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ModConfigError = $"Could not read this pack's mod config: {e.Message}";
+        }
+        finally
+        {
+            _adoptingModConfig = false;
+        }
+
+        RefreshModConfigFilter();
+        OnPropertyChanged(nameof(ModConfigSummary));
+    }
+
+    [ObservableProperty] public partial string? ModConfigError { get; set; }
+
+    private FileSystemWatcher? _modConfigWatcher;
+
+    /// <summary>
+    /// Which reload is the current one. A save is several file events — editors write a temp
+    /// file and rename over the original, and the game rewrites every config at once — so the
+    /// last one to arrive wins and the ones before it are dropped rather than each causing a
+    /// pass over the folder.
+    /// </summary>
+    private int _modConfigTick;
+
+    /// <summary>
+    /// What the files said when the list was last built, so a write that changes nothing this
+    /// tab shows does not rebuild it. The game rewrites every config file on exit; without
+    /// this, coming back from a session would reset the scroll position of a list where
+    /// nothing had moved.
+    /// </summary>
+    private string _modConfigSignature = "";
+
+    /// <summary>
+    /// Watches the pack's config folder while the tab is open, so a value changed in an
+    /// editor — or by the game, or by ConfigLib's own settings screen — shows up without
+    /// having to leave the tab and come back.
+    ///
+    /// ConfigLib watches these same files for the same reason, which is a fair sign that a
+    /// watcher here is not going to surprise it.
+    /// </summary>
+    private void WatchModConfig()
+    {
+        if (_modConfigWatcher is not null) return;
+
+        var folder = ModConfigFolder;
+
+        // Nothing to watch, and nothing to show either — the tab says to play the pack once.
+        // Re-attempted whenever the tab is opened, and after the folder button makes one.
+        if (!Directory.Exists(folder)) return;
+
+        try
+        {
+            var watcher = new FileSystemWatcher(folder)
+            {
+                // XLeveling and friends keep their settings a level down.
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+
+            watcher.Changed += OnModConfigChanged;
+            watcher.Created += OnModConfigChanged;
+            watcher.Deleted += OnModConfigChanged;
+            watcher.Renamed += OnModConfigChanged;
+
+            // Not Error: a watcher that dies takes the live updating with it and leaves the
+            // tab working exactly as it did before this existed, which is not worth a message.
+            watcher.EnableRaisingEvents = true;
+            _modConfigWatcher = watcher;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                      or PlatformNotSupportedException or ArgumentException)
+        {
+            _modConfigWatcher = null;
+        }
+    }
+
+    private void StopWatchingModConfig()
+    {
+        var watcher = _modConfigWatcher;
+        _modConfigWatcher = null;
+
+        if (watcher is null) return;
+
+        watcher.EnableRaisingEvents = false;
+        watcher.Changed -= OnModConfigChanged;
+        watcher.Created -= OnModConfigChanged;
+        watcher.Deleted -= OnModConfigChanged;
+        watcher.Renamed -= OnModConfigChanged;
+        watcher.Dispose();
+    }
+
+    /// <summary>
+    /// Arrives on a thread pool thread, from outside the application entirely. Everything it
+    /// touches after the delay is on the UI thread.
+    /// </summary>
+    private void OnModConfigChanged(object? sender, FileSystemEventArgs e)
+    {
+        var mine = Interlocked.Increment(ref _modConfigTick);
+
+        _ = Task.Delay(TimeSpan.FromMilliseconds(400)).ContinueWith(_ =>
+        {
+            // A later write landed while this one was waiting. That one will do the reload.
+            if (Volatile.Read(ref _modConfigTick) != mine) return;
+
+            Dispatcher.UIThread.Post(ReloadModConfigIfChanged);
+        }, TaskScheduler.Default);
+    }
+
+    private void ReloadModConfigIfChanged()
+    {
+        // Left the tab while the delay was running, or the pack was closed under it.
+        if (SelectedTab != ModConfigTab || _modConfigWatcher is null) return;
+
+        try
+        {
+            if (Signature(Survey()) == _modConfigSignature) return;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Mid-write, most likely. The next event reloads.
+            return;
+        }
+
+        LoadModConfig();
+    }
+
+    private IReadOnlyList<ModConfigSetting> Survey() =>
+        ModConfigSurvey.Read(_packData.DataPathFor(Id), Manifest.ModConfig, includeUnchanged: true);
+
+    /// <summary>
+    /// What the files say, as one comparable string. Values only — whether a row is ticked
+    /// comes from the manifest, which nothing outside this window changes.
+    /// </summary>
+    private static string Signature(IEnumerable<ModConfigSetting> settings) =>
+        string.Join('\n', settings.Select(s => $"{s.File} {s.Key} {s.CurrentText}"));
+
+    public void Dispose() => StopWatchingModConfig();
+
+    /// <summary>
+    /// This pack's mod config folder. A property rather than only a command so a test can say
+    /// where the button goes without a file manager opening on the machine running it.
+    /// </summary>
+    public string ModConfigFolder => ModConfigFiles.DirectoryIn(_packData.DataPathFor(Id));
+
+    /// <summary>
+    /// Opens that folder, which is otherwise buried at
+    /// <c>~/.cairn/packs/&lt;id&gt;/data/ModConfig</c> — a path nobody should have to know,
+    /// least of all somebody who has just been told a setting cannot be carried and wants to
+    /// look at the file themselves.
+    ///
+    /// Created if it is not there. A pack that has never been launched has no such folder,
+    /// and a button that silently does nothing is worse than an empty window: the game makes
+    /// this directory itself on first run, so making it early costs nothing and means the
+    /// button always does what it says.
+    /// </summary>
+    [RelayCommand]
+    private void OpenModConfigFolder()
+    {
+        var folder = ModConfigFolder;
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Say it below, with the same line as a folder that would not open.
+        }
+
+        // The folder may only just have come into existence, which is the one case the tab
+        // could not have started watching it on the way in.
+        WatchModConfig();
+
+        if (!Files.OpenFolder(folder)) _log($"could not open {folder}");
+    }
+
+    private void RefreshModConfigFilter()
+    {
+        var term = ModConfigSearch.Trim();
+
+        ModConfigSettings.Clear();
+
+        foreach (var row in _allModConfig)
+        {
+            // What the author changed, plus what the pack already says — which together are
+            // the rows somebody came here to act on. Everything else is behind Show all.
+            if (!ShowAllSettings && !row.IsChanged && !row.Carried) continue;
+
+            if (term.Length > 0
+                && !row.Key.Contains(term, StringComparison.OrdinalIgnoreCase)
+                && !row.File.Contains(term, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            ModConfigSettings.Add(row);
+        }
+
+        OnPropertyChanged(nameof(ModConfigListLine));
+        OnPropertyChanged(nameof(ShowNoModConfigFound));
+        OnPropertyChanged(nameof(NoModConfigFoundLine));
+    }
+
+    public string ModConfigListLine =>
+        _allModConfig.Count == 0 || ModConfigSettings.Count == _allModConfig.Count
+            ? ""
+            : $"showing {ModConfigSettings.Count} of {_allModConfig.Count}";
+
+    public bool ShowNoModConfigFound => ModConfigSettings.Count == 0;
+
+    /// <summary>Why the list is empty, which is a different answer for each reason.</summary>
+    public string NoModConfigFoundLine
+    {
+        get
+        {
+            // Nothing readable at all, which for a pack nobody has played yet is the
+            // ordinary state rather than a problem — the mods write these files when they
+            // first run. Distinct from having settings and none of them matching.
+            if (_allModConfig.Count == 0)
+                return "This pack's mods have written no settings Cairn can read yet. "
+                       + "Play it once, and they will be here.";
+
+            if (ModConfigSearch.Trim().Length > 0) return "No setting matches that.";
+
+            // A pack that has not been launched since Cairn started keeping a baseline. Not
+            // the same as nothing having changed, and saying so would be a lie about
+            // somebody's own pack — every existing pack lands here on first upgrade, with a
+            // config folder full of values whose history nothing recorded.
+            if (!_allModConfig.Any(r => r.Setting.HasBaseline))
+                return "Cairn has no record of what these mods first wrote, so it cannot tell "
+                       + "which values you changed. It starts keeping one the next time you "
+                       + "play this pack — until then, use Show all.";
+
+            return "Nothing changed. Every setting is as its mod first wrote it — "
+                   + "tick Show all to carry one anyway.";
+        }
+    }
+
+    public string ModConfigSummary
+    {
+        get
+        {
+            var carried = _allModConfig.Count(r => r.Carried);
+
+            return carried == 0
+                ? "Settings you have changed in your mods' own config files. Tick one to carry "
+                  + "it in the pack, and everyone who installs it gets your value."
+                : $"{carried} setting{(carried == 1 ? "" : "s")} carried in this pack. "
+                  + "Anyone who installs it gets these; anything they change themselves stays theirs.";
+        }
+    }
+
+    /// <summary>
+    /// Writes the ticked rows into the pack.
+    ///
+    /// Rebuilt from the rows rather than merged over what the manifest already says — the
+    /// opposite of the hotkey tab, and deliberately. A hotkey row exists only where the scan
+    /// could read a registration, so rebuilding there would drop the ones it could not; every
+    /// row here comes from a file that is present, and a key the manifest names that no file
+    /// has gets a row of its own. So the rows are the whole truth, and rebuilding is what
+    /// lets unticking take an entry out.
+    /// </summary>
+    private void OnModConfigEdited()
+    {
+        // Building the rows sets each one's tick, which is not somebody choosing it.
+        if (_adoptingModConfig) return;
+
+        Manifest.ModConfig = ModConfigSurvey.ToManifest(
+            _allModConfig.Where(r => r.Carried).Select(r => r.Setting));
+
+        try
+        {
+            _store.Save(Manifest);
+            Error = null;
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+            return;
+        }
+
+        OnPropertyChanged(nameof(ModConfigSummary));
+
+        // Mod config is part of the shared document, so ticking one is something to publish.
+        // Not the full Persist: the mod list has not moved.
+        ReloadShare();
     }
 
     private static string Format(SyncStep s)

@@ -514,6 +514,14 @@ public partial class MainViewModel : ViewModelBase
         CreatePackCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// The pane being replaced is the last moment anything holds the old one. It watches its
+    /// pack's config folder while that tab is open, and selecting another pack does not go
+    /// through the tab, so without this every pack visited would leave a live watcher behind.
+    /// </summary>
+    partial void OnDetailChanging(PackDetailViewModel? oldValue, PackDetailViewModel? newValue)
+        => oldValue?.Dispose();
+
     partial void OnDetailChanged(PackDetailViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelection));

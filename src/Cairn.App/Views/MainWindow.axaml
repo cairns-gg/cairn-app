@@ -1008,6 +1008,122 @@
                         </DockPanel>
                     </TabItem>
 
+                    <!--
+                        Two mods often need a line in one of their config files before they
+                        work together. The author changes it in game, where they can see what
+                        it does, and ticks it here so it travels — instead of writing "and go
+                        and edit this file" in the pack description.
+                    -->
+                    <TabItem Header="Mod config">
+                        <DockPanel LastChildFill="True" Margin="0,8,0,0">
+                            <StackPanel DockPanel.Dock="Top" Spacing="8">
+                                <TextBlock Text="{Binding Detail.ModConfigSummary}" FontSize="12"
+                                           Opacity="0.75" TextWrapping="Wrap" />
+
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                    <TextBox Grid.Column="0" Text="{Binding Detail.ModConfigSearch}"
+                                             PlaceholderText="Search by setting or file" />
+
+                                    <!-- A value changed during the very first session was in
+                                         the file before anything saw it, so it never reads as
+                                         changed. This is how somebody finds it anyway. -->
+                                    <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                              Content="Show all"
+                                              IsChecked="{Binding Detail.ShowAllSettings}"
+                                              ToolTip.Tip="Every setting Cairn can read, not only the ones you have changed." />
+
+                                    <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                               FontSize="11" Opacity="0.6"
+                                               Text="{Binding Detail.ModConfigListLine}" />
+                                </Grid>
+
+                                <TextBlock FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource VsWarningBrush}"
+                                           IsVisible="{Binding Detail.ModConfigError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                           Text="{Binding Detail.ModConfigError}" />
+                            </StackPanel>
+
+            <!-- No Save button, the same as Hotkeys: ticking writes the pack. A second
+                 step is how edits sat unsaved and were thrown away by selecting another
+                 pack. The one button here opens the folder these files are actually in,
+                 which is otherwise a path nobody should have to know. -->
+                            <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*"
+                                  ColumnSpacing="10" Margin="0,8,0,0">
+                                <Button Grid.Column="0" Content="Open config folder"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding Detail.OpenModConfigFolderCommand}"
+                                        ToolTip.Tip="{Binding Detail.ModConfigFolder}" />
+
+                                <TextBlock Grid.Column="1" FontSize="11" Opacity="0.6"
+                                           VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Text="Saved into the pack as you tick. A setting ConfigLib keeps in its own file arrives once that mod has run here at least once." />
+                            </Grid>
+
+                            <TextBlock DockPanel.Dock="Top" Margin="0,14,0,0" FontSize="12"
+                                       Opacity="0.7" TextWrapping="Wrap"
+                                       IsVisible="{Binding Detail.ShowNoModConfigFound, FallbackValue=False}"
+                                       Text="{Binding Detail.NoModConfigFoundLine}" />
+
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding Detail.ModConfigSettings}" Margin="0,8,0,0">
+                                    <!-- Show all on a real pack is two thousand rows — 98
+                                         config files, 2045 settings, measured. The default
+                                         stack panel realises every one of them and the tab
+                                         takes seconds to open. Hotkeys gets away without
+                                         this at forty rows; this cannot. -->
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ModConfigRowViewModel">
+                                            <Border Padding="8,6" Margin="0,0,0,4" Classes="sunken">
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                                    <!-- The whole of what a row decides: does
+                                                         this value travel with the pack? -->
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                              IsChecked="{Binding Carried}"
+                                                              ToolTip.Tip="Carry this value in the pack." />
+
+                                                    <StackPanel Grid.Column="1" Spacing="2">
+                                                        <TextBlock Text="{Binding Key}" FontSize="12"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding File}" FontSize="11" Opacity="0.55"
+                                                                   TextTrimming="CharacterEllipsis" />
+
+                                                        <TextBlock FontSize="11" IsVisible="{Binding IsOrphan}"
+                                                                   Foreground="{DynamicResource VsWarningBrush}"
+                                                                   TextWrapping="Wrap"
+                                                                   Text="{Binding OrphanLine}" />
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                                Spacing="10" VerticalAlignment="Center">
+                                                        <!-- What the mod first wrote, kept beside
+                                                             what it says now: "is that what it
+                                                             ships or what I picked?" is the
+                                                             question the tab answers. -->
+                                                        <TextBlock VerticalAlignment="Center" FontSize="11"
+                                                                   Opacity="0.5" MaxWidth="160"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   IsVisible="{Binding ShowBaseline}"
+                                                                   Text="{Binding BaselineText, StringFormat='was {0}'}" />
+
+                                                        <TextBlock VerticalAlignment="Center" FontSize="12"
+                                                                   MinWidth="70" MaxWidth="200"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding CurrentText}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </TabItem>
+
                     <TabItem Header="Log">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
                             <!--
