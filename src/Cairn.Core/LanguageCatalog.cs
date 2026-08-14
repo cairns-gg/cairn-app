@@ -117,11 +117,27 @@ public sealed class LanguageCatalog
     /// <summary>
     /// Which CLDR plural category a count falls in for a language.
     ///
-    /// Only the two-form rule is implemented, because only English exists. Adding Russian
-    /// means adding its rule here and nothing else — the keys already have somewhere for
-    /// <c>-few</c> and <c>-many</c> to go.
+    /// Two rules, because two are needed. English and its neighbours take the singular for one
+    /// and the plural for everything else; French and Brazilian Portuguese take the singular
+    /// for zero as well — "0 mod" and "1 mod", then "2 mods". A French translation written
+    /// against the English rule says "0 mods", which is the kind of wrong that reads as
+    /// nobody having looked.
+    ///
+    /// Anything not listed gets the English rule, which is a guess and is marked as one here
+    /// rather than presented as a decision. Russian and Polish need -few and -many and are not
+    /// covered; the keys already have somewhere for those to go, and this is where the rule
+    /// goes with them.
     /// </summary>
-    private static string PluralForm(string code, int count) => count == 1 ? "one" : "other";
+    private static string PluralForm(string code, int count)
+    {
+        var language = code.Split('-')[0];
+
+        return language switch
+        {
+            "fr" or "pt" => count is 0 or 1 ? "one" : "other",
+            _ => count == 1 ? "one" : "other",
+        };
+    }
 
     private string? Find(string key) =>
         _strings.TryGetValue(key, out var text) ? text : _fallback?.Find(key);

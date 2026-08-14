@@ -155,3 +155,166 @@ public class LanguageCoverageTests
         }
     }
 }
+
+/// <summary>
+/// Every translation, shipped or drafted, held against the English it is a translation of.
+///
+/// A translator works in a text editor with no compiler and no types. The two mistakes that
+/// costs are a key that does not exist — silently dead, the English shows instead and
+/// nothing says why — and a placeholder dropped or renumbered, which is a value that does
+/// not appear in the sentence somebody reads. Neither is visible without looking, and
+/// looking is what this does.
+/// </summary>
+public class TranslationTests
+{
+    private static string Repo()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (dir is not null && !Directory.EnumerateFiles(dir.FullName, "Cairn.sln*").Any())
+            dir = dir.Parent;
+
+        Assert.NotNull(dir);
+        return dir!.FullName;
+    }
+
+    /// <summary>
+    /// The shipped catalogs, plus the drafts in <c>translations/</c> that are loaded with
+    /// CAIRN_LANG_DIR rather than embedded. A draft nobody checks is a draft that arrives
+    /// broken on the day somebody promotes it.
+    /// </summary>
+    public static TheoryData<string> Files()
+    {
+        var data = new TheoryData<string>();
+        var repo = Repo();
+
+        foreach (var dir in new[]
+                 {
+                     Path.Combine(repo, "src", "Cairn.Core", "assets", "cairn", "lang"),
+                     Path.Combine(repo, "translations"),
+                 })
+        {
+            if (!Directory.Exists(dir)) continue;
+
+            foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+                if (Path.GetFileNameWithoutExtension(file) != LanguageCatalog.Default)
+                    data.Add(file);
+        }
+
+        return data;
+    }
+
+    private static Dictionary<string, string> Read(string path)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+        return document.RootElement.EnumerateObject()
+            .Where(p => p.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+            .ToDictionary(p => p.Name, p => p.Value.GetString()!);
+    }
+
+    private static Dictionary<string, string> English() => Read(
+        Path.Combine(Repo(), "src", "Cairn.Core", "assets", "cairn", "lang", "en.json"));
+
+    [Theory]
+    [MemberData(nameof(Files))]
+    public void Every_key_it_translates_is_one_English_has(string path)
+    {
+        var english = English();
+
+        var unknown = Read(path).Keys
+            .Where(k => !k.StartsWith('_') && !english.ContainsKey(k))
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(unknown.Count == 0,
+            $"{Path.GetFileName(path)} translates keys that do not exist, so they are never "
+            + "shown and the English is used instead:\n  " + string.Join("\n  ", unknown));
+    }
+
+    /// <summary>
+    /// Same set of placeholders, not the same order — a translation is allowed to move {1}
+    /// in front of {0}, and several languages will need to. What it may not do is lose one.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Files))]
+    public void Every_value_English_puts_in_a_sentence_survives_the_translation(string path)
+    {
+        var english = English();
+        var holes = new Regex(@"\{(\d+)", RegexOptions.Compiled);
+
+        var dropped = Read(path)
+            .Where(e => !e.Key.StartsWith('_') && english.ContainsKey(e.Key))
+            .Where(e => holes.Matches(e.Value).Select(m => m.Groups[1].Value).ToHashSet()
+                        .SetEquals(holes.Matches(english[e.Key]).Select(m => m.Groups[1].Value)) is false)
+            .Select(e => $"{e.Key}\n      en: {english[e.Key]}\n      {Path.GetFileNameWithoutExtension(path)}: {e.Value}")
+            .ToList();
+
+        Assert.True(dropped.Count == 0,
+            $"{Path.GetFileName(path)} does not use the same values as the English:\n  "
+            + string.Join("\n  ", dropped));
+    }
+
+    /// <summary>
+    /// A plural key needs the forms its own language selects between, not the ones English
+    /// does. French takes the singular for zero as well as one, which is the rule that made
+    /// LanguageCatalog.PluralForm need a table rather than a comparison.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Files))]
+    public void A_translated_plural_has_the_form_it_falls_back_to(string path)
+    {
+        var strings = Read(path);
+
+        var missing = strings.Keys
+            .Where(k => k.EndsWith("-one", StringComparison.Ordinal))
+            .Select(k => k[..^"-one".Length] + "-other")
+            .Where(other => !strings.ContainsKey(other))
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            $"{Path.GetFileName(path)} has a singular with no plural beside it:\n  "
+            + string.Join("\n  ", missing));
+    }
+}
+
+/// <summary>
+/// No catalog names a key twice.
+///
+/// JSON allows it and every reader here takes the last one, so a duplicate is invisible:
+/// the file parses, the application runs, and one of the two strings is simply never used.
+/// The sweep that moved the interface onto the catalog introduced one — Cancel, added once
+/// for the small windows and again for the main one — and nothing noticed for eleven
+/// commits.
+/// </summary>
+public class DuplicateKeyTests
+{
+    [Theory]
+    [MemberData(nameof(TranslationTests.Files), MemberType = typeof(TranslationTests))]
+    public void A_translation_names_no_key_twice(string path) => AssertNoDuplicates(path);
+
+    [Fact]
+    public void The_English_catalog_names_no_key_twice() => AssertNoDuplicates(
+        Path.Combine(
+            new DirectoryInfo(AppContext.BaseDirectory).FullName, "..", "..", "..", "..", "..",
+            "src", "Cairn.Core", "assets", "cairn", "lang", "en.json"));
+
+    private static void AssertNoDuplicates(string path)
+    {
+        var names = new Regex("""^\s*"([^"]+)"\s*:""", RegexOptions.Multiline)
+            .Matches(File.ReadAllText(path))
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+
+        var twice = names.GroupBy(n => n, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"{g.Key} ({g.Count()} times)")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(twice.Count == 0,
+            $"{Path.GetFileName(path)} names a key more than once, so all but the last are "
+            + "dead:\n  " + string.Join("\n  ", twice));
+    }
+}

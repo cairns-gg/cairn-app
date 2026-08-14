@@ -339,9 +339,9 @@ public partial class GamesViewModel : ViewModelBase
     /// <summary>Names them rather than counting them: which packs is the actual question.</summary>
     private static string Listed(IReadOnlyList<string> names) => names.Count switch
     {
-        1 => Lang.Get("names-one", names[0]),
-        2 => Lang.Get("names-two", names[0], names[1]),
-        _ => Lang.Get("names-many", names[0], names[1], names.Count - 2),
+        1 => Lang.Get("names-single", names[0]),
+        2 => Lang.Get("names-pair", names[0], names[1]),
+        _ => Lang.Get("names-overflow", names[0], names[1], names.Count - 2),
     };
 
     [RelayCommand]

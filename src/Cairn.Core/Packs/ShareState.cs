@@ -63,13 +63,13 @@ public sealed record ShareState(ShareStatus Status, string? Url, string? Visibil
 
     public string Label => Status switch
     {
-        ShareStatus.Unshared => "Share…",
-        ShareStatus.Shared => "Shared",
-        ShareStatus.Pending => "Publish changes",
+        ShareStatus.Unshared => Lang.Get("share-label-unshared"),
+            ShareStatus.Shared => Lang.Get("share-label-shared"),
+            ShareStatus.Pending => Lang.Get("share-publish-changes"),
 
         // Not "Share…", which would read as starting again somewhere new. This one has an
         // address waiting for it.
-        ShareStatus.Withdrawn => "Publish again",
+        ShareStatus.Withdrawn => Lang.Get("share-label-publish-again"),
         _ => "",
     };
 

@@ -96,7 +96,6 @@
   "sidebar-preferences": "Preferences",
   "provision-heading": "Getting things ready",
   "provision-explain": "The game and its .NET runtime are several hundred megabytes; this only happens once per version.",
-  "common-cancel": "Cancel",
   "quickimport-heading": "Import a pack",
   "quickimport-explain": "Paste a shared pack, or a URL to one. Someone else's export reproduces their exact mod versions.",
   "quickimport-import-as": "Import as",
@@ -324,9 +323,9 @@
   "games-remove-unused": "Delete {0} from disk. No pack targets it.",
   "games-remove-used-one": "{0} targets {1}. Playing will download it again; worlds and mods are untouched.",
   "games-remove-used-other": "{0} target {1}. Playing will download it again; worlds and mods are untouched.",
-  "names-one": "“{0}”",
-  "names-two": "“{0}” and “{1}”",
-  "names-many": "“{0}”, “{1}” and {2} more",
+  "names-single": "“{0}”",
+  "names-pair": "“{0}” and “{1}”",
+  "names-overflow": "“{0}”, “{1}” and {2} more",
 
   "packupdate-adds": "adds",
   "packupdate-removes": "removes",
@@ -663,6 +662,10 @@
   "prefs-language-from-env": "{0} is set, so Cairn is using {1} whatever is chosen here.",
   "prefs-language-from-game": "Following Vintage Story, which is set to {0}.",
   "prefs-language-from-system": "Following your system, which is set to {0}.",
+
+  "share-label-unshared": "Share…",
+  "share-label-shared": "Shared",
+  "share-label-publish-again": "Publish again",
 
   "tab-mods": "Mods",
   "tab-settings": "Settings",
