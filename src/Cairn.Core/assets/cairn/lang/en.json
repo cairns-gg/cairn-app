@@ -1,6 +1,8 @@
 {
   "_comment": "Cairn's interface strings. Flat key against text, the same shape every Vintage Story mod ships in assets/<domain>/lang/. Placeholders are {0}, {1} and keep their meaning across languages. A key ending -one or -other is a plural form; see LanguageCatalog.Plural.",
 
+  "_language-name": "English",
+
   "pack-id-required": "Pack 'id' is required.",
   "pack-gameversion-unusable": "Pack 'gameVersion' is not a usable version string: '{0}'. Write a bare version like \"1.22.5\" — the game silently reads \">=1.22.5\" as major version 0, which matches everything.",
 
@@ -654,6 +656,13 @@
   "provision-needs-both": "Vintage Story {0} and its .NET runtime need downloading.",
   "provision-needs-game": "Vintage Story {0} needs downloading.",
   "provision-needs-runtime": "Vintage Story {0} is installed but its .NET runtime is missing.",
+
+  "prefs-language": "LANGUAGE",
+  "prefs-language-automatic": "Automatic",
+  "prefs-language-explain": "Cairn follows the language Vintage Story is set to, then your system's. Choose one here to fix it regardless. Applies straight away.",
+  "prefs-language-from-env": "{0} is set, so Cairn is using {1} whatever is chosen here.",
+  "prefs-language-from-game": "Following Vintage Story, which is set to {0}.",
+  "prefs-language-from-system": "Following your system, which is set to {0}.",
 
   "tab-mods": "Mods",
   "tab-settings": "Settings",

@@ -42,6 +42,23 @@ public sealed class LanguageCatalog
     /// <summary>The language tag this holds, e.g. <c>de</c> or <c>pt-br</c>.</summary>
     public string Code { get; }
 
+    /// <summary>
+    /// What this language calls itself — "Deutsch", not "German" — for the picker.
+    ///
+    /// Out of the file rather than out of CultureInfo, which cannot answer: the whole
+    /// repository builds with InvariantGlobalization, so there is no ICU and every culture
+    /// reports its own tag as its name. Asking the translator to write it is the better answer
+    /// anyway. They know what their language is called, and nobody else gets a vote.
+    ///
+    /// Underscored so <c>LanguageCoverageTests</c> passes over it: it is metadata about the
+    /// file rather than a string the interface asks for by key.
+    /// </summary>
+    /// Its own entry only, never the fallback's: a file that has not named itself would
+    /// otherwise report "English", and a picker listing English twice is worse than one
+    /// listing a language by its tag.
+    public string Name =>
+        _strings.TryGetValue("_language-name", out var name) ? name : Code;
+
     /// <summary>Keys this catalog answers itself, not counting anything it falls back for.</summary>
     public int Count => _strings.Count;
 

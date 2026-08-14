@@ -91,6 +91,26 @@
                         <TextBlock Classes="hint"
                                    Text="{l:Tr prefs-uiscale-explain}" />
                     </StackPanel>
+
+                    <Separator Margin="0,4" />
+
+                    <!--
+                        Beside the scale because they are the same kind of setting: how the
+                        interface presents itself, applied as you pick it rather than on a save.
+                    -->
+                    <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Left">
+                        <TextBlock Classes="label" Text="{l:Tr prefs-language}" />
+
+                        <ComboBox MinWidth="180"
+                                  ItemsSource="{Binding Language.Choices}"
+                                  SelectedItem="{Binding Language.Selected}" />
+
+                        <!-- What Automatic worked out, so the row is not a shrug. -->
+                        <TextBlock Classes="hint" Text="{Binding Language.Note}"
+                                   IsVisible="{Binding Language.Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                        <TextBlock Classes="hint" Text="{l:Tr prefs-language-explain}" />
+                    </StackPanel>
                 </StackPanel>
             </TabItem>
 

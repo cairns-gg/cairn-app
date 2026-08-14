@@ -49,7 +49,42 @@ public static class LanguageChoice
         if (FromGame(gameSettingsPath) is { } game)
             return (game, LanguageSource.Game);
 
-        return (LanguageCatalog.Normalise(CultureInfo.CurrentUICulture.Name), LanguageSource.System);
+        return (LanguageCatalog.Normalise(SystemLanguage()), LanguageSource.System);
+    }
+
+    /// <summary>
+    /// What the operating system is set to, or null when it will not say.
+    ///
+    /// CurrentUICulture is asked first and usually answers nothing: the whole repository builds
+    /// with InvariantGlobalization, so there is no ICU and every culture reports as the
+    /// invariant one. That made this step dead code — it could only ever return English —
+    /// which is not what a chain with four steps in it is supposed to do.
+    ///
+    /// So the POSIX locale variables are read too, which is what they are for and what needs no
+    /// ICU. LC_ALL wins, then LC_MESSAGES, then LANG, and "de_DE.UTF-8" is cut down to "de-de".
+    /// A value of "C" or "POSIX" means the system declining to say rather than a language.
+    ///
+    /// Windows has no equivalent without ICU, so it falls through to English. That is a smaller
+    /// loss than it looks: the step above this one reads the language Vintage Story is set to,
+    /// which for this audience is both a better signal and one that works everywhere.
+    /// </summary>
+    private static string? SystemLanguage()
+    {
+        if (CultureInfo.CurrentUICulture.Name is { Length: > 0 } culture) return culture;
+
+        foreach (var name in (string[])["LC_ALL", "LC_MESSAGES", "LANG"])
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value)) continue;
+
+            // "de_DE.UTF-8@euro" — the language is everything before the encoding or modifier.
+            var tag = value.Split('.', '@')[0];
+            if (tag is "C" or "POSIX" or "") continue;
+
+            return tag;
+        }
+
+        return null;
     }
 
     /// <summary>The folder of loose lang files to prefer, or null for the built-in ones.</summary>

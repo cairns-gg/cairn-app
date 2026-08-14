@@ -109,3 +109,87 @@ public class LanguageBindingTests : IDisposable
         Assert.Contains("Mod config", TabHeaders(window));
     }
 }
+
+/// <summary>
+/// The Preferences picker, which is the only way a person can change language.
+/// </summary>
+[Collection(AvaloniaTests.Collection)]
+public class LanguagePickerTests : IDisposable
+{
+    private readonly string _home = Path.Combine(
+        Path.GetTempPath(), "cairn-langpick-" + Guid.NewGuid().ToString("n")[..8]);
+
+    public LanguagePickerTests()
+    {
+        Directory.CreateDirectory(Path.Combine(_home, "packs"));
+        Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+        Environment.SetEnvironmentVariable(LanguageChoice.EnvironmentVariable, null);
+    }
+
+    public void Dispose()
+    {
+        Lang.Reset();
+        Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+        if (Directory.Exists(_home)) Directory.Delete(_home, recursive: true);
+    }
+
+    [AvaloniaFact]
+    public void The_picker_offers_automatic_first_and_then_what_ships()
+    {
+        var picker = new LanguageSettingViewModel();
+
+        Assert.Equal("Automatic", picker.Choices[0]);
+        Assert.Contains("English", picker.Choices);
+
+        // Nothing chosen yet, so it sits on Automatic and says what that worked out to.
+        Assert.Equal("Automatic", picker.Selected);
+        Assert.Contains("Following", picker.Note);
+    }
+
+    /// <summary>
+    /// Written through CairnSettings.Update, so choosing a language cannot erase the scale —
+    /// which is the bug that kept this picker from existing at all.
+    /// </summary>
+    [AvaloniaFact]
+    public void Choosing_one_is_remembered_without_disturbing_the_scale()
+    {
+        CairnSettings.Update(s => s.UiScale = 1.5);
+
+        new LanguageSettingViewModel().Selected = "English";
+
+        var saved = CairnSettings.Load();
+        Assert.Equal("en", saved.Language);
+        Assert.Equal(1.5, saved.UiScale);
+    }
+
+    [AvaloniaFact]
+    public void Going_back_to_automatic_forgets_the_choice()
+    {
+        var picker = new LanguageSettingViewModel();
+
+        picker.Selected = "English";
+        Assert.Equal("en", CairnSettings.Load().Language);
+
+        picker.Selected = "Automatic";
+        Assert.Null(CairnSettings.Load().Language);
+    }
+
+    /// <summary>
+    /// CAIRN_LANG outranks the setting, and the row says so rather than showing a choice
+    /// that is not in force.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_environment_says_so_in_the_note()
+    {
+        Environment.SetEnvironmentVariable(LanguageChoice.EnvironmentVariable, "fr");
+
+        try
+        {
+            Assert.Contains("CAIRN_LANG", new LanguageSettingViewModel().Note);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(LanguageChoice.EnvironmentVariable, null);
+        }
+    }
+}

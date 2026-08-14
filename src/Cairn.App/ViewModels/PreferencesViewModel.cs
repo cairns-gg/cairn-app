@@ -76,6 +76,11 @@ public partial class PreferencesViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// The language row, in a type of its own — see <see cref="LanguageSettingViewModel"/>.
+    /// </summary>
+    public LanguageSettingViewModel Language { get; } = new();
+
+    /// <summary>
     /// Which version this is. Read from the assembly rather than held in a constant, so a
     /// build cannot claim a number nobody stamped — see <see cref="CairnVersion"/>.
     /// </summary>

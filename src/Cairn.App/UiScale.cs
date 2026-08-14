@@ -116,45 +116,11 @@ public static class UiScale
 
     // ---- remembering it ----
 
-    private sealed class Stored
-    {
-        public double UiScale { get; set; } = 1.0;
-    }
+    /// <summary>
+    /// Reading and writing both go through CairnSettings, which is what stops this erasing
+    /// the language the next setting along. This type used to own the whole file.
+    /// </summary>
+    public static void Load() => Current = CairnSettings.Load().UiScale;
 
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-
-    /// <summary>Never throws: an unreadable settings file costs the default, not a start-up.</summary>
-    public static void Load()
-    {
-        try
-        {
-            if (!File.Exists(CairnPaths.SettingsPath)) return;
-
-            var stored = JsonSerializer.Deserialize<Stored>(
-                File.ReadAllText(CairnPaths.SettingsPath), Json);
-
-            if (stored is not null) Current = stored.UiScale;
-        }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
-        {
-            // Defaults are fine.
-        }
-    }
-
-    public static void Save()
-    {
-        try
-        {
-            Directory.CreateDirectory(CairnPaths.Root);
-
-            // Staged and moved, like the caches: a half-written file reads as corrupt.
-            var staging = CairnPaths.SettingsPath + "." + Path.GetRandomFileName();
-            File.WriteAllText(staging, JsonSerializer.Serialize(new Stored { UiScale = Current }, Json));
-            File.Move(staging, CairnPaths.SettingsPath, overwrite: true);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // Losing the preference costs one re-selection.
-        }
-    }
+    public static void Save() => CairnSettings.Update(s => s.UiScale = Current);
 }
