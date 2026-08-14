@@ -28,8 +28,10 @@ public partial class SearchHitViewModel(
     public string Name { get; } = Entry(result).Name;
     public string Summary { get; } = Entry(result).Summary ?? "";
     public string Side { get; } = Entry(result).Side ?? "";
-    public string Downloads { get; } = $"{Entry(result).Downloads:N0} downloads";
-    public string Author { get; } = string.IsNullOrWhiteSpace(Entry(result).Author) ? "" : $"by {Entry(result).Author}";
+    public string Downloads { get; } = Lang.Get("mods-downloads", Entry(result).Downloads);
+    public string Author { get; } = string.IsNullOrWhiteSpace(Entry(result).Author)
+        ? ""
+        : Lang.Get("mods-by", Entry(result).Author);
     public string Tags { get; } = string.Join(" · ", Entry(result).Tags);
 
     /// <summary>Where the icon lives on the CDN; null for the roughly one mod in ten with none.</summary>
@@ -59,8 +61,20 @@ public partial class SearchHitViewModel(
 
     public bool Incompatible => !Compatible;
 
+    /// <summary>
+    /// What ModDB does mark this mod for, kept apart from the sentence that shows it.
+    ///
+    /// The confirmation that asks whether to add it anyway used to recover this by stripping
+    /// "no " and " release" back off NoReleaseNote. That worked while the note was built here
+    /// and read two hundred lines away, and it stopped working the moment the note became
+    /// translatable — in any language whose sentence is not "no X release", the strip returns
+    /// the whole sentence and the dialogue says the mod is marked for "keine X-Version".
+    /// A displayed string is not a data structure.
+    /// </summary>
+    public string MarkedFor { get; } = versionRange;
+
     /// <summary>Says which version it is missing, not just that something is wrong.</summary>
-    public string NoReleaseNote { get; } = $"no {versionRange} release";
+    public string NoReleaseNote { get; } = Lang.Get("mods-no-release", versionRange);
 
     /// <summary>
     /// Already part of this pack. Shown on the row so a search never offers to add
@@ -209,7 +223,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         if (CopyToClipboard is null)
         {
-            _log("could not reach the clipboard");
+            _log(Lang.Get("log-no-clipboard"));
             return;
         }
 
@@ -222,13 +236,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         try
         {
             await CopyToClipboard(report);
-            _log("diagnostics copied to the clipboard");
+            _log(Lang.Get("log-diagnostics-copied"));
         }
         catch (Exception e)
         {
             // A clipboard that refuses is not worth failing over, but silence would leave
             // somebody pasting whatever was there before and wondering why it made no sense.
-            _log($"could not copy diagnostics: {e.Message}");
+            _log(Lang.Get("log-diagnostics-failed", e.Message));
         }
     }
 
@@ -250,20 +264,20 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         if (!logs.Exists)
         {
-            _log("no game logs yet — this pack has not been launched");
+            _log(Lang.Get("log-no-game-logs"));
             return;
         }
 
         var tail = logs.Tail(GameLogs.ClientMain, lines: 200);
         if (tail.Count == 0)
         {
-            _log($"no {GameLogs.ClientMain} under {logs.Directory}");
+            _log(Lang.Get("log-no-client-log", GameLogs.ClientMain, logs.Directory));
             return;
         }
 
-        _log($"── {GameLogs.ClientMain} (last {tail.Count} lines) ──");
+        _log(Lang.Get("log-game-log-head", GameLogs.ClientMain, tail.Count));
         foreach (var line in tail) _log(line);
-        _log("── end of game log ──");
+        _log(Lang.Get("log-game-log-end"));
     }
 
     // Reporting the problems from a bad exit lives in RunningGames, which is what is still
@@ -275,7 +289,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         var logs = GameLogs;
 
         if (!Files.OpenFolder(logs.Directory))
-            _log($"could not open {logs.Directory}");
+            _log(Lang.Get("log-open-failed", logs.Directory));
     }
 
     public ObservableCollection<ModRowViewModel> Mods { get; } = [];
@@ -297,7 +311,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         get
         {
             var left = PackManifest.MaxDescription - (EditDescription?.Length ?? 0);
-            return left <= 40 ? $"{left} left" : "";
+            return left <= 40 ? Lang.Get("packsettings-chars-left", left) : "";
         }
     }
 
@@ -405,8 +419,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     /// <summary>Says which of the two lists is on screen, and how big it is.</summary>
     public string ListHeading => ShowingSearch
-        ? $"{SearchHits.Count} result{(SearchHits.Count == 1 ? "" : "s")} for “{_searchedFor}”"
-        : $"{Mods.Count} mod{(Mods.Count == 1 ? "" : "s")} in this pack";
+        ? Lang.Plural("mods-results-for", SearchHits.Count, SearchHits.Count, _searchedFor)
+            : Lang.Plural("mods-in-pack", Mods.Count, Mods.Count);
 
     private string _searchedFor = "";
 
@@ -511,7 +525,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public bool IsShowingLaunchStage => !string.IsNullOrEmpty(LaunchStage);
 
-    public string PlayLabel => IsLaunching ? "Working…" : "Play";
+    public string PlayLabel => IsLaunching ? Lang.Get("pack-working") : Lang.Get("pack-play");
 
     public bool HasExported => !string.IsNullOrEmpty(ExportedPath);
 
@@ -529,13 +543,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool HasDescription => !string.IsNullOrWhiteSpace(Manifest.Description);
 
     public string Subtitle =>
-        $"game {Manifest.GameVersion}  ·  {Manifest.Mods.Count} mod{(Manifest.Mods.Count == 1 ? "" : "s")}";
+        Lang.Plural("pack-subtitle", Manifest.Mods.Count, Manifest.GameVersion, Manifest.Mods.Count);
 
     /// <summary>See PackListItemViewModel.HasServer — blank is "opens at the main menu",
     /// not "singleplayer only".</summary>
     public bool HasServer => !string.IsNullOrWhiteSpace(Manifest.Connect);
 
-    public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
+    public string ServerLine => HasServer ? Lang.Get("pack-auto-joins", Manifest.Connect) : "";
 
     // ---- sharing ----
 
@@ -594,7 +608,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// missing button with no explanation reads as a bug; this is the explanation.
     /// </summary>
     public string FollowingLine =>
-        IsFollowing ? $"imported from {ShareUrlLine} — it stays theirs to publish" : "";
+        IsFollowing ? Lang.Get("share-imported-from", ShareUrlLine) : "";
 
     // ---- a newer revision from the author ----
 
@@ -609,7 +623,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public string PackUpdateLine => PackUpdate is null
         ? ""
-        : $"Revision {PackUpdate.To} is available — you have {PackUpdate.From}.";
+        : Lang.Get("packupdate-revision-available", PackUpdate.To, PackUpdate.From);
 
     /// <summary>
     /// Offered for any followed pack, not only one with a revision waiting.
@@ -627,7 +641,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// author's until somebody unlocks them. Two buttons a player had to tell apart was
     /// the problem; naming them more carefully would only have made it survivable.
     /// </summary>
-    public string ReviewUpstreamLabel => "Check for updates";
+    public string ReviewUpstreamLabel => Lang.Get("pack-check-updates");
 
     // ---- editing somebody else's pack ----
 
@@ -678,11 +692,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool ShowModUpdateCheck => CanEditMods && !ShowingSearch && !CheckingUpdates;
 
     public string LockedNote =>
-        "These mods are the author's. Unlock to add, remove or change versions in your copy.";
+        Lang.Get("pack-locked-note");
 
     public string UnlockedNote =>
-        "Your changes are kept when you take the author's updates, and you will be asked "
-        + "about them each time. Reset to their pack to undo them.";
+        Lang.Get("pack-unlocked-note");
 
     [RelayCommand]
     private void UnlockMods()
@@ -692,7 +705,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         _store.SaveLocalState(Id, state);
 
         ReloadMods();
-        _log("mods unlocked — this copy can now differ from the author's");
+        _log(Lang.Get("pack-unlocked-log"));
     }
 
     [RelayCommand(CanExecute = nameof(CanRelock))]
@@ -781,7 +794,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             if (bundle is null)
             {
                 PackUpdate = null;
-                _log("could not reach the author's pack");
+                _log(Lang.Get("pack-upstream-unreachable"));
                 return;
             }
 
@@ -800,7 +813,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // dialog to say so would be worse than saying so.
             if (!plan.AnyChange && !plan.Changes.Any())
             {
-                _log($"this pack matches the author's revision {bundle.Revision ?? 0}");
+                _log(Lang.Get("pack-matches-revision", bundle.Revision ?? 0));
                 return;
             }
 
@@ -832,8 +845,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             }
 
             _log(plan.Reset
-                ? $"reset to the author's revision {bundle.Revision ?? 0}"
-                : $"updated to revision {bundle.Revision ?? 0}");
+                ? Lang.Get("pack-reset-to-revision", bundle.Revision ?? 0)
+                : Lang.Get("pack-updated-to-revision", bundle.Revision ?? 0));
 
             ReloadMods();
             ReloadShare();
@@ -865,7 +878,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// offers to publish again and the question that raises is where it would land.
     /// </summary>
     public string WithdrawnLine =>
-        IsWithdrawn ? $"withdrawn — {ShareUrlLine} is yours until you publish there again" : "";
+        IsWithdrawn ? Lang.Get("share-withdrawn-note", ShareUrlLine) : "";
 
     /// <summary>Whether the export controls are offered at all. See <see cref="Export"/>.</summary>
     public bool CanShareFile => !IsFollowing;
@@ -949,15 +962,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public string InstallChoiceLine => Resolution switch
     {
         { State: GameLibrary.ChoiceState.Missing } =>
-            "The install this pack was set to use is gone; it will run the stock game instead.",
+            Lang.Get("install-gone"),
 
         // Named on both sides, because the fix depends on knowing which is which: either
         // retarget the pack back, or build this version.
         { State: GameLibrary.ChoiceState.WrongVersion, Chosen: { } c } =>
-            $"{c.Describe} is for {c.Version}, and this pack now targets "
-            + $"{Manifest.GameVersion} — it will run the stock game.",
+            Lang.Get("install-wrong-version", c.Describe, c.Version, Manifest.GameVersion),
 
-        { Install: { IsVariant: true } v } => $"Running with {v.Variant}.",
+        { Install: { IsVariant: true } v } => Lang.Get("install-variant", v.Variant),
 
         _ => "",
     };
@@ -1004,7 +1016,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         && GameInstall.TryAt(
             _library.Store.InstallDir(OptimumSource.Pinned.InstallName)) is null;
 
-    public string BuildOptimumLabel => $"Build Optimum {OptimumSource.Pinned.Version}…";
+    public string BuildOptimumLabel => Lang.Get("optimum-build-label", OptimumSource.Pinned.Version);
 
     /// <summary>
     /// Whether it can be started right now, as opposed to whether it applies to this pack.
@@ -1021,8 +1033,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// <summary>Why the button is greyed, or empty when it is not.</summary>
     public string BuildOptimumBlockedNote =>
         CanBuildOptimum && HasPendingGameVersion
-            ? $"Finish the change to {TargetGameVersion} first — a build now would be for "
-              + $"{Manifest.GameVersion}."
+            ? Lang.Get("optimum-finish-change-first", TargetGameVersion, Manifest.GameVersion)
             : "";
 
     public bool HasBuildOptimumBlockedNote => !string.IsNullOrEmpty(BuildOptimumBlockedNote);
@@ -1058,12 +1069,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // Missing tools and a full disk are both things only the person at the machine
             // can fix, so this reports and stops rather than offering to press on.
             await Confirm(new ConfirmViewModel(
-                "Optimum cannot be built here", plan.Describe(), "OK"));
+                Lang.Get("optimum-cannot-build"), plan.Describe(), Lang.Get("common-ok")));
             return;
         }
 
         if (!await Confirm(new ConfirmViewModel(
-                "Build Optimum?", plan.Describe(), "Build it")))
+                Lang.Get("optimum-build-title"), plan.Describe(), Lang.Get("optimum-build-confirm"))))
             return;
 
         // The stock install of the same version, so the packager overlays the client
@@ -1074,7 +1085,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         if (!await RunOptimumBuild(build) || build.Result is null) return;
 
-        _log($"Built {build.Result.Describe}.");
+        _log(Lang.Get("optimum-built", build.Result.Describe));
 
         // Records the choice and re-reads the whole game situation, which is what makes the
         // new install appear in the picker and this button go away.
@@ -1335,7 +1346,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ServerLine));
         SettingsEdited();
         RefreshGameState();
-        _log($"saved settings for '{Id}'");
+        _log(Lang.Get("packsettings-saved", Id));
     }
 
     // ---- changing the game version ----
@@ -1465,7 +1476,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             var change = new VersionChangeViewModel(plan);
             VersionChange = change;
-            _log($"checked {Manifest.GameVersion} -> {target}: {plan.Summary()}");
+            _log(Lang.Get("versionchange-checked", Manifest.GameVersion, target, plan.Summary()));
 
             if (ConfirmVersionChange is not null)
             {
@@ -1525,7 +1536,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         ReloadMods();
         _onChanged();
 
-        _log($"pack now targets game {target}; press Play to install it and update mods");
+        _log(Lang.Get("versionchange-applied", target));
     }
 
     /// <summary>
@@ -1622,10 +1633,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             _ = LoadIconsAsync([.. SearchHits], generation);
 
             _log(hits.Count > SearchHits.Count
-                ? $"{hits.Count} result(s) for '{_searchedFor}' — showing the closest {SearchHits.Count}"
-                : $"{SearchHits.Count} result(s) for '{_searchedFor}'");
+                ? Lang.Get("mods-search-trimmed", hits.Count, _searchedFor, SearchHits.Count)
+                    : Lang.Get("mods-search-count", SearchHits.Count, _searchedFor));
             if (SearchHits.Count == 0)
-                Error = "No mods matched that search.";
+                Error = Lang.Get("mods-no-matches");
             else Error = null;
         }
         catch (Exception e)
@@ -1704,8 +1715,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // modid into the manifest, which used to stop the whole pack syncing.
         if (string.IsNullOrWhiteSpace(hit.ModId))
         {
-            _log($"'{hit.Name}' publishes no mod id, so it cannot be added to a pack — "
-                 + "it is a download listing or a modified client rather than a mod");
+            _log(Lang.Get("mods-no-modid", hit.Name));
             return;
         }
 
@@ -1721,16 +1731,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // is a question rather than a silent allowance.
         if (hit.NeedsAcceptance && Confirm is not null)
         {
-            var marked = hit.NoReleaseNote.Replace("no ", "").Replace(" release", "");
+            var marked = hit.MarkedFor;
 
             var agreed = await Confirm(new ConfirmViewModel(
-                $"Add {hit.Name} anyway?",
-                $"{hit.Name} publishes no release for Vintage Story {Manifest.GameVersion}; "
-                + $"ModDB marks it for {marked}.\n\n"
-                + "It may still work, and plenty of mods do. It may also fail to load, or "
-                + "damage worlds this pack has already created — nobody has said otherwise "
-                + "for this combination.",
-                "Add anyway"));
+                Lang.Get("mods-add-anyway-title", hit.Name),
+                Lang.Get("mods-add-anyway-body", hit.Name, Manifest.GameVersion, marked),
+                Lang.Get("mods-add-anyway-confirm")));
 
             if (!agreed) return;
         }
@@ -1748,7 +1754,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         // The row stays on screen, so it has to stop offering to add it again.
         hit.AlreadyInPack = true;
-        _log($"added {hit.ModId}");
+        _log(Lang.Get("mods-added", hit.ModId));
 
         ReloadMods();
 
@@ -1840,8 +1846,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         {
             done++;
             CheckingUpdatesLine = total > 1
-                ? $"checking {modId}… ({done} of {total})"
-                : $"checking {modId}…";
+                ? Lang.Get("mods-checking-of", modId, done, total)
+                    : Lang.Get("mods-checking", modId);
         });
 
         try
@@ -1859,10 +1865,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                     ?.To;
 
             UpdateSummary = updates.Count == 0
-                ? "Everything is up to date."
-                : $"{updates.Count} update{(updates.Count == 1 ? "" : "s")} available.";
+                ? Lang.Get("mods-up-to-date")
+                    : Lang.Plural("mods-updates-available", updates.Count, updates.Count);
 
-            foreach (var u in updates) _log($"update available: {u.Describe()}");
+            foreach (var u in updates) _log(Lang.Get("mods-update-available", u.Describe()));
             OnPropertyChanged(nameof(AnyUpdates));
             UpdateAllCommand.NotifyCanExecuteChanged();
         }
@@ -1901,7 +1907,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 Manifest, _store.ModsDir(Id), _store.LockPath(Id), progress,
                 allowUpdates: new HashSet<string>(modIds, StringComparer.OrdinalIgnoreCase));
 
-            if (report.Failed) Error = "Some mods could not be updated — see the log.";
+            if (report.Failed) Error = Lang.Get("mods-update-failed");
             UpdateSummary = null;
         }
         catch (Exception e)
@@ -1927,7 +1933,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         Manifest.Mods.RemoveAll(m => string.Equals(m.ModId, row.ModId, StringComparison.OrdinalIgnoreCase));
         Persist();
-        _log($"removed {row.ModId} (its zip goes away on the next sync)");
+        _log(Lang.Get("mods-removed", row.ModId));
 
         // If it is also on screen as a search result, offer it again.
         foreach (var hit in SearchHits.Where(
@@ -1938,7 +1944,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     private void OpenHitPage(SearchHitViewModel hit)
     {
         if (!Browser.Open(hit.PageUrl))
-            Error = "Could not open a browser for that link.";
+            Error = Lang.Get("mods-no-browser");
     }
 
     /// <summary>
@@ -1953,12 +1959,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         if (info is null)
         {
-            Error = $"Could not find {row.ModId} on ModDB.";
+            Error = Lang.Get("mods-not-found", row.ModId);
             return;
         }
 
         if (!Browser.Open(ModDbUrls.Page(info.AssetId, info.UrlAlias)))
-            Error = $"Could not open the ModDB page for {row.ModId}.";
+            Error = Lang.Get("mods-page-failed", row.ModId);
     }
 
     // ---- sharing ----
@@ -1971,7 +1977,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     private void OpenSharePage()
     {
         if (Share.Url is not null && !Browser.Open(Share.Url))
-            Error = $"Could not open {ShareUrlLine}.";
+            Error = Lang.Get("share-open-failed", ShareUrlLine);
     }
 
     /// <summary>
@@ -2001,8 +2007,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // the command is bindable, and this is the rule.
         if (IsFollowing)
         {
-            Error = $"This pack was imported from {ShareUrlLine} and follows its author. "
-                    + "Publishing it would re-issue their pack under your name.";
+            Error = Lang.Get("share-cannot-publish-follower", ShareUrlLine);
             return;
         }
 
@@ -2014,7 +2019,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             var session = await SignInAsync();
             if (session is null) return;
 
-            var progress = new Progress<string>(id => PublishStage = $"Checking {id}…");
+            var progress = new Progress<string>(id => PublishStage = Lang.Get("share-checking", id));
 
             var plan = await PublishPlan.PrepareAsync(
                 Manifest, _store.LoadLock(Id), _moddb, progress);
@@ -2027,7 +2032,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // must not be able to turn sharing into a change to what is installed.
             if (!plan.LockCovers)
             {
-                PublishStage = "Syncing…";
+                PublishStage = Lang.Get("share-syncing");
                 var sync = await RunSyncAsync(quiet: true);
 
                 // RunSyncAsync clears IsBusy in its own finally, and publishing continues.
@@ -2052,7 +2057,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             if (ConfirmPublish is null || !await ConfirmPublish(Publish)) return;
 
-            PublishStage = "Publishing…";
+            PublishStage = Lang.Get("share-publishing");
 
             var document = _store.PublishedDocument(Id, Publish.StripConnect);
             var client = new CairnsClient(_http, session.Server);
@@ -2075,7 +2080,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 },
             });
 
-            _log($"published {result.Url} (revision {result.Revision}, {result.Visibility})");
+            _log(Lang.Get("share-published", result.Url, result.Revision, result.Visibility));
             ReloadShare();
         }
         catch (Exception e)
@@ -2107,7 +2112,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         _store.MarkWithdrawn(Id);
         ReloadShare();
-        _log($"{link.Url} was withdrawn — publishing brings it back");
+        _log(Lang.Get("share-was-withdrawn", link.Url));
     }
 
     /// <summary>
@@ -2125,18 +2130,18 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         var client = new CairnsClient(_http);
         var flow = await client.StartSignInAsync();
 
-        PublishStage = $"Enter {flow.UserCode} at {flow.VerificationUri}";
-        _log($"sign in at {flow.VerificationUri} with code {flow.UserCode}");
+        PublishStage = Lang.Get("share-enter-code", flow.UserCode, flow.VerificationUri);
+        _log(Lang.Get("share-sign-in-at", flow.VerificationUri, flow.UserCode));
 
         Browser.Open($"{flow.VerificationUri}?code={flow.UserCode}");
 
         try
         {
             var session = await client.AwaitSignInAsync(
-                flow, new Progress<string>(s => PublishStage = $"{flow.UserCode} — {s}"));
+                flow, new Progress<string>(s => PublishStage = Lang.Get("share-code-stage", flow.UserCode, s)));
 
             session.Save();
-            _log($"signed in to {session.Server} as {session.Username}");
+            _log(Lang.Get("share-signed-in", session.Server, session.Username));
 
             return session;
         }
@@ -2221,7 +2226,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         if (picker.Worlds.Count == 0)
         {
-            _log("no worlds in your Vintage Story install to bring in");
+            _log(Lang.Get("worldimport-none-to-bring"));
             return;
         }
 
@@ -2232,13 +2237,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         foreach (var world in picker.Chosen)
         {
-            _log($"copying world '{world.Name}' ({Bytes.Human(world.Size)})…");
+            _log(Lang.Get("main-copying-world", world.Name, Bytes.Human(world.Size)));
 
             var copied = await InstalledWorlds.CopyIntoAsync(world, data);
 
             _log(copied.Copied
-                ? $"copied world '{world.Name}' — your own copy is untouched"
-                : $"could not copy world '{world.Name}': {copied.Problem}");
+                ? Lang.Get("main-copied-world", world.Name)
+                    : Lang.Get("main-copy-world-failed", world.Name, copied.Problem));
         }
 
         OnPropertyChanged(nameof(HasWorldsToImport));
@@ -2302,8 +2307,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         row.PinChanged();
 
         _log(version is null
-            ? $"unpinned {modId} — will track newest"
-            : $"pinned {modId} to {version}");
+            ? Lang.Get("mods-unpinned", modId)
+                : Lang.Get("mods-pinned", modId, version));
     }
 
     // ---- sync / launch / delete ----
@@ -2311,7 +2316,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     private async Task Play()
     {
-        _runs.Begin(Id, "Checking the game is ready…");
+        _runs.Begin(Id, Lang.Get("play-checking-game"));
 
         try
         {
@@ -2364,14 +2369,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         if (Confirm is null) return;
 
         if (!await Confirm(new ConfirmViewModel(
-                "Force Vintage Story to quit?",
-                $"“{Title}” has Vintage Story running. Forcing it to quit ends the game "
-                + "immediately — anything since the last save is lost, and the game gets no "
-                + "chance to write one. Use it when the game has stopped responding.",
-                "Force quit")))
+                Lang.Get("play-force-quit-title"),
+                Lang.Get("play-force-quit-body", Title),
+                Lang.Get("play-force-quit-confirm"))))
             return;
 
-        if (_runs.ForceQuit(Id)) _log("forcing Vintage Story to quit");
+        if (_runs.ForceQuit(Id)) _log(Lang.Get("play-forcing-quit"));
     }
 
     private async Task PlayCoreAsync()
@@ -2383,17 +2386,17 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             if (ResolvedInstall is null)
             {
-                Error = $"Could not prepare Vintage Story {Manifest.GameVersion} — see the log.";
+                Error = Lang.Get("play-prepare-failed", Manifest.GameVersion);
                 return;
             }
         }
 
-        Stage("Checking mods…");
+        Stage(Lang.Get("play-checking-mods"));
 
         var report = await RunSyncAsync();
         if (report is null || report.Failed)
         {
-            Error = "Not launching — sync did not complete cleanly.";
+            Error = Lang.Get("play-sync-unclean");
             return;
         }
 
@@ -2413,14 +2416,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             var config = new List<ModConfigChange>();
 
             foreach (var dropped in _packData.BeforeLaunch(Id, bound, config))
-                _log($"no longer loading mods from {dropped} — this pack has its own");
+                _log(Lang.Get("play-dropped-mod-path", dropped));
 
             // A keyboard that changes behaviour without saying so is alarming in a way a
             // mod path is not. Only ever bindings the player had none of — see
             // ClientHotkeys — so this says what arrived, not what was taken.
             if (bound.Count > 0)
-                _log($"bound {bound.Count} hotkey{(bound.Count == 1 ? "" : "s")} from the pack: "
-                     + string.Join(", ", bound));
+                _log(Lang.Plural("play-bound-hotkeys", bound.Count, bound.Count, string.Join(", ", bound)));
 
             // Every line, not a count. These change how the game plays, they are written
             // into files belonging to other people's mods, and the ones left alone are what
@@ -2453,17 +2455,16 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
                 if (!runtime.Resolved)
                 {
-                    Error = $"{install.Version} needs .NET {install.RequiredFramework}, "
-                            + "which could not be installed — see the log.";
+                    Error = Lang.Get("play-runtime-failed", install.Version, install.RequiredFramework);
                     return;
                 }
             }
 
-            Stage("Starting Vintage Story…");
-            _log($"launching: {string.Join(' ', launcher.BuildArguments(options))}");
+            Stage(Lang.Get("play-starting"));
+            _log(Lang.Get("play-launching", string.Join(' ', launcher.BuildArguments(options))));
 
             var proc = launcher.Launch(options);
-            _log($"Vintage Story started (pid {proc.Id})");
+            _log(Lang.Get("play-started", proc.Id));
 
             // The game takes a while to put a window up. Keep saying so, and keep Play
             // disabled, until it actually exits. Handed to the registry, which outlives
@@ -2472,7 +2473,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         catch (Exception e)
         {
-            Error = $"Launch failed: {e.Message}";
+            Error = Lang.Get("play-failed", e.Message);
         }
     }
 
@@ -2499,7 +2500,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             ExportedPath = path;
             Error = null;
-            _log($"exported '{Id}' -> {path}");
+            _log(Lang.Get("packsettings-exported", Id, path));
         }
         catch (Exception e)
         {
@@ -2655,7 +2656,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // over on one unlucky file left the tab permanently blank otherwise: no rows,
             // no way back short of selecting another pack and returning.
             _hotkeysLoaded = false;
-            HotkeySummary = $"Could not read the pack's mods: {e.Message}";
+            HotkeySummary = Lang.Get("hotkeys-read-failed", e.Message);
         }
         finally
         {
@@ -2674,14 +2675,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// </summary>
     private static string Summarise(HotkeyCatalog.Result result)
     {
-        var line = $"{result.Entries.Count} hotkeys in this pack";
+        var line = Lang.Plural("hotkeys-count", result.Entries.Count, result.Entries.Count);
 
         if (result.Keyless > 0)
-            line += $" — {result.Keyless} of them do not say which key they ship on";
+            line += Lang.Get("hotkeys-keyless", result.Keyless);
 
         if (result.Unreadable > 0)
-            line += $"{(result.Keyless > 0 ? ", and" : " —")} {result.Unreadable} more are set up "
-                    + "in code and cannot be read from the files";
+            line += result.Keyless > 0
+                    ? Lang.Get("hotkeys-unreadable-and", result.Unreadable)
+                    : Lang.Get("hotkeys-unreadable", result.Unreadable);
 
         return line;
     }
@@ -2851,14 +2853,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public string HotkeyListLine =>
         _allHotkeys.Count == 0 || Hotkeys.Count == _allHotkeys.Count
             ? ""
-            : $"showing {Hotkeys.Count} of {_allHotkeys.Count}";
+            : Lang.Get("hotkeys-showing", Hotkeys.Count, _allHotkeys.Count);
 
     public bool ShowNoHotkeysFound => _allHotkeys.Count > 0 && Hotkeys.Count == 0;
 
     /// <summary>Why the list is empty, which is a different answer for each filter.</summary>
     public string NoHotkeysFoundLine => OnlyClashes && HotkeyClashCount == 0
-        ? "Nothing collides. Every hotkey in this pack is on a key of its own."
-        : "No hotkey matches that.";
+        ? Lang.Get("hotkeys-none-collide")
+            : Lang.Get("hotkeys-no-match");
 
     [ObservableProperty] public partial int HotkeyClashCount { get; set; }
 
@@ -2877,8 +2879,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// would reach for next.
     /// </summary>
     public string OnlyClashesLabel => HotkeyClashCount == 0
-        ? "Only conflicts"
-        : $"Only conflicts ({HotkeyClashCount})";
+        ? Lang.Get("hotkeys-only-conflicts")
+            : Lang.Get("hotkeys-only-conflicts-count", HotkeyClashCount);
 
     /// <summary>
     /// Takes a keypress for whichever row is waiting, and returns whether it wanted one.
@@ -2931,7 +2933,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             var progress = new Progress<SyncStep>(s =>
             {
                 _log(Format(s));
-                if (IsLaunching) Stage($"Mods: {s.ModId} {s.Detail}");
+                if (IsLaunching) Stage(Lang.Get("play-mod-stage", s.ModId, s.Detail));
 
                 // The row stops saying "downloading…" when sync has actually reached it,
                 // rather than when the whole run finishes.
@@ -2945,15 +2947,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             if (report.Failed)
             {
-                if (quiet) _log("some mods could not be installed — Play will try again");
-                else Error = "Some mods could not be installed — see the log.";
+                if (quiet) _log(Lang.Get("sync-failed-quiet"));
+                else Error = Lang.Get("sync-failed");
             }
 
             return report;
         }
         catch (Exception e)
         {
-            if (quiet) _log($"background sync failed: {e.Message}");
+            if (quiet) _log(Lang.Get("sync-background-failed", e.Message));
             else Error = e.Message;
             return null;
         }
@@ -3319,12 +3321,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         var marker = s.Action switch
         {
-            SyncAction.Downloaded => "added",
-            SyncAction.Updated => "updated",
-            SyncAction.Removed => "removed",
-            SyncAction.Unchanged => "ok",
-            SyncAction.Warned => "warning",
-            _ => "failed",
+            SyncAction.Downloaded => Lang.Get("sync-added"),
+                SyncAction.Updated => Lang.Get("sync-updated"),
+                SyncAction.Removed => Lang.Get("sync-removed"),
+                SyncAction.Unchanged => Lang.Get("sync-ok"),
+                SyncAction.Warned => Lang.Get("sync-warning"),
+                _ => Lang.Get("sync-failed-marker"),
         };
 
         return $"{marker,-8} {s.ModId,-24} {s.Detail}";
