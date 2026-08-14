@@ -464,12 +464,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// </summary>
     private static string DescribeVersions(IReadOnlyList<string>? versions)
     {
-        if (versions is null || versions.Count == 0) return "no game version";
+        if (versions is null || versions.Count == 0) return Lang.Get("sync-no-game-version");
 
         var shown = versions.Take(3).ToList();
         var rest = versions.Count - shown.Count;
 
-        return string.Join(", ", shown) + (rest > 0 ? $" and {rest} more" : "");
+        return string.Join(", ", shown) + (rest > 0 ? Lang.Get("and-n-more", rest) : "");
     }
 
     /// <summary>

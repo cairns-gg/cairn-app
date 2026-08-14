@@ -5,7 +5,7 @@ namespace Cairn.Core.Packs;
 /// </summary>
 public sealed record PackUpdateAvailable(int From, int To, PackBundle Bundle)
 {
-    public string Describe() => $"revision {To} is available (you have {From})";
+    public string Describe() => Lang.Get("packupdate-check-describe", To, From);
 }
 
 /// <summary>

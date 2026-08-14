@@ -15,8 +15,8 @@ public sealed record ProcessResult(string Command, int ExitCode, IReadOnlyList<s
     /// everything — and the reason is nearly always in the last few lines.
     /// </summary>
     public string Describe() => Succeeded
-        ? $"{Command} succeeded."
-        : $"{Command} failed (exit {ExitCode})."
+        ? Lang.Get("optimum-cmd-succeeded", Command)
+        : Lang.Get("optimum-cmd-failed", Command, ExitCode)
           + (Tail.Count == 0 ? "" : "\n" + string.Join("\n", Tail));
 }
 

@@ -81,21 +81,21 @@ public sealed record VersionChangePlan(
 
     public string Summary()
     {
-        if (IsNoChange) return $"The pack already targets {To}.";
+        if (IsNoChange) return Lang.Get("versionchange-no-change", To);
 
-        var direction = IsDowngrade ? "Downgrade" : "Upgrade";
+        var direction = IsDowngrade ? Lang.Get("versionchange-downgrade") : Lang.Get("versionchange-upgrade");
         var parts = new List<string>();
 
-        if (AnythingBreaks) parts.Add($"{Breaking.Count()} would stop working");
-        if (Moving.Any()) parts.Add($"{Moving.Count()} would change version");
-        if (Warning.Any()) parts.Add($"{Warning.Count()} not marked for {To} exactly");
-        if (IsIncomplete) parts.Add($"{Unchecked.Count()} could not be checked");
+        if (AnythingBreaks) parts.Add(Lang.Get("versionchange-would-break", Breaking.Count()));
+        if (Moving.Any()) parts.Add(Lang.Get("versionchange-would-move", Moving.Count()));
+        if (Warning.Any()) parts.Add(Lang.Get("versionchange-not-marked", Warning.Count(), To));
+        if (IsIncomplete) parts.Add(Lang.Get("versionchange-unchecked", Unchecked.Count()));
 
         var mods = parts.Count == 0
-            ? Mods.Count == 0 ? "No mods to check." : "Every mod keeps the release it has."
+            ? Mods.Count == 0 ? Lang.Get("versionchange-no-mods") : Lang.Get("versionchange-all-keep")
             : string.Join(", ", parts) + ".";
 
-        return $"{direction} {From} → {To}. {mods}";
+        return Lang.Get("versionchange-summary", direction, From, To, mods);
     }
 }
 

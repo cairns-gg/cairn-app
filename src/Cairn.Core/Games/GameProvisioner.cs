@@ -11,10 +11,10 @@ public sealed record ProvisionPlan(string GameVersion, bool NeedsGame, bool Need
 
     public string Describe() => (NeedsGame, NeedsRuntime) switch
     {
-        (true, true) => $"Vintage Story {GameVersion} and its .NET runtime need downloading.",
-        (true, false) => $"Vintage Story {GameVersion} needs downloading.",
-        (false, true) => $"Vintage Story {GameVersion} is installed but its .NET runtime is missing.",
-        _ => $"Vintage Story {GameVersion} is ready.",
+        (true, true) => Lang.Get("provision-needs-both", GameVersion),
+            (true, false) => Lang.Get("provision-needs-game", GameVersion),
+            (false, true) => Lang.Get("provision-needs-runtime", GameVersion),
+            _ => Lang.Get("provision-ready", GameVersion),
     };
 }
 

@@ -7,7 +7,7 @@ public sealed record PublishMod(string ModId, string? Version, bool Pinned, bool
 {
     /// <summary>"glassview 1.3.0" or "unchisel 1.2.0 (pinned)".</summary>
     public string Describe() =>
-        Version is null ? ModId : $"{ModId} {Version}{(Pinned ? " (pinned)" : "")}";
+        Version is null ? ModId : $"{ModId} {Version}{(Pinned ? " " + Lang.Get("share-pinned-suffix") : "")}";
 }
 
 /// <summary>
@@ -45,16 +45,14 @@ public sealed record PublishPlan(
     public bool CanPublish => LockCovers;
 
     public string Summary() => Mods.Count == 0
-        ? "This pack has no mods to publish."
-        : $"Publishing {Mods.Count} mod{(Mods.Count == 1 ? "" : "s")} at these exact versions.";
+        ? Lang.Get("share-nothing-to-publish")
+        : Lang.Plural("share-publishing-mods", Mods.Count, Mods.Count);
 
     public string UnresolvableWarning()
     {
         var n = Unresolvable.Count();
-        return $"{n} mod{(n == 1 ? " is" : "s are")} not on ModDB "
-               + $"({string.Join(", ", Unresolvable.Take(3).Select(m => m.ModId))}"
-               + $"{(n > 3 ? ", …" : "")}). Recipients cannot install "
-               + (n == 1 ? "it." : "them.");
+        return Lang.Plural("share-unresolvable", n, n,
+            string.Join(", ", Unresolvable.Take(3).Select(m => m.ModId)) + (n > 3 ? ", …" : ""));
     }
 
     /// <summary>

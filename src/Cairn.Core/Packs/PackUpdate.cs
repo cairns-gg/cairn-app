@@ -63,12 +63,15 @@ public sealed record ModChange(
 
     public string Describe() => Kind switch
     {
-        ModChangeKind.Added => Theirs is null ? "added" : $"added, pinned to {Theirs}",
-        ModChangeKind.Removed => "removed by the author",
-        ModChangeKind.Repinned => $"{Mine ?? "newest"} → {Theirs ?? "newest"}",
-        ModChangeKind.DroppedByYou => "you removed it; the author still includes it",
-        ModChangeKind.PinConflict => $"you pin {Mine ?? "newest"}, the author pins {Theirs ?? "newest"}",
-        ModChangeKind.Yours => "yours",
+        ModChangeKind.Added => Theirs is null
+                ? Lang.Get("packupdate-desc-added")
+                : Lang.Get("packupdate-desc-added-pinned", Theirs),
+            ModChangeKind.Removed => Lang.Get("packupdate-desc-removed"),
+            ModChangeKind.Repinned => $"{Mine ?? Lang.Get("packupdate-newest")} → {Theirs ?? Lang.Get("packupdate-newest")}",
+            ModChangeKind.DroppedByYou => Lang.Get("packupdate-desc-dropped"),
+            ModChangeKind.PinConflict => Lang.Get("packupdate-desc-pin-conflict",
+                Mine ?? Lang.Get("packupdate-newest"), Theirs ?? Lang.Get("packupdate-newest")),
+            ModChangeKind.Yours => Lang.Get("packupdate-yours"),
         _ => "",
     };
 }
@@ -237,9 +240,9 @@ public sealed class PackUpdatePlan
         var repinned = Changes.Count(c => c.Kind == ModChangeKind.Repinned);
 
         var parts = new List<string>();
-        if (added > 0) parts.Add($"{added} added");
-        if (removed > 0) parts.Add($"{removed} removed");
-        if (repinned > 0) parts.Add($"{repinned} repinned");
+        if (added > 0) parts.Add(Lang.Get("packupdate-n-added", added));
+        if (removed > 0) parts.Add(Lang.Get("packupdate-n-removed", removed));
+        if (repinned > 0) parts.Add(Lang.Get("packupdate-n-repinned", repinned));
 
         // Named rather than counted, and after the mods so it is the last thing read. This
         // is the one line somebody sees before agreeing, and where the pack points is not a
@@ -247,15 +250,15 @@ public sealed class PackUpdatePlan
         if (ConnectChanges)
         {
             parts.Add(string.IsNullOrWhiteSpace(ConnectTo)
-                ? "stops joining a server"
-                : $"joins {ConnectTo}");
+                ? Lang.Get("packupdate-stops-joining")
+                : Lang.Get("packupdate-joins", ConnectTo));
         }
 
-        if (KeybindsChange) parts.Add("changes keybinds");
+        if (KeybindsChange) parts.Add(Lang.Get("packupdate-changes-keybinds"));
 
         return parts.Count == 0
-            ? $"Revision {ToRevision} changes no mods."
-            : $"Revision {ToRevision}: {string.Join(", ", parts)}.";
+            ? Lang.Get("packupdate-no-mod-changes", ToRevision)
+            : Lang.Get("packupdate-summary", ToRevision, string.Join(", ", parts));
     }
 
     /// <summary>

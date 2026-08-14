@@ -83,21 +83,21 @@ public static class ModDependencies
         /// <summary>"genelib 3.2.0 'Genelib' by sekelsta", or whatever survives.</summary>
         public string Describe()
         {
-            if (Problem is not null) return $"unreadable — {Problem}";
+            if (Problem is not null) return Lang.Get("deps-unreadable", Problem);
 
             var parts = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(ModId)) parts.Add(ModId!);
             if (!string.IsNullOrWhiteSpace(Version)) parts.Add(Version!);
             if (!string.IsNullOrWhiteSpace(Name)) parts.Add($"\"{Name}\"");
-            if (Authors.Count > 0) parts.Add($"by {string.Join(", ", Authors)}");
+            if (Authors.Count > 0) parts.Add(Lang.Get("mods-by", string.Join(", ", Authors)));
             if (!string.IsNullOrWhiteSpace(Type)) parts.Add($"({Type})");
 
-            return parts.Count == 0 ? "no modinfo.json" : string.Join(" ", parts);
+            return parts.Count == 0 ? Lang.Get("deps-no-modinfo") : string.Join(" ", parts);
         }
 
         public string DescribeRequires() => Requires.Count == 0
-            ? "nothing"
+            ? Lang.Get("deps-nothing")
             : string.Join(", ", Requires.Select(
                 r => r.Value is null ? r.Key : $"{r.Key} {r.Value}"));
     }

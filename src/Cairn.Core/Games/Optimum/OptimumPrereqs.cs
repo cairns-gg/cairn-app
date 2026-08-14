@@ -23,13 +23,12 @@ public sealed record PrereqReport(IReadOnlyList<BuildTool> Missing, string? Unsu
     public string Describe()
     {
         if (Unsupported is not null) return Unsupported;
-        if (Missing.Count == 0) return "Everything needed to build Optimum is present.";
+        if (Missing.Count == 0) return Lang.Get("optimum-prereqs-ok");
 
         var lines = Missing.Select(t => $"  {t.Name} — {t.UsedFor}\n      {t.Hint}");
 
-        return $"Building Optimum needs {Missing.Count} tool"
-               + (Missing.Count == 1 ? "" : "s")
-               + " this machine does not have:\n" + string.Join("\n", lines);
+        return Lang.Plural("optimum-prereqs-missing", Missing.Count, Missing.Count)
+               + "\n" + string.Join("\n", lines);
     }
 }
 
@@ -67,15 +66,15 @@ public static class OptimumPrereqs
         var arch = RuntimeInformation.ProcessArchitecture;
 
         if (arch is not (Architecture.X64 or Architecture.Arm64))
-            return $"Optimum has no build for {arch}.";
+            return Lang.Get("optimum-no-build-for", arch);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && arch is Architecture.Arm64)
-            return "Optimum has no Windows build for arm64.";
+            return Lang.Get("optimum-no-windows-arm64");
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return "Optimum can only be built on Windows, Linux or macOS.";
+            return Lang.Get("optimum-platforms");
 
         return null;
     }

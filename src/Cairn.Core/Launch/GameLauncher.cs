@@ -47,8 +47,7 @@ public sealed record RuntimeResolution(DotnetRuntime? Runtime, ExecutableArch Ga
                                 && Runtime.Arch != GameArch;
 
     public string Describe() => Runtime is null
-        ? $"No {Describe(GameArch)} .NET {Required.Major} runtime found. The game bundles no "
-          + "runtime, so it cannot start until one is installed."
+        ? Lang.Get("launch-no-runtime", Describe(GameArch), Required.Major)
         : $".NET {Runtime.Best(Required)?.ToString() ?? "?"} ({Describe(Runtime.Arch)}) at {Runtime.Root}";
 
     private static string Describe(ExecutableArch arch) => arch switch
