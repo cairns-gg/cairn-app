@@ -100,7 +100,13 @@ you choose it — no restart, the window you are looking at changes under you.
 
 By default Cairn works it out: it follows **the language your Vintage Story is set to**, then
 your system's, then English. If you already play in Spanish, Cairn starts in Spanish without
-being told.
+being told. (On Windows the system step is skipped — Vintage Story's own setting is the
+better signal there in any case.)
+
+**The things that go wrong are translated too**, not only the buttons. A mod that cannot be
+installed, a pack that will not import, a disk with no room on it — the sentence explaining
+it comes from the same file as everything else, because the moment you most want your own
+language is the moment something has failed.
 
 **The translations are drafts, and they say so.** English is complete. Spanish, French and
 both Portuguese variants cover the interface you see most — tabs, buttons, the mod list, the
@@ -154,6 +160,18 @@ as it finishes, with no restart.
 **If this happened to you**, the mods that were downloaded again are in the old location,
 where Cairn will never look for them. It is safe to delete that folder — the only thing in
 there worth keeping is the small `home` file, which is what points Cairn at the new drive.
+
+## Smaller things
+
+- **Your settings stop overwriting each other.** Cairn kept its preferences in a file that
+  was rewritten whole by whichever setting you had just changed, so a second setting would
+  have vanished the first time you dragged the interface-size slider. That is why there was
+  never more than one. It now keeps every setting it knows about, and every setting it does
+  *not* — so a preference written by a newer Cairn survives being opened by an older one.
+- **A few sentences that were wrong in English got fixed**, found by writing them out
+  properly for translation: "1 thing you changed differ from the author's" now says
+  *differs*, and the dialog that asks about a mod with no release for your game version no
+  longer works out which version it means by taking its own sentence apart.
 
 ## Upgrading
 

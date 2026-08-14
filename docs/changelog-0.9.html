@@ -54,7 +54,9 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p>Every word the launcher says now comes from a translation file rather than being written into the program, and there is a <strong>Language</strong> setting in Preferences to pick one. It applies as you choose it &mdash; no restart, the window you are looking at changes under you.</p>
 
-<p>By default Cairn works it out: it follows <strong>the language your Vintage Story is set to</strong>, then your system's, then English. If you already play in Spanish, Cairn starts in Spanish without being told.</p>
+<p>By default Cairn works it out: it follows <strong>the language your Vintage Story is set to</strong>, then your system's, then English. If you already play in Spanish, Cairn starts in Spanish without being told. (On Windows the system step is skipped &mdash; Vintage Story's own setting is the better signal there in any case.)</p>
+
+<p><strong>The things that go wrong are translated too</strong>, not only the buttons. A mod that cannot be installed, a pack that will not import, a disk with no room on it &mdash; the sentence explaining it comes from the same file as everything else, because the moment you most want your own language is the moment something has failed.</p>
 
 <p><strong>The translations are drafts, and they say so.</strong> English is complete. Spanish, French and both Portuguese variants cover the interface you see most &mdash; tabs, buttons, the mod list, the Mod config tab, Preferences &mdash; and are waiting on a professional reviewer before anyone should trust them. Anything not translated yet shows in English rather than going blank, so a half-finished language reads as half-finished.</p>
 
@@ -85,6 +87,13 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 <p>It notices now. The pack list, the paths on screen and the next launch all follow the move as it finishes, with no restart.</p>
 
 <p><strong>If this happened to you</strong>, the mods that were downloaded again are in the old location, where Cairn will never look for them. It is safe to delete that folder &mdash; the only thing in there worth keeping is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
+
+<h2>Smaller things</h2>
+
+<ul>
+  <li><strong>Your settings stop overwriting each other.</strong> Cairn kept its preferences in a file that was rewritten whole by whichever setting you had just changed, so a second setting would have vanished the first time you dragged the interface-size slider. That is why there was never more than one. It now keeps every setting it knows about, and every setting it does <em>not</em> &mdash; so a preference written by a newer Cairn survives being opened by an older one.</li>
+  <li><strong>A few sentences that were wrong in English got fixed</strong>, found by writing them out properly for translation: "1 thing you changed differ from the author's" now says <em>differs</em>, and the dialog that asks about a mod with no release for your game version no longer works out which version it means by taking its own sentence apart.</li>
+</ul>
 
 <h2>Upgrading</h2>
 
