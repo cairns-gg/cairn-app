@@ -21,8 +21,14 @@ public class LanguageCoverageTests
     /// <summary><c>{l:Tr some-key}</c> in markup, and Lang.Get/Plural("some-key") in code.</summary>
     private static readonly Regex InMarkup = new(@"\{l:Tr\s+([A-Za-z0-9_.-]+)\s*\}", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Lang.Get/Plural("key") for a sentence rendered on the spot, and new Message("key") for
+    /// one Core has decided on and left for whoever reads it to render — see
+    /// <see cref="Message"/>. Both are references, and a scanner that knew only the first
+    /// reported every composed reason as an unused string.
+    /// </summary>
     private static readonly Regex InCode = new(
-        @"Lang\.(?:Get|Plural)\(\s*""([A-Za-z0-9_.-]+)""", RegexOptions.Compiled);
+        @"(?:Lang\.(?:Get|Plural)|new Message)\(\s*""([A-Za-z0-9_.-]+)""", RegexOptions.Compiled);
 
     /// <summary>
     /// The plural forms CLDR names. A key used as Lang.Plural("carried") is answered by

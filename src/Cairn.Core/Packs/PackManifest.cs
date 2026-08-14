@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -169,7 +170,7 @@ public sealed class PackManifest
         // strange address would fail to connect, it is that a value beginning with '-' is
         // read by the game's own parser as a further option.
         if (ServerAddress.Problem(Connect) is { } connect)
-            yield return $"Pack 'connect' {connect}";
+            yield return Lang.Get("pack-connect-problem", connect);
 
         // Checked here rather than at launch, so a pack naming ../../etc is refused by
         // import — the moment it arrives from someone else — and not on the machine of
@@ -198,17 +199,15 @@ public sealed class PackManifest
         foreach (var (file, patch) in ModConfig)
         {
             if (ModConfigFiles.PathProblem(file) is { } problem)
-                yield return $"Pack 'modConfig' cannot use '{file}': {problem}.";
+                yield return Lang.Get("pack-modconfig-bad-path", file, problem);
 
             else if (patch is null)
-                yield return $"Pack 'modConfig' entry '{file}' has no values under it.";
+                yield return Lang.Get("pack-modconfig-empty", file);
         }
 
         var size = JsonSerializer.Serialize(ModConfig, JsonOptions).Length;
         if (size > MaxModConfig)
-            yield return $"Pack 'modConfig' is {size / 1024}KB, over the {MaxModConfig / 1024}KB "
-                         + "limit. It carries the values that make mods agree with each other, "
-                         + "not a copy of each mod's whole config file.";
+            yield return Lang.Get("pack-modconfig-too-big", size / 1024, MaxModConfig / 1024);
     }
 
     /// <summary>Problems with individual mod entries, each naming the entry it is about.</summary>

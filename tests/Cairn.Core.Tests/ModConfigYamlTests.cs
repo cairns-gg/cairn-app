@@ -195,7 +195,7 @@ public class ModConfigYamlTests : IDisposable
 
         var refused = Assert.Single(changes, c => c.Outcome == ModConfigOutcome.Refused);
         Assert.Equal("version", refused.Key);
-        Assert.Contains("ConfigLib", refused.Detail);
+        Assert.Equal("modconfig-why-version", refused.Detail!.Key);
 
         // The rest of the patch still lands; one bad key costs one key.
         Assert.Contains("version: 1\n", File.ReadAllText(Config("seafarer.yaml")));
@@ -213,7 +213,7 @@ public class ModConfigYamlTests : IDisposable
         var refused = Assert.Single(Apply(Declare("seafarer.yaml", """{ "drying-enable-wind": false }""")));
 
         Assert.Equal(ModConfigOutcome.Refused, refused.Outcome);
-        Assert.Contains("next launch", refused.Detail);
+        Assert.Equal("modconfig-why-not-yet", refused.Detail!.Key);
         Assert.False(File.Exists(Config("seafarer.yaml")));
     }
 

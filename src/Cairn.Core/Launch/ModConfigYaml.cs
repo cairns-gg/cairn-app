@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -42,7 +43,7 @@ internal static class ModConfigYaml
     /// Flat by construction: a ConfigLib file has no sections, so the object is one level of
     /// scalars — which is exactly what the rest of the mod config code already works in.
     /// </summary>
-    public static (JsonObject? Values, string? Why) Parse(string text)
+    public static (JsonObject? Values, Message? Why) Parse(string text)
     {
         var values = new JsonObject();
 
@@ -54,13 +55,13 @@ internal static class ModConfigYaml
             if (content.TrimStart().StartsWith("#")) continue;
 
             if (KeyOf(content) is not { } key)
-                return (null, "it has YAML in it that Cairn cannot edit safely");
+                return (null, new Message("modconfig-why-yaml"));
 
             if (values.ContainsKey(key.Name))
-                return (null, $"it names '{key.Name}' more than once");
+                return (null, new Message("modconfig-why-yaml-duplicate", key.Name));
 
             var (value, ok) = Scalar(content[key.ValueStart..]);
-            if (!ok) return (null, "it has YAML in it that Cairn cannot edit safely");
+            if (!ok) return (null, new Message("modconfig-why-yaml"));
 
             values[key.Name] = value;
         }

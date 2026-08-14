@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -34,7 +35,7 @@ public enum ModConfigOutcome
 /// <see cref="ModConfigOutcome.Refused"/>, which is about the file rather than a value in it.
 /// </summary>
 public sealed record ModConfigChange(
-    string File, string Key, ModConfigOutcome Outcome, string? Detail = null,
+    string File, string Key, ModConfigOutcome Outcome, Message? Detail = null,
     JsonNode? Value = null)
 {
     /// <summary>
@@ -44,13 +45,13 @@ public sealed record ModConfigChange(
     /// </summary>
     public string Describe() => Outcome switch
     {
-        ModConfigOutcome.Applied => $"{File}: set {Key}",
-        ModConfigOutcome.Kept => $"{File}: left {Key} alone — it has been changed here"
-                                 + (Detail is null ? "" : $" ({Detail})"),
-        ModConfigOutcome.Released => $"{File}: the pack no longer sets {Key}, leaving it as it is",
-        ModConfigOutcome.Missing => $"{File}: {Key} is not a setting this mod has",
-        _ when Key.Length > 0 => $"{File}: left {Key} alone — {Detail}",
-        _ => $"{File}: left alone — {Detail}",
+        ModConfigOutcome.Applied => Lang.Get("modconfig-log-set", File, Key),
+        ModConfigOutcome.Kept when Detail is null => Lang.Get("modconfig-log-kept", File, Key),
+        ModConfigOutcome.Kept => Lang.Get("modconfig-log-kept-why", File, Key, Detail),
+        ModConfigOutcome.Released => Lang.Get("modconfig-log-released", File, Key),
+        ModConfigOutcome.Missing => Lang.Get("modconfig-log-missing", File, Key),
+        _ when Key.Length > 0 => Lang.Get("modconfig-log-refused-key", File, Key, Detail),
+        _ => Lang.Get("modconfig-log-refused", File, Detail),
     };
 }
 
@@ -225,7 +226,7 @@ public static class ModConfigFiles
 
                 if (!Save(full, written))
                     changes.Add(new ModConfigChange(file, "", ModConfigOutcome.Refused,
-                        "it could not be written"));
+                        new Message("modconfig-why-unwritable")));
             }
 
             next[file] = patch.DeepClone().AsObject();
@@ -328,8 +329,7 @@ public static class ModConfigFiles
         if (named.Count == 0) return patch;
 
         changes.Add(new ModConfigChange(file, ModConfigYaml.VersionKey, ModConfigOutcome.Refused,
-            "'version' belongs to ConfigLib, and setting it makes ConfigLib reset every "
-            + "setting in this file to the mod's defaults"));
+            new Message("modconfig-why-version")));
 
         var without = patch.DeepClone().AsObject();
         foreach (var key in named) without.Remove(key);
@@ -395,7 +395,7 @@ public static class ModConfigFiles
                 }
 
                 changes.Add(new ModConfigChange(file, path, ModConfigOutcome.Kept,
-                    "the file has a single value where the pack has a section"));
+                    new Message("modconfig-why-value-not-section")));
                 continue;
             }
 
@@ -494,7 +494,7 @@ public static class ModConfigFiles
     /// <see cref="Read"/> for <see cref="ModConfigSurvey"/>, which must offer a row only for
     /// a file a tick could actually reach — the same judgement, made once.
     /// </summary>
-    internal static (JsonObject? Root, bool Rewritable, string? Why) ReadForSurvey(string path)
+    internal static (JsonObject? Root, bool Rewritable, Message? Why) ReadForSurvey(string path)
     {
         var (root, _, rewritable, why) = Read(path);
         return (root, rewritable, why);
@@ -507,7 +507,7 @@ public static class ModConfigFiles
     internal static bool IsYaml(string file) =>
         file.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase);
 
-    private static (JsonObject? Root, string? Text, bool Rewritable, string? Why) Read(string path)
+    private static (JsonObject? Root, string? Text, bool Rewritable, Message? Why) Read(string path)
     {
         var yaml = IsYaml(path);
 
@@ -521,8 +521,7 @@ public static class ModConfigFiles
                     // honoured at all — get that wrong and it overwrites every setting with
                     // its defaults. So this waits for the file rather than inventing one, and
                     // the cost is exactly one session: it is there from the next launch.
-                    ? (null, null, false, "it is not there yet — this pack's values will "
-                                          + "apply from the next launch")
+                    ? (null, null, false, new Message("modconfig-why-not-yet"))
 
                     // Absent JSON is the ordinary first launch, and the whole file is the
                     // pack's to write. The mod fills in whatever it does not find.
@@ -532,7 +531,7 @@ public static class ModConfigFiles
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            return (null, null, false, "it could not be read");
+            return (null, null, false, new Message("modconfig-why-unreadable"));
         }
 
         if (yaml)
@@ -544,7 +543,7 @@ public static class ModConfigFiles
         try
         {
             if (JsonNode.Parse(text) is JsonObject strict) return (strict, text, true, null);
-            return (null, null, false, "its top level is a list rather than a set of settings");
+            return (null, null, false, new Message("modconfig-why-list"));
         }
         catch (JsonException)
         {
@@ -554,13 +553,13 @@ public static class ModConfigFiles
         try
         {
             if (JsonNode.Parse(text, documentOptions: Lenient) is JsonObject)
-                return (null, null, false, "it has comments in it that saving would erase");
+                return (null, null, false, new Message("modconfig-why-comments"));
 
-            return (null, null, false, "its top level is a list rather than a set of settings");
+            return (null, null, false, new Message("modconfig-why-list"));
         }
         catch (JsonException)
         {
-            return (null, null, false, "it is not valid JSON");
+            return (null, null, false, new Message("modconfig-why-not-json"));
         }
     }
 
@@ -658,25 +657,25 @@ public static class ModConfigFiles
     /// filename character elsewhere, so a pack written on one would quietly write a file
     /// called <c>XLeveling\mining.json</c> on the other.
     /// </summary>
-    public static string? PathProblem(string? file)
+    public static Message? PathProblem(string? file)
     {
-        if (string.IsNullOrWhiteSpace(file)) return "it has no file name";
-        if (file.Contains('\\')) return "it uses backslashes — write the separator as '/'";
+        if (string.IsNullOrWhiteSpace(file)) return new Message("modconfig-path-no-name");
+        if (file.Contains('\\')) return new Message("modconfig-path-backslash");
         if (Path.IsPathRooted(file) || file.Contains(':'))
-            return "it is an absolute path, and must be relative to ModConfig/";
+            return new Message("modconfig-path-absolute");
 
         var parts = file.Split('/');
-        if (parts.Any(p => p.Length == 0)) return "it has an empty path segment";
-        if (parts.Any(p => p is "." or "..")) return "it points outside ModConfig/";
+        if (parts.Any(p => p.Length == 0)) return new Message("modconfig-path-empty-segment");
+        if (parts.Any(p => p is "." or "..")) return new Message("modconfig-path-outside");
         if (parts.Any(p => p.Any(Path.GetInvalidFileNameChars().Contains)))
-            return "it has characters that are not allowed in a file name";
+            return new Message("modconfig-path-bad-characters");
 
         // JSON, and ConfigLib's flat YAML. Everything else — an .ini, a mod's own YAML with
         // real structure in it — has no honest way to have one value merged into it while
         // the rest of the file is preserved. Refusing loudly is the difference between a
         // feature that does not cover a mod and one that appears to and does nothing.
         if (!file.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && !IsYaml(file))
-            return "Cairn can only carry .json and .yaml config files";
+            return new Message("modconfig-path-extension");
 
         return null;
     }

@@ -258,6 +258,6 @@ public static class ModConfigSurvey
     private static string Native(string file) =>
         file.Replace('/', System.IO.Path.DirectorySeparatorChar);
 
-    private static (JsonObject? Root, bool Rewritable, string? Why) ReadConfig(string path) =>
+    private static (JsonObject? Root, bool Rewritable, Message? Why) ReadConfig(string path) =>
         ModConfigFiles.ReadForSurvey(path);
 }

@@ -225,7 +225,9 @@ public class ModConfigTests : IDisposable
         var refused = Assert.Single(Apply(Declare("vanillamoremolds.json", """{ "enableMolds": true }""")));
 
         Assert.Equal(ModConfigOutcome.Refused, refused.Outcome);
-        Assert.Contains("comments", refused.Detail);
+        // The key rather than the words: what this test is about is which reason was
+        // reached, and the wording of it is the catalog's business.
+        Assert.Equal("modconfig-why-comments", refused.Detail!.Key);
         Assert.Equal(original, File.ReadAllText(Config("vanillamoremolds.json")));
     }
 
@@ -237,7 +239,7 @@ public class ModConfigTests : IDisposable
         var refused = Assert.Single(Apply(Declare("markers.json", """{ "Category": "Fauna" }""")));
 
         Assert.Equal(ModConfigOutcome.Refused, refused.Outcome);
-        Assert.Contains("list", refused.Detail);
+        Assert.Equal("modconfig-why-list", refused.Detail!.Key);
     }
 
     [Fact]
