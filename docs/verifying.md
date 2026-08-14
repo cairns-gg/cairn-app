@@ -72,42 +72,24 @@ attestation makes commit → artifact attributable. It is the one link in the ch
 workflow cannot enforce: the attestation faithfully records whatever commit the tag pointed
 at, including the wrong one.
 
-Signing is configured per clone, in `.git/config`, so it does not travel with the source and
-this is where it is written down. The key is an SSH key held in 1Password rather than a GPG
-key on disk — the same key that authenticates the push, and `op-ssh-sign` is what git calls
-to use it:
+Both the tags and the commits under them are signed. What that gets you as a reader is two
+checks you can run yourself:
 
 ```bash
-key="$(ssh-add -L | awk '$3=="Github"{print $1" "$2}')"   # via 1Password's agent
-
-git config gpg.format ssh
-git config user.signingkey "$key"
-git config gpg.ssh.program "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
-git config tag.gpgsign true
-git config commit.gpgsign true
-
-# Without this git makes signatures it cannot then verify, which reads as a broken key
-# rather than as a missing list of who is allowed to sign.
-printf '%s %s\n' "$(git config user.email)" "$key" > ~/.config/git/allowed_signers
-git config gpg.ssh.allowedSignersFile "$HOME/.config/git/allowed_signers"
+git verify-tag v1.2.3            # Good "git" signature ...
+git log --show-signature -1      # or --format='%h %G?' — G for good, N for unsigned
 ```
 
-`tag.gpgsign` means `git tag -a` signs too, so the release command in
-[building.md](building.md) needs no change. Check one with `git verify-tag v1.2.3`,
-and a commit with
-`git log --show-signature -1` or `git log --format='%h %G?'` — `G` for a good signature, `N`
-for none.
+GitHub shows the same thing as a **Verified** badge on the commit and tag. Verifying locally
+needs an allowed-signers file naming who you are willing to trust — without one, git will
+report a signature as good and then decline to say whose it is.
 
-Commits are signed as well, which is a smaller claim than the tag's and worth being clear
-about: it says an author's key stood behind each commit, while the tag is what a release is
-cut from and the attestation is what binds that commit to a binary. Everything before this
-was configured is unsigned, and stays that way — re-signing history would move every commit
-to a new hash, breaking the tags and the attestation that name them, to assert something
-about the past that was not true at the time.
-
-The cost is one signing operation per commit, which 1Password can prompt for. Everything
-that rewrites commits re-signs them, so a rebase over a long branch asks repeatedly unless
-the key is set to authorise without asking.
+Commits being signed is a smaller claim than the tag's, and worth keeping distinct: it says
+an author's key stood behind each commit, while the tag is what a release is cut from and
+the attestation is what binds that commit to a binary. Anything committed before this was
+set up is unsigned and stays that way — re-signing history would move every commit to a new
+hash, breaking the tags and the attestation that name them, to assert something about the
+past that was not true at the time.
 
 **GitHub keeps authentication keys and signing keys in separate lists**, and being in the
 first does not put a key in the second — so a tag signed by the key that pushed it still
