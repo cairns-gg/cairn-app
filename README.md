@@ -108,6 +108,45 @@ gets.
 [docs/pack-isolation.md](docs/pack-isolation.md) has the reasoning for both, and the
 most-reported bug that came of getting the second one wrong.
 
+### Mod settings a pack carries
+
+Some mods only work together once one of their config files has been edited — Terrain Slabs
+wants Footprints named in a list before the two behave. A pack can carry those values, so
+the author works it out once instead of everybody who installs the pack working it out
+again:
+
+```json
+"modConfig": {
+  "terrainslabs.json": { "compatibleMods": ["footprints"] },
+  "XLeveling/mining.json": { "enabled": true }
+}
+```
+
+Paths are relative to the pack's `ModConfig/`, with `/` on every platform. Only the values
+named travel — the rest of the file stays the mod's, so a pack does not go stale when the mod
+adds a setting, and what a pack intends to change can be read before importing it.
+
+**The first time a pack asks for a value it gets it; after that, anything you have changed
+is yours** — later versions of the pack will not take it back. Every launch says which
+values it set and which it left alone.
+
+Mods using **ConfigLib** are covered both ways: where it edits the mod's own JSON, and where
+it keeps the settings in its own flat `.yaml`. That second kind arrives on the second launch,
+because ConfigLib writes the file itself the first time the mod runs and the `version` line
+it puts at the top is not something to guess at. `.ini` files, files whose top level is a
+list, and files containing `//` comments are refused out loud rather than half-applied; of
+114 config files in a real 74-mod pack, 110 can be carried.
+
+You do not write that by hand. The **Mod config** tab lists what you have changed from what
+each mod first wrote, old value beside new, and a tick carries it — Cairn learns a mod's
+defaults by remembering what it wrote the first time it ran, so the list is empty until a
+pack has been played once, and says so. `cairn-server` applies these too, which matters
+because half of them are server-side rules.
+
+[docs/world-config.md](docs/world-config.md) has why the rule is not the one the hotkeys
+use, how ConfigLib divides into the part this reaches and the part it does not, and what the
+other two settings layers would take.
+
 ### Where all this lives, and moving it
 
 Everything — packs, game versions, private runtimes, caches, build trees — is under one

@@ -398,26 +398,198 @@ The eight that stay as ids do so because nothing in the files says otherwise.
 
 ## Mod config, and ConfigLib
 
+**Built.** `pack.json` carries `modConfig`, `ModConfigFiles` applies it at launch, and both
+front ends report what it did. The rest of this section is the reasoning.
+
 Mod config is not world config, and it needs no companion mod at all. It is files in
 `<datapath>/ModConfig/`, which is already this pack's directory. Cairn writing them is the
 same act as writing `clientsettings.json`.
 
-ConfigLib (Maltiez; 626,925 downloads on 2026-08-09; both sides; requires ImGui) changes
-what is *possible* rather than where anything lives: a unified in-game editor, configs for
-content mods that otherwise have none, and by its own description it "allows changing values
-in regular JSON patches, that can be valuable for server configurations and can make
-tweaking other mods for server needs much easier". It does not require the mod to depend on
-it — absent, asset defaults apply. A pack author who wants the GUI adds it to the pack like
-any other mod.
+### The hotkey rule does not transfer, and that decides the design
 
-Two consequences:
+`ClientHotkeys` fills only the codes the settings file has no entry for, which is safe
+because `keyMapping` is a sparse delta — most pack data paths have no entries at all. A mod
+config file is the exact opposite: **the mod rewrites it in full on every load**, so every
+key is present at its default from the first launch onwards. Measured on a real pack, every
+one of the 114 files was restamped by the last launch.
 
-- **Seed, do not enforce.** A config file's schema belongs to the mod and versions with it.
-  A config captured against mod 1.2 and replayed into a pack whose user has moved to 2.0 is
-  how a mod ends up refusing to load. `PackData.EnsureDataPath` already has the right
-  pattern: seed once, then it is the player's.
-- **With ConfigLib installed the player can edit them in-game**, so the same drift question
-  arrives here as everywhere else.
+So "fill only what is missing" would do nothing whatsoever for anybody who has pressed Play
+once — which is everybody the feature exists for. "Seed once and never touch it again", the
+rule this document originally proposed, fails the same way: a pack that adds a config tweak
+after publishing would never reach a single existing follower.
+
+What works is a third value. `ModConfigFiles` records what the pack last asked for, and:
+
+| | |
+|---|---|
+| the file has no such key | write it |
+| the record says nothing about this key | write it — this is the pack's first word, and nobody can have overridden a pack that had not spoken |
+| the file still holds what the pack last asked for | the pack owns it; write the new value |
+| the file holds something else | somebody changed it. Theirs. Report it, change nothing |
+
+Which gives the lifecycle worth having: a value arrives once, and the moment a player moves
+it, it is theirs permanently, including against later pack updates.
+
+The record is `<datapath>/cairn-modconfig.json` — in the data path rather than beside the
+manifest, because it describes those files and has to die with them. Beside the manifest it
+would survive Delete data, and the next launch would read the mod's freshly written defaults
+as a player's deliberate edits and refuse to apply the pack forever. It records what the
+pack *asked for*, not what Cairn *wrote*: a value declined because the player owns it must
+still be recorded, or it reads as a first word next launch and is taken from them again on
+every launch, forever.
+
+### Only the values asserted, not the file
+
+A sparse object, deep-merged. Objects recurse; arrays and scalars are leaves and are replaced
+whole — there is no answer to whether a declared list appends, replaces or de-duplicates
+that is right for every mod, and a pack that declares the list its author tested is both
+predictable and what the manifest appears to say.
+
+Whole-file capture was the other candidate and is worse on three counts: a config captured
+against mod 1.2 and replayed into a copy that has moved to 2.0 is how a mod refuses to load;
+it carries the author's unrelated personal settings; and it is unreviewable, which for a file
+that changes how the game plays is the point. `pack.json` is a shared document, published and
+fetched by everyone who imports the pack.
+
+Writing a *partial* file on a first launch is safe on both of the game's paths, which is what
+makes sparse workable at all: `LoadModConfig<T>` deserialises through Newtonsoft, so a
+missing property keeps its field initialiser; and `LoadModConfig` returns a `JsonObject`
+whose indexer answers `new JsonObject(null)` for an absent key, with every accessor falling
+through to its default (`Datastructures/JsonObject.cs:47`, `:239`).
+
+The same file also settles key matching: that indexer looks up `OrdinalIgnoreCase`, and
+Newtonsoft matches properties the same way. So the file's spelling wins wherever it has one —
+writing the manifest's spelling beside it would leave two keys and let the mod pick by
+document order, which is a setting that silently does nothing.
+
+### What it refuses, and why that is the honest half
+
+Measured by running the merge over a real pack's 114 files: **110 usable, 4 refused**, and
+every refused file verified byte-identical afterwards.
+
+| refused | count | why |
+|---|---|---|
+| top level is a list | 2 | including `OreDatabase.json`, which is also the 149KB one |
+| `//` comments | 1 | the mod author documenting their own settings inside the file they ship |
+| `.ini` | 1 | ImGui's window positions, which are not a mod setting anybody would carry |
+
+The comment case is why reading is lenient and writing is not: parse strictly, and on failure
+parse again with comments skipped. Succeeding only the second time means the file has
+documentation in it that a JSON writer would delete without asking. Refusing loudly is the
+difference between a feature that does not cover a mod and one that appears to and does
+nothing.
+
+ConfigLib (Maltiez; 626,925 downloads on 2026-08-09; both sides; requires ImGui) gives a
+unified in-game editor and gives content mods a config screen they otherwise have none of. It
+does not require the mod to depend on it — absent, asset defaults apply.
+
+It was described here as changing "what is possible rather than where anything lives". That
+is half wrong, and the wrong half is the half that matters. Measured against a 74-mod pack
+with ConfigLib 1.12.0 installed, ten mods ship `assets/<domain>/config/configlib-patches.json`,
+and **the `file` key in it decides where the settings live**:
+
+| | mods | storage |
+|---|---|---|
+| `"file": "gravestones.json"` | buzzwords, gravestones, farseer | the mod's own JSON config — ConfigLib is only a GUI over it |
+| no `file` key | betterruins, confession, em, seafarer, tailorsdelight, texturedbuilding, wool | ConfigLib's own `<domain>.yaml`, which it generates |
+
+`modConfig` reaches both, by different means: the first group is ordinary JSON, and the second
+is handled by `ModConfigYaml` below. The `file` key is also worth knowing when reading a
+pack — `buzzwords.json` holds exactly the `name` fields from its patch file, so a setting can
+appear under the mod's own filename or under ConfigLib's, and which one is not a choice the
+pack author made.
+
+It also sharpens why the three-way record is not over-engineering. With ConfigLib installed
+"the file changed since Cairn wrote it" is a button press mid-session, in mods that ship no
+settings screen of their own. It is the common case, not the careful-user case.
+
+### ConfigLib's own files
+
+**Built.** `ModConfigYaml` reads and edits them; the seven mods above are carried like any
+other.
+
+Its YAML is *generated*, which makes it a far smaller problem than YAML in general. Across
+those seven files: **131 settings, every one top-level, zero nested keys**, and values only
+ever `true`, `false`, an integer, a decimal or a quoted string. So a scalar can be replaced
+by line, leaving the section banners, the descriptions and the `(default: …)` notes exactly
+as they were — and anything outside that shape is refused rather than guessed at. This is not
+a YAML parser and must not become one: adding YamlDotNet would be the first third-party
+parser in Core, to read 125 lines of a format one library generates.
+
+Two rules come from ConfigLib's own code, and neither was guessable from the files:
+
+**Never add a key.** Compare the two branches of `Config.WriteToFile`: the JSON path is
+`ToJson(settings, ReadConfigFile(...))`, merging with what is on disk, while the YAML path is
+plain `ToYaml(settings)`. So a key ConfigLib does not recognise is silently dropped the next
+time it saves. Writing one would be a setting that appears to work and never does, which is
+why an unknown key is reported as `Missing` instead.
+
+**Never write `version`, and never create the file.** `Config.Parse`:
+
+```csharp
+string yaml = ReadConfigFile(defaultConfig, overrideOnFail: true);
+bool flag = FromYaml(settings.Values, yaml);
+if (checkVersion && !flag)
+{
+    WriteConfigFile(defaultConfig);      // every setting, overwritten with the mod's defaults
+    FromYaml(settings.Values, defaultConfig);
+}
+```
+
+and `FromYaml` returns false whenever the file's `version` is not the one in the mod's patch
+file. So a wrong version does not fail quietly — it wipes the config. A partial file *is*
+honoured otherwise (`if (!values.ContainsKey(setting.YamlCode)) continue;`), which is what
+makes the sparse patch work at all.
+
+That kills the idea of seeding an absent file, which was the plan until the code was read.
+It is also barely a loss: `overrideOnFail: true` means **ConfigLib writes the complete correct
+file itself** the first time the mod loads, so waiting costs exactly one session and buys not
+having to be right about a version number whose failure mode is somebody's lost settings.
+
+The patch file is still a schema worth reading later — `type`, `default`, and `range` or
+`values` per setting, inside a zip Cairn already opens for `HotkeyScan` — which would give
+validation for free, the same argument as asking the game to classify world config keys
+rather than hardcoding the list.
+
+One consequence, and it is the reason the three-way record is not over-engineering: **with
+ConfigLib installed the player can edit any of these in-game**, in a mod that ships no
+settings screen of its own. So "the file changed since Cairn wrote it" is not an edge case
+reachable only by someone who opens a text editor — for a pack that includes ConfigLib it is
+a button, and the launcher has to be right about it.
+
+### Choosing the values
+
+**Built.** `ModConfigSurvey` works out what an author changed and the Mod config tab offers
+it as a tick; `ModConfigFiles.Capture` keeps the baseline that makes the diff possible.
+
+There is no other source for a mod's defaults — they are field initialisers inside the mod's
+own assembly, and short of running downloaded code, the only honest way to learn them from
+outside the game is to look at what the mod wrote the first time it ran. So the baseline is
+first-observation-wins and is never updated: the whole point of the file is to be older than
+the author's edits. Captured on the way into a launch *and* on the way out, because the first
+launch of a pack is exactly the one where the files do not exist yet on the way in.
+
+Three things it cannot see, each answered rather than hidden:
+
+- **An edit made during the very first session** is in the file before anything observes it.
+  That is what *Show all* is for, and with ConfigLib in a pack it is likely rather than
+  unusual — which is why the escape hatch is a checkbox rather than a footnote.
+- **The pack's own declared values** are written before the mod first runs, so they are in
+  the baseline too. Harmless: those are the keys the manifest already names, and the tab
+  shows them as carried rather than as something the author changed.
+- **Packs that already exist** have no baseline at all. Saying "nothing has changed" of one
+  would be a lie about somebody's own pack, so the tab says it has no record and that playing
+  once will start one. Measured on a real pack: 2045 settings across 98 files, 0 of them
+  classifiable until it has been launched.
+
+That last number is also why the list virtualises. Two thousand rows through the default
+stack panel is a tab that takes seconds to open; Hotkeys gets away without it at forty.
+
+The tab ticks rather than edits, deliberately. The value shown is the one in the file, which
+the author set where they could see what it does — in game, or in the mod's own settings
+screen. A launcher offering a second place to type it would be asking somebody to tune a mod
+through a text box with no idea of its range or its units, and would then have to answer what
+happens when the two disagree. One question per row: does this travel with the pack?
 
 ## One ownership rule
 
@@ -470,13 +642,15 @@ publish fingerprint (`PublishRecord.WouldChange`) with no extra machinery.
 
 ## Open questions
 
-- **Does mod config travel in the bundle?** `PackBundle` is manifest + lock, deliberately —
-  intent and nothing else. World config values are small and belong in `pack.json` without
-  argument. Mod config files are arbitrary JSON belonging to somebody else's mod, and
-  carrying them would be the first time a bundle holds something that is not intent.
-  Embedding them keyed by filename keeps them diffable and fingerprinted; a side channel
-  does not. This is the one decision here that changes a shared format, so it wants settling
-  before anything is written.
+- ~~**Does mod config travel in the bundle?**~~ **Settled: yes, in `pack.json`, and the
+  format did not have to change.** The worry was that mod config files are arbitrary JSON
+  belonging to somebody else's mod, and that carrying them would be the first time a bundle
+  held something that is not intent. Carrying only the values a pack *asserts* — rather than
+  captured copies of the files — answers that: `{ "terrainslabs.json": { "compatibleMods":
+  ["footprints"] } }` is a statement about how this pack wants two mods to behave, which is
+  intent in exactly the sense the rest of the manifest is. Being in the manifest, it travels
+  in `PackBundle` with no new section and participates in the publish fingerprint for free.
+  Capped at 64KB across all files, because a manifest is also a document people read.
 - **What is `customPlayStyles`?** It is a `stringListSettings` key, empty on a stock
   install. The assembly has `OnCopyPlaystyle`, `LoadPlayStyles` and
   `loadWorldConfigValuesFromPlaystyle` near the settings-key table, which reads like the
