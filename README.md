@@ -947,7 +947,7 @@ cd ../cairns && ./dev.sh          # the server, in its own terminal
 ./dev.sh --local                  # a launcher pointed at it
 ```
 
-`--local` sets `CAIRNS_SERVER=http://localhost:5080` *and* `CAIRN_HOME=~/.cairn-dev`,
+`--local` sets `CAIRNS_SERVER=http://localhost:5080` *and* `CAIRN_DEFAULT_HOME=~/.cairn-dev`,
 because the second half is not optional: publishing writes a `cairns.json` into the pack
 recording where it went, and doing that to a real pack leaves it claiming to live at a
 localhost URL that stops existing when the server does. `--server URL` and `--home DIR`

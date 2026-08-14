@@ -59,7 +59,13 @@ fi
 
 ENV_ARGS=()
 [ -n "$SERVER" ] && { export CAIRNS_SERVER="$SERVER"; ENV_ARGS+=(--env "CAIRNS_SERVER=$SERVER"); }
-[ -n "$HOME_DIR" ] && { export CAIRN_HOME="$HOME_DIR"; ENV_ARGS+=(--env "CAIRN_HOME=$HOME_DIR"); }
+# CAIRN_DEFAULT_HOME, not CAIRN_HOME. Both put the sandbox somewhere harmless, and only
+# one of them leaves the build behaving like a real install: CAIRN_HOME outranks the pointer
+# file, so a dev run using it exercises the branch almost no user takes, and the launcher
+# will not offer to move a root the environment chose — which made the move untestable in
+# the setup that exists for testing. This moves the default instead, so everything downstream
+# behaves exactly as it does for somebody who never set either.
+[ -n "$HOME_DIR" ] && { export CAIRN_DEFAULT_HOME="$HOME_DIR"; ENV_ARGS+=(--env "CAIRN_DEFAULT_HOME=$HOME_DIR"); }
 
 case "$(uname -s)" in
   Darwin) RID_OS=osx ;;

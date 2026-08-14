@@ -46,9 +46,28 @@ public static class CairnHome
     /// <summary>The name of the pointer file, inside the default root.</summary>
     public const string PointerName = "home";
 
-    /// <summary>Where the root is when nothing says otherwise.</summary>
-    public static string DefaultRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cairn");
+    /// <summary>
+    /// Where the root is when nothing says otherwise.
+    ///
+    /// CAIRN_DEFAULT_HOME moves it, which is not the same thing as CAIRN_HOME and exists for
+    /// a different reason. CAIRN_HOME overrides the answer and outranks the pointer file, so
+    /// a sandbox built on it exercises the one branch almost nobody takes — and, since the
+    /// launcher will not offer to move a root the environment decided, made the move
+    /// impossible to try in the very setup meant for trying things. This moves the *default*
+    /// instead, so a sandboxed run behaves exactly like a real one: the pointer works, the
+    /// move works, and none of it is near the developer's own ~/.cairn.
+    /// </summary>
+    public static string DefaultRoot
+    {
+        get
+        {
+            var sandbox = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+
+            return string.IsNullOrWhiteSpace(sandbox)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cairn")
+                : sandbox.Trim();
+        }
+    }
 
     /// <summary>
     /// The pointer file, which is always looked for here and not under the root it names —

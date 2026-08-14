@@ -11,14 +11,15 @@ namespace Cairn.App.Tests;
 /// <summary>
 /// Moving Cairn's files from the Preferences window.
 ///
-/// What is held here is the wiring, not the move: HomeMigration owns the rules and is tested
-/// against real trees in Cairn.Core.Tests. A successful move deliberately cannot be driven
-/// from here — it would need CAIRN_HOME unset, and these tests would then be copying, and
-/// repointing, the developer's own ~/.cairn.
+/// HomeMigration owns the rules and is tested against real trees in Cairn.Core.Tests; what
+/// is held here is what the window is responsible for — the button, the refusals arriving as
+/// text rather than exceptions, and the copy actually being followed by the delete that makes
+/// it a move.
 ///
-/// So this covers what the window is responsible for: that the button exists and is bound,
-/// that a refusal arrives as text on the screen rather than as an exception, that choosing
-/// nothing does nothing, and that nothing else that touches files can start while it runs.
+/// The sandbox moves the default root rather than overriding it with CAIRN_HOME, which is
+/// what dev.sh does and for the same reason: CAIRN_HOME outranks the pointer file, so a suite
+/// built on it could only ever watch this feature refuse itself. With the default moved, a
+/// real move runs end to end here and lands in a temp directory.
 /// </summary>
 [Collection(AvaloniaTests.Collection)]
 public class HomeMoveTests : IDisposable
@@ -26,17 +27,29 @@ public class HomeMoveTests : IDisposable
     private readonly string _home = Path.Combine(
         Path.GetTempPath(), "cairn-move-ui-" + Guid.NewGuid().ToString("n")[..8]);
 
-    private readonly string? _previous = Environment.GetEnvironmentVariable("CAIRN_HOME");
+    private readonly string? _previousHome = Environment.GetEnvironmentVariable("CAIRN_HOME");
+    private readonly string? _previousDefault = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
 
+    /// <summary>
+    /// Sandboxed by moving the default root rather than by overriding it, which is what
+    /// dev.sh does and for the same reason: CAIRN_HOME outranks the pointer, so a suite built
+    /// on it could only ever watch this feature refuse. With the default moved, a real move
+    /// can be driven end to end and it lands in a temp directory.
+    ///
+    /// CAIRN_HOME is cleared as well, because the other classes in this collection set it
+    /// and would otherwise decide the answer here.
+    /// </summary>
     public HomeMoveTests()
     {
         Directory.CreateDirectory(_home);
-        Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+        Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", _home);
     }
 
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable("CAIRN_HOME", _previous);
+        Environment.SetEnvironmentVariable("CAIRN_HOME", _previousHome);
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", _previousDefault);
         try { Directory.Delete(_home, recursive: true); } catch (IOException) { }
     }
 
@@ -85,9 +98,11 @@ public class HomeMoveTests : IDisposable
     [AvaloniaFact]
     public void CAIRN_HOME_disables_the_button_and_says_why_before_the_picker()
     {
-        // These tests run with CAIRN_HOME set, which is the case in question: the variable
-        // outranks the pointer, so a move from here would change nothing. It used to be
-        // enabled — you chose a folder, waited for the dialog, and were told afterwards.
+        // The variable outranks the pointer, so a move from here would change nothing. It
+        // used to be enabled — you chose a folder, waited for the dialog, and were told
+        // afterwards.
+        Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+
         var model = Model();
         var window = ShowOverview(model);
 
@@ -105,21 +120,10 @@ public class HomeMoveTests : IDisposable
     [AvaloniaFact]
     public void Without_CAIRN_HOME_the_button_is_live()
     {
-        // Unset only long enough to read a computed property. Nothing here writes, so the
-        // developer's own root is read and left alone.
-        Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+        var model = Model();
 
-        try
-        {
-            var model = Model();
-
-            Assert.False(model.HomeIsFromEnvironment);
-            Assert.True(model.CanMoveHome);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
-        }
+        Assert.False(model.HomeIsFromEnvironment);
+        Assert.True(model.CanMoveHome);
     }
 
     [AvaloniaFact]
@@ -150,16 +154,15 @@ public class HomeMoveTests : IDisposable
     [AvaloniaFact]
     public async Task A_refusal_is_shown_on_the_screen_rather_than_thrown()
     {
-        // These tests run with CAIRN_HOME set, which is itself one of the refusals — the
-        // pointer would be written and then ignored. Any of them arrives the same way: as
-        // text where the user is looking, because choosing an unsuitable folder is an
-        // ordinary thing to do and not an error.
+        // Choosing the directory Cairn is already using is an ordinary thing to do with a
+        // folder picker, and arrives as text where the user is looking rather than as an
+        // exception.
         var model = Model();
-        model.PickFolder = () => Task.FromResult<string?>(Path.Combine(_home, "elsewhere"));
+        model.PickFolder = () => Task.FromResult<string?>(_home);
 
         await model.MoveHomeCommand.ExecuteAsync(null);
 
-        Assert.Contains("CAIRN_HOME", model.MoveAftermath);
+        Assert.Contains("already where Cairn keeps its state", model.MoveAftermath);
         Assert.False(model.IsMovingHome);
     }
 
@@ -246,5 +249,55 @@ public class HomeMoveTests : IDisposable
 
         Assert.Equal(CairnPaths.Root, model.CairnHome);
         Assert.Equal(_home, model.CairnHome);
+    }
+
+    [AvaloniaFact]
+    public async Task A_move_driven_from_the_window_relocates_everything()
+    {
+        // The whole thing end to end, through the view model the button uses. Possible only
+        // because the sandbox moves the default root instead of overriding it — the class
+        // doc used to say a successful move could not be driven from here, and that was a
+        // consequence of how the suite was set up rather than anything about the feature.
+        // A real manifest, because the window lists packs on the way up and an id-less one
+        // is refused by PackStore — the pack has to be the kind a move would actually carry.
+        File.WriteAllText(Path.Combine(_home, "settings.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(_home, "packs", "demo"));
+        File.WriteAllText(Path.Combine(_home, "packs", "demo", "pack.json"),
+            "{\"id\":\"demo\",\"name\":\"Demo\",\"gameVersion\":\"1.22.5\",\"mods\":[]}");
+
+        var target = Path.Combine(
+            Path.GetTempPath(), "cairn-move-to-" + Guid.NewGuid().ToString("n")[..8]);
+        Directory.CreateDirectory(target);
+
+        var model = Model();
+        model.PickFolder = () => Task.FromResult<string?>(target);
+
+        try
+        {
+            await model.MoveHomeCommand.ExecuteAsync(null);
+
+            // Arrived, and Cairn is looking at it.
+            Assert.True(File.Exists(Path.Combine(target, "packs", "demo", "pack.json")));
+            Assert.Equal(target, CairnPaths.Root);
+            Assert.Equal(target, model.CairnHome);
+
+            // The old copy is still there, and is now offered for deletion with its size.
+            Assert.True(model.HasOldCopy);
+            Assert.Contains("Delete the old copy", model.OldCopyLabel);
+            Assert.True(File.Exists(Path.Combine(_home, "settings.json")));
+
+            // Deleting it frees the space and keeps the one file that makes the new
+            // location work — the trap that would otherwise undo the whole move.
+            await model.DeleteOldCopyCommand.ExecuteAsync(null);
+
+            Assert.False(model.HasOldCopy);
+            Assert.False(File.Exists(Path.Combine(_home, "settings.json")));
+            Assert.True(File.Exists(Path.Combine(_home, Cairn.Core.CairnHome.PointerName)));
+            Assert.Equal(target, CairnPaths.Root);
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch (IOException) { }
+        }
     }
 }

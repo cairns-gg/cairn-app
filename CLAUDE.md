@@ -22,7 +22,7 @@ dotnet build                                                   # whole solution
 ./dev.sh --run              # build, then launch it
 ./dev.sh --no-sign          # skip macOS code signing
 ./dev.sh --cli              # CLI only (~2s)
-./dev.sh --local            # build + run against a cairns on localhost, with CAIRN_HOME=~/.cairn-dev
+./dev.sh --local            # build + run against a cairns on localhost, sandboxed in ~/.cairn-dev
 
 ./build-release.sh          # all four RIDs; ./build-release.sh linux-x64 for one
 ./build-macos-app.sh        # artifacts/osx-arm64/Cairn.app
@@ -117,9 +117,15 @@ is drawn.
 ```
 
 `CairnPaths` is the single source of truth for all of these. The root is `CAIRN_HOME`, then a
-`home` pointer file in `~/.cairn` naming somewhere else, then `~/.cairn` — `CairnHome` owns
-that order and the reasons, and the environment always wins. It is re-evaluated on every
+`home` pointer file in the default root naming somewhere else, then `~/.cairn` — `CairnHome`
+owns that order and the reasons, and the environment always wins. It is re-evaluated on every
 access rather than cached, because the test suites move `CAIRN_HOME` per class.
+
+**Sandbox with `CAIRN_DEFAULT_HOME`, not `CAIRN_HOME`** — it moves the *default* root rather
+than overriding it, so the pointer file and Preferences → Move… behave exactly as they do for
+a real user. `CAIRN_HOME` outranks the pointer, so a sandbox built on it exercises the one
+branch nobody takes and makes the move refuse itself. `dev.sh --home/--local` and
+`HomeMoveTests` both use it.
 
 - **Sync installs what the lockfile says.** `PackSyncer` resolves against ModDB only when it
   must (never installed, moved pin, retargeted game version). Sync runs on every Play, and

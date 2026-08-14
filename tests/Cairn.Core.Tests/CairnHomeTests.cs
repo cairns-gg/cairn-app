@@ -121,6 +121,32 @@ public class CairnHomeTests
     }
 
     [Fact]
+    public void The_default_root_can_be_moved_for_a_sandboxed_run()
+    {
+        // What dev.sh and the UI suite use. CAIRN_HOME would have done it too, and would
+        // have made every sandboxed run take the one branch users do not — including
+        // refusing the move, which is the thing a sandbox exists to try.
+        var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", "/tmp/sandbox/.cairn");
+
+        try
+        {
+            Assert.Equal("/tmp/sandbox/.cairn", CairnHome.DefaultRoot);
+
+            // And it is a default, not an override: the pointer still outranks it, which is
+            // the whole point of sandboxing this way rather than with CAIRN_HOME.
+            var r = CairnHome.Resolve(null, CairnHome.DefaultRoot, _ => "/mnt/big/cairn");
+
+            Assert.Equal("/mnt/big/cairn", r.Root);
+            Assert.Equal(HomeSource.Pointer, r.Source);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", previous);
+        }
+    }
+
+    [Fact]
     public void Preflight_passes_when_the_pointer_target_is_there()
     {
         var r = new HomeResolution("/mnt/big/cairn", HomeSource.Pointer, null);
