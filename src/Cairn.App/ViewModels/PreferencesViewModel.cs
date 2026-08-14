@@ -107,8 +107,10 @@ public partial class PreferencesViewModel : ViewModelBase
         // goes on reporting the answer it remembered for another few minutes.
         var checks = new ModUpdateCache();
         UpdateChecksDetail = checks.Count() == 0
-            ? "none remembered"
-            : $"{Count(checks.Count(), "pack")}, kept {ModUpdateCache.Lifetime.TotalMinutes:0} minutes";
+            ? Lang.Get("prefs-none-remembered")
+            : Lang.Get("prefs-checks-kept",
+                       Lang.Plural("prefs-pack-count", checks.Count(), checks.Count()),
+                       ModUpdateCache.Lifetime.TotalMinutes);
         HasUpdateChecks = checks.Count() > 0;
 
         BuildTrees = GameCleanup.BuildTreesUnder(CairnPaths.BuildsRoot);
@@ -117,16 +119,25 @@ public partial class PreferencesViewModel : ViewModelBase
         BuildsSize = Human(builds);
         HasBuildTrees = builds > 0;
         BuildsDetail = BuildTrees.Count == 0
-            ? "none"
+            ? Lang.Get("prefs-none")
             : string.Join(", ", BuildTrees.Select(t => t.Label));
 
         TotalSize = Human(games + runtimes + cache + packs + builds);
 
         var installed = _games.ListInstalled().Count();
-        GamesDetail = Count(installed, "version");
+        GamesDetail = installed == 0
+            ? Lang.Get("prefs-version-count-zero")
+            : Lang.Plural("prefs-version-count", installed, installed);
 
-        RuntimesDetail = Count(_runtimes.ListInstalled().Count(), "runtime");
-        PacksDetail = Count(_store.ListIds().Count(), "pack");
+        var runtimeCount = _runtimes.ListInstalled().Count();
+        RuntimesDetail = runtimeCount == 0
+            ? Lang.Get("prefs-runtime-count-zero")
+            : Lang.Plural("prefs-runtime-count", runtimeCount, runtimeCount);
+
+        var packCount = _store.ListIds().Count();
+        PacksDetail = packCount == 0
+            ? Lang.Get("prefs-pack-count-zero")
+            : Lang.Plural("prefs-pack-count", packCount, packCount);
     }
 
     [ObservableProperty] public partial string UpdateChecksDetail { get; set; } = "";
@@ -142,7 +153,7 @@ public partial class PreferencesViewModel : ViewModelBase
     private void ClearUpdateChecks()
     {
         new ModUpdateCache().Clear();
-        CleanupSummary = "Forgot the remembered update checks; the next check will ask ModDB.";
+        CleanupSummary = Lang.Get("prefs-forgot-checks");
         Refresh();
     }
 
@@ -167,15 +178,14 @@ public partial class PreferencesViewModel : ViewModelBase
 
         var total = BuildTrees.Sum(t => t.Bytes);
 
-        var message = "This deletes:\n"
+        var message = Lang.Get("delete-this-deletes") + "\n"
                       + string.Join("\n", BuildTrees.Select(
-                          t => $"  • {t.Label} build tree ({Bytes.Human(t.Bytes)})"))
-                      + $"\n\nFrees {Bytes.Human(total)}. Any client already built from them "
-                      + "is kept and goes on working.\n\nRebuilding one takes 15–30 minutes, "
-                      + "so this is worth doing only if you need the space.";
+                          t => Lang.Get("prefs-build-tree-line", t.Label, Bytes.Human(t.Bytes))))
+                      + "\n\n" + Lang.Get("prefs-build-trees-frees", Bytes.Human(total));
 
         if (Confirm is not null
-            && !await Confirm(new ConfirmViewModel("Remove build trees?", message, "Remove")))
+            && !await Confirm(new ConfirmViewModel(
+                Lang.Get("prefs-remove-build-trees"), message, Lang.Get("prefs-build-remove"))))
             return;
 
         IsCleaningUp = true;
@@ -189,7 +199,7 @@ public partial class PreferencesViewModel : ViewModelBase
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 });
 
-            CleanupSummary = $"Removed the build trees, freeing {Bytes.Human(total)}.";
+            CleanupSummary = Lang.Get("prefs-build-trees-removed", Bytes.Human(total));
         }
         finally
         {
@@ -273,16 +283,15 @@ public partial class PreferencesViewModel : ViewModelBase
             return;
         }
 
-        var message = $"Copies everything Cairn keeps to:\n\n  {plan.To}\n\n"
-                      + $"{plan.Files} files, {HomeMigration.Describe(plan.Bytes)}"
-                      + (plan.Links > 0 ? $", and {plan.Links} links kept as links" : "")
-                      + ".\n\nEverything is copied and checked file by file, Cairn is "
-                      + "repointed, and only then is the original at " + plan.From
-                      + " deleted.\n\nNothing is removed until the new copy has been "
-                      + "verified — but when this finishes, the old one is gone.";
+        var message = Lang.Get("prefs-move-to", plan.To) + "\n\n"
+                      + Lang.Get("prefs-move-size", plan.Files, HomeMigration.Describe(plan.Bytes))
+                      + (plan.Links > 0 ? Lang.Get("prefs-move-links", plan.Links) : "")
+                      + ".\n\n" + Lang.Get("prefs-move-how", plan.From)
+                      + "\n\n" + Lang.Get("prefs-move-warning");
 
         if (Confirm is not null
-            && !await Confirm(new ConfirmViewModel("Move Cairn's files?", message, "Move")))
+            && !await Confirm(new ConfirmViewModel(
+                Lang.Get("prefs-move-title"), message, Lang.Get("prefs-move-confirm"))))
             return;
 
         IsMovingHome = true;
@@ -303,7 +312,7 @@ public partial class PreferencesViewModel : ViewModelBase
 
                 lastPercent = percent;
                 MovePercent = percent;
-                MoveStage = $"{percent}% — {p.Files} of {p.FilesTotal} files";
+                MoveStage = Lang.Get("prefs-move-stage", percent, p.Files, p.FilesTotal);
             });
 
             var result = await Task.Run(() => HomeMigration.Move(plan, progress));
@@ -311,14 +320,10 @@ public partial class PreferencesViewModel : ViewModelBase
             MoveAftermath = result.RemovalProblem is { } stuck
                 // The move worked. Saying so first matters: somebody told only that a
                 // deletion failed will go looking for data that is exactly where it should be.
-                ? $"Moved to {plan.To}, checked file by file. The original at "
-                  + $"{result.OldRoot} could not be removed ({stuck}), so it is still using "
-                  + $"{HomeMigration.Describe(result.Bytes)} — delete it by hand when you can."
-                  + (result.KeepInOldRoot is { } keep
-                      ? $" Keep {keep}, which is what points Cairn at the new location."
-                      : "")
-                : $"Moved to {plan.To}, checked file by file, and removed the original — "
-                  + $"{HomeMigration.Describe(result.Freed)} freed.";
+                ? Lang.Get("prefs-moved-stuck", plan.To, result.OldRoot, stuck,
+                             HomeMigration.Describe(result.Bytes))
+                  + (result.KeepInOldRoot is { } keep ? " " + Lang.Get("prefs-moved-keep", keep) : "")
+                : Lang.Get("prefs-moved", plan.To, HomeMigration.Describe(result.Freed));
         }
         catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)
         {
@@ -383,7 +388,7 @@ public partial class PreferencesViewModel : ViewModelBase
         var plan = GameCleanup.Plan(_games, _runtimes, _store) with
         {
             Caches = cacheBytes > 0
-                ? [new CleanupTarget("cached icons and mod details", CairnPaths.CacheRoot, cacheBytes)]
+                ? [new CleanupTarget(Lang.Get("prefs-cache-label"), CairnPaths.CacheRoot, cacheBytes)]
                 : [],
         };
 
@@ -395,23 +400,23 @@ public partial class PreferencesViewModel : ViewModelBase
 
         if (!plan.AnythingToDo)
         {
-            CleanupSummary = "Nothing to clean up — every installed version is in use.";
+            CleanupSummary = Lang.Get("prefs-nothing-to-clean");
             return;
         }
 
         var lines = plan.Describe();
         var kept = plan.Kept.Count == 0
             ? ""
-            : $"\n\nKeeps {string.Join(", ", plan.Kept)}, which packs still target.";
+            : "\n\n" + Lang.Get("prefs-cleanup-keeps", string.Join(", ", plan.Kept));
 
-        var message = "This deletes:\n"
+        var message = Lang.Get("delete-this-deletes") + "\n"
                       + string.Join("\n", lines.Select(l => "  • " + l))
-                      + $"\n\nFrees {Bytes.Human(plan.TotalBytes)}. "
-                      + "Any of it downloads again when a pack needs it."
+                      + "\n\n" + Lang.Get("prefs-cleanup-frees", Bytes.Human(plan.TotalBytes))
                       + kept;
 
         if (Confirm is not null
-            && !await Confirm(new ConfirmViewModel("Clean up unused downloads?", message, "Clean up")))
+            && !await Confirm(new ConfirmViewModel(
+                Lang.Get("prefs-cleanup-title"), message, Lang.Get("prefs-clean-up"))))
             return;
 
         IsCleaningUp = true;
@@ -431,7 +436,7 @@ public partial class PreferencesViewModel : ViewModelBase
 
                 foreach (var version in plan.Versions)
                 {
-                    report.Report($"removing Vintage Story {version.Label}…");
+                    report.Report(Lang.Get("prefs-removing-game", version.Label));
                     try
                     {
                         _games.Remove(GameInstall.TryAt(version.Directory)
@@ -446,7 +451,7 @@ public partial class PreferencesViewModel : ViewModelBase
 
                 foreach (var runtime in plan.Runtimes)
                 {
-                    report.Report($"removing .NET {runtime.Label}…");
+                    report.Report(Lang.Get("prefs-removing-runtime", runtime.Label));
                     try
                     {
                         _runtimes.Remove(DotnetRuntimeLocator.Inspect(runtime.Directory)
@@ -461,7 +466,7 @@ public partial class PreferencesViewModel : ViewModelBase
 
                 foreach (var cache in plan.Caches)
                 {
-                    report.Report("emptying caches…");
+                    report.Report(Lang.Get("prefs-emptying-caches"));
                     try
                     {
                         _icons.Clear();
@@ -485,12 +490,9 @@ public partial class PreferencesViewModel : ViewModelBase
         Refresh();
 
         CleanupSummary = failures.Count > 0
-            ? $"Removed {removed}; could not remove {string.Join("; ", failures)}."
-            : $"Removed {removed} item{(removed == 1 ? "" : "s")}, freeing {Bytes.Human(plan.TotalBytes)}.";
+            ? Lang.Get("prefs-removed-with-failures", removed, string.Join("; ", failures))
+            : Lang.Plural("prefs-removed", removed, removed, Bytes.Human(plan.TotalBytes));
     }
-
-    private static string Count(int n, string noun) =>
-        n == 0 ? $"no {noun}s" : $"{n} {noun}{(n == 1 ? "" : "s")}";
 
     private static long DirectorySize(string path) => DirectoryGrowth.Measure(path);
 
