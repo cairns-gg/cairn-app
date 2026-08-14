@@ -13,20 +13,14 @@ the game, which in singleplayer is running the server itself and loads all of th
 ModDB marks server-side is installed too, with a warning that it may do nothing on a client
 that is only joining somewhere else.
 
-The launcher launches the game, so today a pack is what a *player* runs. Nothing in the
-engine assumes that: `cairn-cli` drives the same `Cairn.Core` — resolve, verify, sync —
-with no window and no game, which is what a server-side or scripted use would be built on.
-It is not shipped in releases yet, so that is a door left open rather than a feature.
+Cairn does not replace the game's ModDB integration; it fills the gap next to it. It also
+installs the game itself, and a private .NET runtime when the machine has none, so a pack is
+something you can hand to somebody who has bought Vintage Story and nothing else.
 
-Cairn does not replace the game's ModDB integration; it fills the gap next to it.
-
-The source is here to be read, not forked: Cairn is **source-available**, under the
-[PolyForm Strict License 1.0.0](LICENSE.md) — noncommercial use and no redistribution, with
-two [added permissions](#licence): `cairn-server` may be run commercially, so a hosting
-provider is not shut out of the one component written for them, and changes may be made for
-the purpose of proposing them back. If what you want to check is that a download matches
-this source, that is
-[a different question with a real answer](#verifying-a-download-against-this-source).
+The source is here to be read, not forked: Cairn is **source-available** under the
+[PolyForm Strict License 1.0.0](LICENSE.md) — noncommercial use, no redistribution, and two
+[added permissions](#licence). Checking that a download was built from what you are reading
+is [a separate question with a real answer](docs/verifying.md).
 
 ## How it works
 
@@ -61,15 +55,8 @@ That makes launching safe. Sync runs on every **Play**, and mods break saves, so
 must not be able to move a pack's mods underneath it — a settled pack syncs without
 touching the network at all. Updating is something you ask for:
 
-```
-cairn-cli update anego --check     # what would move
-cairn-cli update anego             # move all followed mods
-cairn-cli update anego olla        # move just this one
-```
-
-or **Check for updates** in the launcher, which offers each one per row and an
-**Update all**. A mod pinned to an exact version is never offered an update, because a pin
-is an instruction to stay put.
+**Check for updates** offers each one per row, with an **Update all**. A mod pinned to an
+exact version is never offered one, because a pin is an instruction to stay put.
 
 `launch` syncs and then starts the game with the pack stacked on:
 
@@ -232,13 +219,6 @@ repointed only once every file has arrived and been checked, so a failure at any
 leaves the old root live and untouched. Links are recreated as links rather than followed,
 and each pack's pinned install path is moved with it.
 
-```
-cairn-cli home                  where the root is, and which of the three decided it
-cairn-cli home move <dir>       copy everything there, then use it
-cairn-cli home set <dir>        use a directory that already holds a Cairn root
-cairn-cli home clear            go back to the default
-```
-
 **One confirmation covers the whole of it**, deletion included — copy, check every file,
 repoint, remove the original. Somebody doing this is out of disk space, so a version that
 stopped after the copy would answer that with two of everything and a chore.
@@ -346,66 +326,23 @@ required:
 dotnet run --project src/Cairn.App
 ```
 
-The CLI (`cairn-cli`) drives the same `Cairn.Core` engine, so every action is also
-scriptable:
-
-```
-cairn-cli info                          show the detected install and data path
-cairn-cli list                          list packs
-cairn-cli init <id> [--game <version>] [--connect host:port] [--description text]
-cairn-cli add <id> <modid> [version]    add a mod to a pack
-cairn-cli remove <id> <modid>           remove a mod from a pack
-cairn-cli delete <id>                   delete a pack and its mods
-cairn-cli search <text>                 search ModDB
-cairn-cli import-install <name>         make a pack from the mods you already have
-cairn-cli sync <id>                     resolve + download
-cairn-cli launch <id>                   sync, then start the game
-```
+Everything above is also scriptable: `cairn-cli` drives the same engine with no window.
+It is a development tool and is not shipped in releases — see [docs/cli.md](docs/cli.md).
 
 ### Sharing a pack
 
 `pack.json` is already the shareable part — declared intent, meant to be committed or
 handed around. Export bundles it with the lockfile into one file:
 
-```
-cairn-cli export anego -o anego.cairn.json     # omit -o to print it
-cairn-cli export anego --no-lock                # intent only
-cairn-cli import anego.cairn.json              # or a https:// URL
-cairn-cli import shared.json --id anego-copy    # when the id collides
-cairn-cli import shared.json --loose            # track newest instead of pinning
-```
-
-In the launcher: **Import…** in the sidebar, and **Export…** in a pack's Settings tab.
+**Export…** in a pack's Settings tab writes one, and **Import…** in the sidebar takes a
+file, a URL or pasted text. Exporting without the lock shares intent only; importing loose
+tracks the newest compatible release instead of pinning what the author had.
 
 ### Importing the mods you already have
 
-Nearly everybody arriving at Cairn has already played Vintage Story. They have a Mods folder
-with thirty mods in it, and what the launcher used to offer them was an empty pack and a
-search box — which is a poor answer, and became a worse one once packs stopped inheriting
-that folder (above). The two changes only make sense together.
-
-```
-cairn-cli import-install "My mods" --dry-run    # what it would take, and what it would not
-cairn-cli import-install "My mods"              # create the pack
-cairn-cli import-install "My mods" --from /path/to/other/Mods --game 1.22.6
-```
-
-Every zip is read for its own `modinfo.json` — the same reader sync uses — and then looked up
-on ModDB. The second half is worth justifying, because the mods are right there on disk:
-
-- **Your versions, without pinning them.** The manifest names the mod and nothing else, so
-  what stops the next sync taking the newest release is the lockfile — and a lock entry needs
-  a URL, a release id and a file id. The zip carries none of those. Without the lookup the
-  import could honour *your versions* or *unpinned*, not both.
-- **Which mods cannot go in a pack, before the pack exists.** A pack is a list anyone can
-  fetch. A mod that has been taken down since it was installed is indistinguishable, on disk,
-  from one that has not — and finding out on the first Play is finding out too late.
-
-The folder is listed as soon as it has been read, which is instant; each row says
-`checking…` until its own lookup lands. Holding the list back for the lookups made finding
-somebody's own mods look like the slow part of the job.
-
-What comes back is one line per mod, including the ones that will not make it:
+Most people arrive with a Mods folder already full. **Import… → the Vintage Story install on
+this machine** turns it into a pack: every zip is read for its own `modinfo.json`, looked up
+on ModDB, and reported one line per mod — including the ones that will not make it.
 
 ```
 + A Culinary Artillery Experimental 2.0.0-dev.21: ready — 2.0.0-dev.21
@@ -414,78 +351,17 @@ What comes back is one line per mod, including the ones that will not make it:
 4 of 5 mods can go in a pack for game 1.22.6
 ```
 
-A mod ModDB will not serve is skipped and named. Copying its zip into the pack is the other
-answer, and a worse one: a pack whose mods come from a folder on one machine cannot be
-shared, published or reproduced by anyone, which is most of what a pack is for.
+**The versions you are running are imported, and nothing is pinned** — you have said "start
+me where I am", not "stay here", so the exact releases go into the lockfile and the update
+button works as it does for any other pack. A mod ModDB will not serve is named and left
+out, because a pack whose mods came from one machine's folder cannot be shared or reproduced,
+which is most of what a pack is for.
 
-**The versions you are running are imported, and nothing is pinned.** A pin means "stay
-here", and nobody choosing this has said that — they have said "start me where I am". So the
-manifest names the mods and the exact releases go into the lockfile, which is what sync
-installs from; the update button works exactly as it does for any other pack. Pinning
-instead would reproduce the folder too, and then freeze it forever.
+Worlds in that folder are offered too, listed with their sizes and ticked by nobody:
+copied, never moved, and refused rather than overwritten if the pack already has one.
 
-The lock entries are written with no checksum, because nothing has been downloaded yet.
-That is a state the syncer already handles — it verifies against a locked hash when there is
-one and records the hash it computed when there is not — so the first sync fetches precisely
-those releases and fills the rest in. Taking the hash from the player's own copy would be
-the wrong answer: it would describe bytes ModDB may not serve, which is exactly the mismatch
-the field exists to catch.
-
-In the launcher this is one step and asks one question — what to call the pack. Choosing the
-source reads the folder immediately, because reading it is what choosing it meant; switching
-to another source cancels that, so somebody who came to paste a link does not wait on forty
-ModDB lookups on the way past.
-
-The game version is not among the questions. A pack made from the mods you are running is a
-pack for the game you are running them on, so it is taken from the install and stated rather
-than offered. There was a dropdown here briefly, defaulted from the newest version Cairn knew
-about and sitting next to the button as "Scan for game 1.22.6" — which read as a filter on
-the scan, and asked something with one sensible answer. Moving a pack to another game version
-is a different job, and Settings already does it properly, with a preview of what it would do
-to every mod. The CLI keeps `--game` because it is a scriptable tool and that is what flags
-are for.
-
-Two judgements are worth spelling out. A mod switched off in Vintage Story is left off — it
-is not part of what is being played, and importing it would quietly turn it back on. And a
-release marked for no version like the pack's is imported as **accepted**, since running it
-is the same testimony `--accept-unmarked` records — but only when the folder was being
-played on a game version like the pack's. Someone importing a 1.21.4 install into a 1.22.6
-pack has said nothing whatever about 1.22.6, so those mods move to the newest release the
-new game actually has.
-
-The same dialog offers the **worlds** in that install, and a pack's Settings tab offers them
-at any time afterwards — the only route for a pack that already exists. A world made under a
-mod set generally cannot be opened without it, so importing the mods and leaving the worlds
-behind is half a job. They are copied rather than moved, and nothing is ticked by default;
-see "each pack has its own worlds" above for why both of those are deliberate.
-
-Cairn only ever *reads* the folder. Plain Vintage Story goes on working exactly as it did.
-
-Including the lock is what makes a shared pack *reproducible* rather than merely similar.
-The author's lock travels with the pack and their checksums with it, so the first sync
-installs their exact versions and verifies the recipient got identical bytes:
-
-```
-$ cairn-cli sync anego          # lock says a checksum that does not match what downloaded
-  x glassview   1.3.0 does not match the locked checksum — refusing it
-```
-
-Verified end to end: an exported pack imported into a clean Cairn home produced
-byte-identical files (matching SHA-256 for every mod), and a deliberately altered
-checksum was refused rather than installed.
-
-The lock does that job alone, so import leaves the manifest as the author wrote it. Mods
-they deliberately pinned arrive pinned — a pin is transmitted intent — and the rest arrive
-*followed*: installed at the author's exact version, still offered updates later. Writing
-the lock's versions into the manifest instead would pin everything, and a pinned mod is
-never offered an update, so every imported pack would be frozen the day it landed.
-`--loose` is the opposite choice, and discards the lock as well as the pins.
-
-Both front-ends mutate packs only through `PackStore`, so validation cannot be bypassed
-by using one instead of the other — including on import, where a hostile `id` like
-`../../etc` is rejected the same way it is on creation. Pack ids become directory names, so they are
-restricted to letters, digits, `-` and `_` — an id like `../../etc` is refused rather
-than escaping the store.
+[docs/importing.md](docs/importing.md) has the reasoning — why ModDB is asked about mods
+that are already on disk, and why the lock entries start with no checksum.
 
 ### A mod that has not caught up, added on purpose
 
@@ -566,15 +442,8 @@ Cairn can install Vintage Story itself, from the official manifest at
 in-game login, not at download — so Cairn can fetch the game, but you still need a
 purchased account to play it.
 
-```
-cairn-cli games                     installed and available versions
-cairn-cli games install 1.22.5      download, verify md5, unpack
-cairn-cli games remove 1.22.5
-```
-
-Game versions are managed with `cairn-cli games` (above)
-or **Preferences → Storage** in the launcher, which is where installed versions are removed
-and private runtimes managed. **Clean up** there sweeps every version no pack targets, plus
+**Preferences → Storage** lists what is installed, removes versions, and manages the
+private runtimes. **Clean up** there sweeps every version no pack targets, plus
 any private runtime left with nothing to run and the icon and mod-detail caches — one sweep
 for everything that comes back on its own.
 
@@ -876,6 +745,18 @@ mods. That reads exactly like a crash loop, and `NRestarts=0` is the tell: it is
 restarting, not the service. It is the first thing to check when a `--user` service will not
 stay up.
 
+## Building it yourself
+
+```bash
+dotnet build          # needs .NET 10
+./dev.sh --run        # publish for this machine and launch it
+```
+
+Cairn.Core references nothing — not even the game's assemblies — so a clean checkout builds
+without Vintage Story installed. [docs/building.md](docs/building.md) covers the rest:
+cutting a release, signing and notarising the macOS builds, and where the downloads are
+published.
+
 ## Requirements
 
 **Cairn needs nothing installed.** Release builds are self-contained single files, so
@@ -921,48 +802,6 @@ user's shell; setting both makes precedence irrelevant. When no suitable runtime
 Cairn deliberately sets nothing — hostfxr falls back to the machine's registered install
 when `DOTNET_ROOT` holds no usable framework, so writing a bad value cannot help and
 clobbering a good one could hurt.
-
-## Build
-
-```bash
-dotnet build
-dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj   # 428 tests, 432 with the game
-dotnet tests/Cairn.App.Tests/bin/Debug/net10.0/Cairn.App.Tests.dll   # 201 UI tests
-```
-
-Building to test, on whatever machine you are on:
-
-```bash
-./dev.sh              # build for this host only  (~5s)
-./dev.sh --run        # build, then launch it
-./dev.sh --no-sign    # skip code signing         (~4s)
-./dev.sh --cli        # CLI only                  (~2s)
-```
-
-Prefer this over `dotnet run` on macOS. `dotnet run` uses whatever SDK is on `PATH`, and
-if that SDK is x64 the launcher runs under Rosetta and feels sluggish; publishing for the
-host rid is what produces a native build. On macOS `dev.sh` produces the `.app` bundle.
-
-### Testing against a local cairns
-
-```bash
-cd ../cairns && ./dev.sh          # the server, in its own terminal
-./dev.sh --local                  # a launcher pointed at it
-```
-
-`--local` sets `CAIRNS_SERVER=http://localhost:5080` *and* `CAIRN_DEFAULT_HOME=~/.cairn-dev`,
-because the second half is not optional: publishing writes a `cairns.json` into the pack
-recording where it went, and doing that to a real pack leaves it claiming to live at a
-localhost URL that stops existing when the server does. `--server URL` and `--home DIR`
-set them separately.
-
-Sign-in mail is printed to the server's terminal rather than sent — see the cairns README.
-
-Import refuses plain `http://` — a pack names the mods, their download URLs *and* their
-hashes, so anyone able to rewrite one in flight picks what gets installed and writes
-hashes to match. **Loopback is exempt**, because those packets never leave the machine:
-`http://localhost:5080/you/pack.json` imports, `http://cairns.gg/…` does not. The check
-is `PackSources`, in Core, so both front-ends answer it the same way.
 
 ## Opening a pack from the web
 
@@ -1068,445 +907,6 @@ and an error is in its place.
 The link reaches the app two ways, and both are wired: macOS hands a *running* instance the
 URL through an activation event, while Windows and Linux launch the handler afresh with it
 in `argv`. Handling either alone leaves half the platforms dead.
-
-### Registering the scheme
-
-| platform | how | state |
-|---|---|---|
-| macOS | `CFBundleURLTypes` in the bundle, written by `build-macos-app.sh` | **works** — verified cold and with the app already running |
-| Windows | `HKCU\Software\Classes\cairn`, written on startup | **works** — verified by clicking a link |
-| Linux | `~/.local/share/applications/cairn-url-handler.desktop`, written on startup | **works** — verified by clicking a link |
-
-macOS gets this free from the bundle format: LaunchServices reads the plist the first time
-it sees the `.app`, so shipping a bundle *is* the registration. Windows and Linux have no
-equivalent — registering there is an explicit act of installation, and Cairn ships as one
-binary in an archive with no installer to perform one. So `PackLinkHandler` does it for the
-app on startup, off the critical path, and never fails a launch over it.
-
-On every start rather than once, because both mechanisms record an absolute path: somebody
-who moves the binary would otherwise be left with a scheme pointing at where it used to be.
-Nothing is written when the recorded value already matches, so the usual case costs a read.
-
-**Windows still wants single-instance handling**, which this does not add. With no installer
-it launches a *new* copy per click, and two launchers sharing one `~/.cairn` can race.
-Registering the scheme is what makes the link arrive at all; making a second click reach the
-window already open is a separate job.
-
-On macOS the scheme binds once LaunchServices has seen the bundle somewhere it scans, so a
-freshly built `artifacts/` copy may need `lsregister -f` before a link finds it.
-
-When a click seems to do nothing, the app writes one line to stderr saying whether the link
-arrived and whether it was refused — the three causes (never delivered, delivered and
-refused, worked but the window is behind something) otherwise look identical:
-
-```bash
-open --stdout /tmp/cairn.log --stderr /tmp/cairn.log -n artifacts/osx-arm64/Cairn.app
-```
-
-Release artifacts, all platforms at once:
-
-```bash
-./build-release.sh                 # osx-arm64, osx-x64, win-x64, linux-x64
-./build-release.sh linux-x64       # or just one
-```
-
-Self-contained, single-file, compressed — roughly **36 MB** for the CLI and **47 MB** for
-the launcher per platform. Cross-publishing works from any host. Note the RIDs here are
-Cairn's *own* binary: the arm64 build exists so the launcher runs natively on Apple
-Silicon, and it still resolves an x64 runtime for the x64 game.
-
-### Cutting a release
-
-Push a tag. `.github/workflows/release.yml` runs the tests, builds all four artifacts and
-publishes a release with them attached. Not a draft: it was one so somebody could look
-before the world saw an unnotarised build, but nobody downloads from here. The gate that
-matters is on promoting `latest.json`, which is what people actually fetch.
-
-```bash
-git tag -a v0.2.0 -m "v0.2.0" && git push origin v0.2.0
-```
-
-| platform | artifact | built on |
-|---|---|---|
-| macOS (Apple silicon) | `cairn-<v>-macos-arm64.zip` | `macos-latest` |
-| macOS (Intel) | `cairn-<v>-macos-x64.zip` | `macos-latest` |
-| Windows | `cairn-<v>-windows-x64.zip` | `ubuntu-latest`, cross-published |
-| Linux | `cairn-<v>-linux-x64.tar.gz` | `ubuntu-latest`, cross-published |
-| Linux (server) | `cairn-<v>-linux-x64-server.tar.gz` | `ubuntu-latest`, cross-published |
-
-The server is a separate artifact rather than a second file in the Linux tarball: somebody
-putting a server in a container wants that binary and not a desktop launcher, and the
-reverse is just as true. It is the only artifact `cairn-server` ships in — see
-[running a server](#running-a-server-cairn-server) for why Linux alone.
-
-Only macOS needs its own runner, because the `.app` bundle needs `codesign` and `plutil`;
-the others are single-file binaries with no platform tooling behind them. The tag becomes
-`CFBundleShortVersionString`, which is what Finder shows and what macOS compares to decide
-whether an install is an upgrade.
-
-Three details that are load-bearing:
-
-- **`ditto`, not `zip`,** for the bundle. A `.app` holds symlinks and extended attributes,
-  and plain `zip` flattens them into something macOS calls damaged.
-- **`.tar.gz` for Linux**, because zip does not carry the executable bit and a download
-  that needs `chmod +x` before it runs is a download that gets reported as broken.
-- **Promotion is conditional, publishing is not.** Downloads come from R2, not from
-  GitHub — the release here is a record of what was built. Uploading a version reaches
-  nobody, because the files sit at a path nothing links to; moving `releases/latest.json`
-  is what ships them, and that only happens when the macOS builds were notarised. An
-  unnotarised build still uploads, still gets a URL, and simply is not made the download.
-
-  Promote one anyway with a single `aws s3 cp latest.json`, if that is deliberate.
-
-`workflow_dispatch` builds everything without publishing, which is how to find out a build
-is broken before there is a tag claiming otherwise.
-
-### Publishing to Cloudflare R2
-
-**This is the distribution channel.** GitHub holds the source and a copy of each build;
-people download from `download.cairns.gg`. Two secrets and three variables; with
-`R2_ACCESS_KEY_ID` unset the job says so and does nothing.
-
-| name | kind | what it is |
-|---|---|---|
-| `R2_ACCESS_KEY_ID` | secret | from an R2 API token with Object Read & Write |
-| `R2_SECRET_ACCESS_KEY` | secret | the other half of it |
-| `R2_ENDPOINT` | variable | `https://<account-id>.r2.cloudflarestorage.com` |
-| `R2_BUCKET` | variable | the bucket name |
-| `R2_PUBLIC_URL` | variable | the custom domain, e.g. `https://download.cairns.gg` |
-
-The endpoint and bucket are variables rather than secrets so they appear in the logs. A
-masked bucket name makes a failed upload much harder to read, and neither is a secret.
-
-R2 speaks S3, so the client is the AWS CLI that runs on the runner already — with three
-differences from a typical S3 provider, each of which is a way this quietly breaks:
-
-- **No `--acl`.** R2 does not implement per-object ACLs and rejects one rather than
-  ignoring it. What makes a file readable is the bucket's custom domain, which is a
-  property of the bucket rather than of each object.
-- **`AWS_DEFAULT_REGION=auto`.** R2 has one region, and the first label of the endpoint is
-  the account id — so deriving the region from the endpoint, which is right for providers
-  whose endpoint names their region, would sign requests for a region that does not exist.
-- **Checksums only when required.** Recent AWS CLI versions add integrity checksums by
-  default that not every S3-compatible provider accepts; asking for them only when needed
-  survives CLI updates instead of breaking on one.
-
-```
-releases/1.2.3/cairn-1.2.3-macos-arm64.zip     immutable, cached for a year
-releases/1.2.3/…                               every other artifact, plus SHA256SUMS
-releases/1.2.3/manifest.json                   what that version was
-releases/latest.json                           what to offer, cached for 5 minutes
-```
-
-**Versioned paths, never overwritten.** Somebody who linked a build a year ago should still
-get that build, byte for byte — which is also what makes it safe to cache them forever,
-since a URL cannot come to mean something else.
-
-That includes the manifest. `latest.json` is rewritten every release, so a version's own
-manifest is kept beside its artifacts — otherwise the sizes and checksums of 1.2.3 stop
-existing the moment 1.2.4 ships, while the files they describe are still up. It is written
-whether or not the version is promoted: a version nothing points at is still a version that
-happened.
-
-`latest.json` is the only mutable object, and holds the same bytes as the promoted
-version's manifest rather than a pointer to it — one request for a reader, and no window in
-which it names a manifest that is not up yet:
-
-```json
-{
-  "version": "1.2.3",
-  "publishedAt": "2026-08-01T17:50:51Z",
-  "files": [
-    { "platform": "macos-arm64", "name": "cairn-1.2.3-macos-arm64.zip",
-      "url": "https://…/releases/1.2.3/cairn-1.2.3-macos-arm64.zip",
-      "size": 48291043, "sha256": "f813d49e…" }
-  ]
-}
-```
-
-That is what a downloads page on the site should read, rather than a hardcoded list that
-goes stale the release after somebody remembers to update it.
-
-### Verifying a download against this source
-
-The source is published so it can be read. That is worth very little on its own: reading it
-tells you what Cairn *would* do, and the thing on your disk is a binary somebody else built.
-Three separate mechanisms close that gap, and they are worth keeping distinct, because each
-answers a question the other two cannot.
-
-**1. The manifest says what the bytes should be, and is signed.** `manifest.json` carries a
-SHA-256 for every artifact, and `manifest.json.minisig` is a detached signature over it made
-in the `manifest` job — which holds the signing key and no credential that can write to
-object storage. The public half is [`cairn.pub`](cairn.pub), committed here.
-
-```bash
-minisign -Vm manifest.json -p cairn.pub
-sha256sum -c SHA256SUMS
-```
-
-That proves the download is intact and is what the key holder meant to ship. It proves
-nothing about where it came from, and a reader who has no reason to trust the key holder
-gains nothing from it at all.
-
-**2. The build attestation says which commit it was built from, and GitHub signs that.**
-Every release artifact is attested with `actions/attest`: GitHub mints a Sigstore
-certificate against the workflow's own OIDC identity and signs a SLSA statement binding the
-artifact's digest to this repository, this workflow file, this commit and this run.
-
-```bash
-gh attestation verify cairn-1.2.3-linux-x64.tar.gz --repo dizzyd/cairn-app
-```
-
-This is the one that answers the inspector's question, and it is the only one here that
-does not rest on trusting whoever cut the release. Nobody can forge it by hand — not
-whoever holds the R2 credentials, not whoever holds the minisign key, not the account
-owner. The only thing that produces one is that workflow actually running on that commit.
-The bundle is published beside the downloads as `cairn-<version>.intoto.jsonl` and named by
-the manifest, so it also verifies offline, for somebody who took the file from
-`download.cairns.gg` and never touched GitHub:
-
-```bash
-gh attestation verify cairn-1.2.3-linux-x64.tar.gz \
-  --repo dizzyd/cairn-app --bundle cairn-1.2.3.intoto.jsonl
-```
-
-Public repositories only, on every plan; a private one needs Enterprise Cloud. The step is
-skipped while this repository is private, and the manifest then carries no `attestation`
-field rather than naming a file nobody made.
-
-**3. The checksums exist in two places reached by different credentials.** `SHA256SUMS`
-goes to R2 with the artifacts and is also written into the GitHub release, which the R2
-token cannot touch. That is detection rather than prevention: whoever holds the R2 keys can
-still replace a download, but not without the two copies disagreeing.
-
-Three smaller things make the chain legible end to end:
-
-- **The commit is inside the binary.** CI sets `SourceRevisionId` from `GITHUB_SHA`, so the
-  informational version is `1.2.3+<sha>`, and the diagnostics report — *Copy diagnostics* in
-  the launcher, `cairn-cli diagnostics` on the command line — prints it beside the version.
-  The manifest and the attestation name that same commit, so a bug report identifies the
-  source that produced it, and the three either agree or visibly do not.
-- **The dependency graph is pinned.** Every project has a `packages.lock.json` and CI
-  restores in locked mode, so "built from this commit" also fixes the 33 resolved packages,
-  including the native payloads that end up inside the signed artifact and that no `.csproj`
-  names. Without that, the same commit could build from different code.
-- **The build log is public.** Once this repository is, the run named in the manifest is
-  readable by anyone, including everything the workflow did to produce the artifacts.
-
-**Tag releases with a signed tag**, so that tag → commit is attributable the same way the
-attestation makes commit → artifact attributable. It is the one link in the chain the
-workflow cannot enforce: the attestation faithfully records whatever commit the tag pointed
-at, including the wrong one.
-
-Signing is configured per clone, in `.git/config`, so it does not travel with the source and
-this is where it is written down. The key is an SSH key held in 1Password rather than a GPG
-key on disk — the same key that authenticates the push, and `op-ssh-sign` is what git calls
-to use it:
-
-```bash
-key="$(ssh-add -L | awk '$3=="Github"{print $1" "$2}')"   # via 1Password's agent
-
-git config gpg.format ssh
-git config user.signingkey "$key"
-git config gpg.ssh.program "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
-git config tag.gpgsign true
-git config commit.gpgsign true
-
-# Without this git makes signatures it cannot then verify, which reads as a broken key
-# rather than as a missing list of who is allowed to sign.
-printf '%s %s\n' "$(git config user.email)" "$key" > ~/.config/git/allowed_signers
-git config gpg.ssh.allowedSignersFile "$HOME/.config/git/allowed_signers"
-```
-
-`tag.gpgsign` means `git tag -a` signs too, so the release command in *Cutting a release*
-needs no change. Check one with `git verify-tag v1.2.3`, and a commit with
-`git log --show-signature -1` or `git log --format='%h %G?'` — `G` for a good signature, `N`
-for none.
-
-Commits are signed as well, which is a smaller claim than the tag's and worth being clear
-about: it says an author's key stood behind each commit, while the tag is what a release is
-cut from and the attestation is what binds that commit to a binary. Everything before this
-was configured is unsigned, and stays that way — re-signing history would move every commit
-to a new hash, breaking the tags and the attestation that name them, to assert something
-about the past that was not true at the time.
-
-The cost is one signing operation per commit, which 1Password can prompt for. Everything
-that rewrites commits re-signs them, so a rebase over a long branch asks repeatedly unless
-the key is set to authorise without asking.
-
-**GitHub keeps authentication keys and signing keys in separate lists**, and being in the
-first does not put a key in the second — so a tag signed by the key that pushed it still
-shows as unverified until the same public key is added again with type *signing*:
-
-```bash
-gh auth refresh -h github.com -s admin:ssh_signing_key
-gh ssh-key add --type signing --title "release signing" ~/.ssh/id_for_signing.pub
-```
-
-What none of this offers is a **reproducible build**. You cannot rebuild a commit and get a
-byte-identical artifact: the single-file bundle is compressed, and the macOS bundle carries
-a signature with a timestamp in it and a stapled notarisation ticket that only Apple can
-issue. `ContinuousIntegrationBuild` is set under CI so the *managed assemblies* are
-deterministic, which is enough to rebuild a commit and diff the DLLs inside the bundle —
-useful, and short of a guarantee. The attestation is what stands in for one, and the
-difference is worth being plain about: it says GitHub watched this workflow build these
-bytes from this commit, not that anyone else can produce them again.
-
-And the obvious limit, since the whole section is about trust: none of it says the source is
-*good*. It says the binary is that source. Reading it is still your job.
-
-### Signing and notarising the macOS builds
-
-This is the **direct-download** path, not the App Store one: somebody downloads a zip and
-it opens. Nothing here submits an app anywhere, and none of it requires the sandboxing the
-App Store insists on.
-
-Two names in the table below suggest otherwise and are worth reading past. *Developer ID
-Application* is the certificate Apple provides **for distribution outside the App Store** —
-the store uses a different one. And an *App Store Connect API key* is just Apple's
-credential system for their APIs; `notarytool` authenticates with it whether or not the
-App Store is ever involved.
-
-Five repository secrets turn it on. With none of them the workflow ad-hoc signs exactly as
-it did before, and the release notes say so — there is no flag to remember.
-
-| secret | what it is |
-|---|---|
-| `MACOS_CERTIFICATE` | the **Developer ID Application** certificate and key, exported as `.p12`, then `base64 -i cert.p12 \| pbcopy` |
-| `MACOS_CERTIFICATE_PASSWORD` | the password set when exporting the `.p12` |
-| `APPLE_NOTARY_KEY` | an App Store Connect API key (`.p8`), base64-encoded the same way |
-| `APPLE_NOTARY_KEY_ID` | the key's ID, e.g. `ABCD123456` |
-| `APPLE_NOTARY_ISSUER` | the issuer UUID from App Store Connect → Users and Access → Integrations |
-
-**Developer ID Application**, not "Apple Development" or "Mac App Distribution" — those
-cannot sign software distributed outside the App Store, and the difference is not visible
-until notarisation refuses. Create it in the developer portal or Xcode → Settings →
-Accounts → Manage Certificates, then export it *with its private key* from Keychain Access.
-
-An **API key** rather than an app-specific password because it can be revoked on its own
-and does not stop working when the Apple ID password changes.
-
-The workflow imports the certificate into a keychain of its own, unlocked for that job
-only, and calls `security set-key-partition-list` — without which `codesign` waits on a GUI
-prompt nobody is there to answer and the job hangs until it times out.
-
-All three steps are needed for a download that simply opens, and each covers a different
-refusal:
-
-| step | what it gets past |
-|---|---|
-| sign | "cannot be opened because the developer cannot be verified" |
-| notarise | the quarantine warning macOS attaches to anything downloaded |
-| staple | the same warning, for somebody whose first launch is offline |
-
-They happen in that order, and stapling happens before packaging — staple afterwards and
-the archive people download contains an app without its ticket.
-
-#### The macOS bundle must stay non-single-file
-
-`build-macos-app.sh` publishes a directory rather than a single file, and while the reason
-written there is startup — a single-file build self-extracts before the window can appear —
-it is also what makes notarisation possible at all. A single-file .NET app unpacks its
-native libraries to `~/.net/<app>` on first run, so the binaries that actually execute do
-not exist at signing time and cannot be notarised. Apple has nothing to inspect and the
-extracted copies carry no signature.
-
-The Windows and Linux artifacts are single-file, which is fine: neither platform checks.
-
-#### Why `--deep`, which Apple discourages
-
-.NET's apphost requires `cairn.runtimeconfig.json` and `cairn.deps.json` to sit beside the
-executable, and `codesign` treats every non-code file in `Contents/MacOS` as nested code
-that must carry its own signature. A `.json` cannot. Signing each nested binary and then
-the bundle — the arrangement Apple actually recommends — fails at the last step, every
-time, on a clean tree:
-
-```
-code object is not signed at all
-In subcomponent: .../Contents/MacOS/cairn.runtimeconfig.json
-```
-
-Moving the payload out of `MacOS/` would mean replacing the apphost. The cost of `--deep`
-is that the entitlements below reach nested code as well as the app; they are narrow, and
-the notary service is the real arbiter of whether Apple minds.
-
-What `--deep` does get right, checked rather than assumed: the hardened runtime reaches
-every nested binary too, which is what notarisation requires.
-
-```
-libcoreclr.dylib     flags=0x10002(adhoc,runtime)
-libSkiaSharp.dylib   flags=0x10002(adhoc,runtime)
-cairn-cli            flags=0x10002(adhoc,runtime)
-createdump           flags=0x10002(adhoc,runtime)
-```
-
-No Mach-O in the bundle is left unsigned, and `get-task-allow` — the debug entitlement that
-guarantees rejection — is absent. `spctl -a` rejects an ad-hoc build, which is the expected
-answer and the thing a real certificate changes.
-
-#### Entitlements
-
-`macos-entitlements.plist`, and each line is a hole in the hardened runtime, so each has a
-reason written next to it. `allow-jit` and `allow-unsigned-executable-memory` are what
-CoreCLR needs to compile IL at runtime — without them the app dies on launch rather than
-degrading. `disable-library-validation` is the one worth trying to remove once notarisation
-is working.
-
-The hardened runtime is applied to ad-hoc builds too, so a local build fails the way a
-released one would rather than saving the surprise. Verified by launching one: it starts.
-
-### macOS application bundle
-
-```bash
-./build-macos-app.sh                       # artifacts/osx-arm64/Cairn.app
-ICON=path/to/icon.png ./build-macos-app.sh # with an icon
-SIGN_IDENTITY="Developer ID Application: …" ./build-macos-app.sh
-```
-
-Produces a real bundle — `Contents/MacOS`, `Contents/Info.plist`, `Contents/_CodeSignature`
-— so it gets a Dock tile, proper foreground activation and its own name in the menu bar.
-The launcher binary is `Contents/MacOS/cairn`, and it is the only program in there. The
-CLI used to ship beside it; it is a development tool with no documentation aimed at
-anybody downloading a launcher, so releases carry the launcher alone and `cairn-cli` is
-run from the source tree.
-
-Deliberately **not** single-file: measured on an M-series machine, warmed, ten runs each,
-
-| packaging | startup |
-|---|---|
-| plain directory (what the bundle uses) | **38 ms** |
-| single-file, compressed | 78 ms |
-
-Signing costs nothing measurable; the difference is single-file self-extraction. Larger on
-disk as a result (113 MB vs 47 MB) — that is the trade.
-
-Two macOS details worth knowing:
-
-- `Application.Name` must be set in `App.axaml`. Without it Avalonia reports itself to
-  LaunchServices as "Avalonia Application" regardless of `CFBundleName`.
-- The bundle is signed with `codesign --deep` because macOS classifies managed `.dll`
-  files as nested code by extension; signing only the bundle leaves them unsigned and
-  `--verify --strict` fails. Apple discourages `--deep` for Developer ID submissions, so
-  notarising would mean signing each nested binary explicitly instead.
-
-Trimming is deliberately off — Avalonia leans on reflection, so it would need testing
-per release rather than being assumed safe.
-
-The UI tests render the real window on Avalonia's headless platform and assert on the
-visual tree. That is deliberate: Avalonia resolves bindings at runtime, so a stale
-binding path fails silently and the launcher would start looking fine and do nothing.
-Note that a `TabControl` only realises the selected tab, so a test asserting on controls
-in another tab has to select it first.
-
-`Cairn.App.Tests` uses **xunit v3** because `Avalonia.Headless.XUnit` 12.x requires it;
-pairing it with xunit v2 compiles and then discovers zero tests. xunit v3 projects are
-self-hosting executables, hence running the dll directly rather than `dotnet test`.
-
-Requires .NET 10. The game is a framework-dependent apphost, so it needs a .NET matching
-*its* architecture: on Apple Silicon that is arm64 for a 1.22-or-later client and x64 —
-installed via Microsoft's `.pkg`, which writes `/etc/dotnet/install_location_x64` — for an
-older one. Cairn itself is architecture-agnostic: it only spawns the game, and reads
-`VintagestoryAPI.dll` metadata without loading it.
 
 ## Licence
 

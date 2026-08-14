@@ -95,8 +95,8 @@ stale silently, and nothing on the page will point at it when it does.
 
 The SmartScreen paragraph goes when the Windows build is signed, and the release notes in
 `.github/workflows/release.yml` carry the same sentence for the same reason — both stop
-being true on the same day. See the README's *Registering the scheme* and *Signing and
-notarising the macOS builds*.
+being true on the same day. See *Registering the scheme* and *Signing and
+notarising the macOS builds* in [building.md](building.md).
 
 ## Still outstanding
 
