@@ -257,13 +257,19 @@ public static class HomeMigration
     /// <returns>Bytes removed.</returns>
     public static long DeleteOldRoot(string oldRoot, string? keep, CancellationToken ct = default)
     {
-        if (!Directory.Exists(oldRoot)) return 0;
-
-        // Refusing rather than deleting is the only safe answer here: this is called with a
-        // path that is no longer the live root, and being wrong about that deletes
-        // everything Cairn has.
+        // First, and unconditionally. This is called with a path that is supposed to be no
+        // longer the live root, and being wrong about that deletes everything Cairn has —
+        // so the refusal must not depend on anything else being true first.
+        //
+        // It used to sit behind the existence check below, which made it conditional on the
+        // live root happening to exist. That is nearly always the case and was never the
+        // case on a CI runner, where nobody has run Cairn: the guard silently did not apply,
+        // and the test proving it applied passed only because the developer's own ~/.cairn
+        // was there.
         if (PathsEqual(oldRoot, CairnPaths.Root))
             throw new MoveFailed($"{oldRoot} is where Cairn is keeping its files now");
+
+        if (!Directory.Exists(oldRoot)) return 0;
 
         var freed = 0L;
 

@@ -267,12 +267,32 @@ public class HomeMigrationTests : IDisposable
         Assert.Single(Directory.EnumerateFileSystemEntries(From));
     }
 
-    [Fact]
-    public void Discarding_refuses_to_delete_the_live_root()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Discarding_refuses_to_delete_the_live_root(bool rootExists)
     {
-        // A mistyped path is how somebody would ask for this, and it is the one mistake
-        // that cannot be walked back.
-        Assert.Throws<MoveFailed>(() => HomeMigration.DeleteOldRoot(CairnPaths.Root, null));
+        // A mistyped path is how somebody would ask for this, and it is the one mistake that
+        // cannot be walked back.
+        //
+        // Both cases, because the first version of this asked only the ambient one and so
+        // proved nothing portable: it passed on a machine where ~/.cairn exists and failed
+        // on CI, where the guard was being skipped entirely rather than being satisfied.
+        var live = Path.Combine(_tmp, "live");
+        if (rootExists) Directory.CreateDirectory(live);
+
+        var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", live);
+
+        try
+        {
+            Assert.Equal(live, CairnPaths.Root);
+            Assert.Throws<MoveFailed>(() => HomeMigration.DeleteOldRoot(live, null));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", previous);
+        }
     }
 
     [Fact]
