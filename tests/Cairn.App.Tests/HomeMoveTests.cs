@@ -58,7 +58,13 @@ public class HomeMoveTests : IDisposable
     /// than hand-constructed here, which would freeze this test against a constructor that
     /// belongs to the app.
     /// </summary>
-    private static PreferencesViewModel Model()
+    private static PreferencesViewModel Model() => Windows().Preferences;
+
+    /// <summary>
+    /// Both halves, for the tests that care what the launcher behind the dialog does with a
+    /// move — the pack pane is drawn from the root and does not close when Preferences does.
+    /// </summary>
+    private static (MainViewModel Main, PreferencesViewModel Preferences) Windows()
     {
         var main = new MainViewModel(new OfflineHandler());
 
@@ -67,7 +73,7 @@ public class HomeMoveTests : IDisposable
         main.ShowPreferencesCommand.Execute(null);
 
         Assert.NotNull(captured);
-        return captured!;
+        return (main, captured!);
     }
 
     private static PreferencesWindow ShowOverview(PreferencesViewModel model)
@@ -216,6 +222,88 @@ public class HomeMoveTests : IDisposable
         Assert.Equal(_home, model.CairnHome);
     }
 
+    /// <summary>
+    /// A pack for the move to carry, and for the window to draw. A real manifest rather than
+    /// an empty directory: the window lists packs on the way up and PackStore refuses an
+    /// id-less one, so it has to be the kind a move would actually pick up.
+    /// </summary>
+    private string APack(string id = "demo")
+    {
+        Directory.CreateDirectory(Path.Combine(_home, "packs", id));
+        File.WriteAllText(Path.Combine(_home, "packs", id, "pack.json"),
+            $"{{\"id\":\"{id}\",\"name\":\"Demo\",\"gameVersion\":\"1.22.5\",\"mods\":[]}}");
+        return id;
+    }
+
+    [AvaloniaFact]
+    public async Task The_launcher_behind_the_dialog_moves_with_it()
+    {
+        // The bug this was reported as: everything arrived at the new root and the launcher
+        // went on showing the old one — the pack pane naming a directory on the disk just
+        // moved off, a new pack offered the same, and Play re-downloading every mod into the
+        // tree the move had emptied. It came right on the next start, which is what said the
+        // files were fine and the window was drawn from paths read at start-up.
+        //
+        // Asserted on the screen rather than on the view model, because the view model was
+        // never the half that was wrong: its paths read through CairnPaths and answer for
+        // the new root the moment the pointer moves. What lasted until a restart is the text
+        // already drawn, which only changes if something says the pane is stale.
+        APack();
+
+        var target = Path.Combine(
+            Path.GetTempPath(), "cairn-move-to-" + Guid.NewGuid().ToString("n")[..8]);
+        Directory.CreateDirectory(target);
+
+        var main = new MainViewModel(new OfflineHandler());
+        var window = new MainWindow { DataContext = main };
+        window.Show();
+
+        // A TabControl only realises the tab it is showing, and the paths live in Settings.
+        // Selected again after the move, because rebuilding the pane from the new root
+        // rebuilds the tabs with it and leaves the first one showing.
+        void ShowSettingsTab()
+        {
+            var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+            tabs.SelectedItem = tabs.GetVisualDescendants().OfType<TabItem>()
+                .Single(t => (t.Header as string) == "Settings");
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        ShowSettingsTab();
+
+        string Paths() => string.Join(" ", window.GetVisualDescendants().OfType<TextBlock>()
+            .Select(t => t.Text ?? "").Where(t => t.Contains("packs")));
+
+        Assert.Contains(_home, Paths());
+
+        PreferencesViewModel? preferences = null;
+        main.OpenPreferences = p => { preferences = p; return Task.CompletedTask; };
+        main.ShowPreferencesCommand.Execute(null);
+
+        Assert.NotNull(preferences);
+        preferences!.PickFolder = () => Task.FromResult<string?>(target);
+
+        try
+        {
+            await preferences.MoveHomeCommand.ExecuteAsync(null);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            // The pack is still selected and still the same pack: it is where it lives that
+            // changed, and rebuilding the pane must not lose the selection on the way.
+            Assert.Equal("demo", main.SelectedPack?.Id);
+
+            ShowSettingsTab();
+
+            var shown = Paths();
+            Assert.Contains(target, shown);
+            Assert.DoesNotContain(_home, shown);
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch (IOException) { }
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_move_driven_from_the_window_relocates_everything()
     {
@@ -223,12 +311,8 @@ public class HomeMoveTests : IDisposable
         // because the sandbox moves the default root instead of overriding it — the class
         // doc used to say a successful move could not be driven from here, and that was a
         // consequence of how the suite was set up rather than anything about the feature.
-        // A real manifest, because the window lists packs on the way up and an id-less one
-        // is refused by PackStore — the pack has to be the kind a move would actually carry.
         File.WriteAllText(Path.Combine(_home, "settings.json"), "{}");
-        Directory.CreateDirectory(Path.Combine(_home, "packs", "demo"));
-        File.WriteAllText(Path.Combine(_home, "packs", "demo", "pack.json"),
-            "{\"id\":\"demo\",\"name\":\"Demo\",\"gameVersion\":\"1.22.5\",\"mods\":[]}");
+        APack();
 
         var target = Path.Combine(
             Path.GetTempPath(), "cairn-move-to-" + Guid.NewGuid().ToString("n")[..8]);

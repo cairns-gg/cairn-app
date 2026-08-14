@@ -70,6 +70,14 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p><strong>If you want to fix something, or add a language:</strong> the files are the same flat JSON every Vintage Story mod ships in <code>assets/&lt;domain&gt;/lang/</code>, so if you have written one for a mod you have written one of these. Point <code>CAIRN_LANG_DIR</code> at a folder holding your own <code>de.json</code> and Cairn reads it in preference to the built-in ones and offers it in the picker &mdash; no need to build anything.</p>
 
+<h2>Moving Cairn's files now takes the launcher with it</h2>
+
+<p><strong>Preferences &rarr; Move&hellip;</strong> put everything on the new drive, and then the window carried on as though it had not: the pack's Settings tab still named the old disk, a new pack was made against it, and pressing Play downloaded every mod again into a folder that was no longer being used. Restarting Cairn put it all right, because the files had been where they should be the whole time &mdash; it was the launcher that had not noticed.</p>
+
+<p>It notices now. The pack list, the paths on screen and the next launch all follow the move as it finishes, with no restart.</p>
+
+<p><strong>If this happened to you</strong>, the mods that were downloaded again are in the old location, where Cairn will never look for them. It is safe to delete that folder &mdash; the only thing in there worth keeping is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
+
 <h2>Upgrading</h2>
 
 <p>Nothing to do. A pack that carries no mod config behaves exactly as it did, and Cairn stays in English unless it finds a reason not to.</p>

@@ -28,12 +28,17 @@ public sealed class ModInfoCache(ModDbClient moddb, string? root = null)
     private static readonly JsonSerializerOptions Json =
         new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    private readonly string _root = root ?? CairnPaths.CacheRoot;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private Dictionary<string, ModInfo>? _entries;
 
-    public string Path => System.IO.Path.Combine(_root, "mods.json");
+    /// <summary>
+    /// Read through to <see cref="CairnPaths"/> unless a root was given, rather than settled
+    /// when the cache was built: the root can move while Cairn is running.
+    /// </summary>
+    private string Root => root ?? CairnPaths.CacheRoot;
+
+    public string Path => System.IO.Path.Combine(Root, "mods.json");
 
     /// <summary>
     /// What is known about <paramref name="modId"/>, asking ModDB only if this is the
@@ -135,11 +140,11 @@ public sealed class ModInfoCache(ModDbClient moddb, string? root = null)
     {
         try
         {
-            Directory.CreateDirectory(_root);
+            Directory.CreateDirectory(Root);
 
             // Written aside and moved, so a crash mid-write cannot leave a half file that
             // then fails to parse on the next run.
-            var staging = System.IO.Path.Combine(_root, System.IO.Path.GetRandomFileName());
+            var staging = System.IO.Path.Combine(Root, System.IO.Path.GetRandomFileName());
             File.WriteAllText(staging, JsonSerializer.Serialize(entries, Json));
             File.Move(staging, Path, overwrite: true);
         }

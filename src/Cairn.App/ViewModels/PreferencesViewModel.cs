@@ -224,6 +224,18 @@ public partial class PreferencesViewModel : ViewModelBase
     public Func<Task<string?>>? PickFolder { get; set; }
 
     /// <summary>
+    /// Called once the root has moved, so the window behind this one catches up.
+    ///
+    /// Everything reads its paths through <see cref="CairnPaths"/> and so addresses the new
+    /// root immediately, but the main window is already drawn from the old one: the pack
+    /// pane is showing the directories it read at start-up, and its list was built by
+    /// walking a packs directory that has since been deleted and recreated somewhere else.
+    /// Without this the launcher looks unmoved until it is restarted, which is exactly how
+    /// this arrived as a bug report.
+    /// </summary>
+    public Action? HomeMoved { get; set; }
+
+    /// <summary>
     /// Whether CAIRN_HOME is what decided the root, in which case moving from here cannot
     /// work: the pointer would be written and then outranked by the variable.
     ///
@@ -321,6 +333,10 @@ public partial class PreferencesViewModel : ViewModelBase
             });
 
             var result = await Task.Run(() => HomeMigration.Move(plan, progress));
+
+            // Before the aftermath is written, because everything from here on is a report
+            // about a move that has already taken effect everywhere else.
+            HomeMoved?.Invoke();
 
             MoveAftermath = result.RemovalProblem is { } stuck
                 // The move worked. Saying so first matters: somebody told only that a

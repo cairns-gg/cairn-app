@@ -491,6 +491,24 @@ public partial class MainViewModel : ViewModelBase
     private void OnLibraryChanged() => Detail?.RefreshGameState();
 
     /// <summary>
+    /// Cairn's root has just moved, so everything on screen was read from a directory that
+    /// no longer exists.
+    ///
+    /// The stores need nothing — they resolve through <see cref="CairnPaths"/> on every
+    /// access, which is what stops a launch from syncing into the old root — but the window
+    /// does: the pack list was built by walking the old packs directory, and the detail pane
+    /// is displaying the paths it found there. Rebuilt from the new root rather than left
+    /// until the next start, which is how long the pack pane used to go on naming a disk
+    /// Cairn had already moved off.
+    /// </summary>
+    private void OnHomeMoved()
+    {
+        LoadPacks();
+        Games.RefreshInstalled();
+        OnLibraryChanged();
+    }
+
+    /// <summary>
     /// A launch moved on. Only the pane for that pack has anything to redraw — the others
     /// are not showing it, and the one that is may not be the one that started it.
     /// </summary>
@@ -1091,8 +1109,17 @@ public partial class MainViewModel : ViewModelBase
 
         // No confirmer supplied here on purpose: PreferencesWindow parents one to itself,
         // so a prompt raised from Preferences does not hand focus to the main window.
-        await OpenPreferences(new PreferencesViewModel(
-            Games, _store, _gameStore, _runtimes, new ModIconCache(_http), new ModInfoCache(_moddb)));
+        var preferences = new PreferencesViewModel(
+            Games, _store, _gameStore, _runtimes, new ModIconCache(_http), new ModInfoCache(_moddb))
+        {
+            // Moving the root deletes the tree this window was drawn from. The stores read
+            // their paths through CairnPaths and so need nothing, but what is on screen was
+            // read before the move: rebuilt here rather than at the next restart, which is
+            // how long a pack pane full of paths from the old disk used to last.
+            HomeMoved = OnHomeMoved,
+        };
+
+        await OpenPreferences(preferences);
 
         // Removing a game version from in there changes what every pack can launch.
         Games.RefreshInstalled();

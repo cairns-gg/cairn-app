@@ -23,8 +23,13 @@ namespace Cairn.Core.Launch;
 /// </summary>
 public sealed class PackData(PackStore store, string? sessionPath = null, string? sharedDataPath = null)
 {
-    /// <summary>Cairn's record of the login, shared by every pack.</summary>
-    public string SessionPath { get; } = sessionPath ?? CairnPaths.SessionPath;
+    /// <summary>
+    /// Cairn's record of the login, shared by every pack. Read through to
+    /// <see cref="CairnPaths"/> unless one was given, rather than settled at construction:
+    /// the root can move while Cairn is running, and a session written to the old one is a
+    /// login that vanishes at the next restart.
+    /// </summary>
+    public string SessionPath => sessionPath ?? CairnPaths.SessionPath;
 
     /// <summary>The data path packs used before they had their own, and the seed for new ones.</summary>
     public string SharedDataPath { get; } = sharedDataPath ?? GameInstall.DefaultDataPath;

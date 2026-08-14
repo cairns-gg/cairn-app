@@ -25,11 +25,16 @@ public sealed class DotnetRuntimeException(string message, Exception? inner = nu
 /// </summary>
 public sealed class RuntimeStore
 {
-    private readonly string _root;
+    private readonly string? _root;
 
-    public RuntimeStore(string? root = null) => _root = root ?? CairnPaths.RuntimesRoot;
+    /// <param name="root">
+    /// Somewhere other than Cairn's own runtimes directory, or null for that one — which is
+    /// then read on every access rather than settled here, because the root can move while
+    /// Cairn is running. See <see cref="CairnPaths"/>.
+    /// </param>
+    public RuntimeStore(string? root = null) => _root = root;
 
-    public string Root => _root;
+    public string Root => _root ?? CairnPaths.RuntimesRoot;
 
     public string InstallDir(string version, string rid)
     {
@@ -38,7 +43,7 @@ public sealed class RuntimeStore
             // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new ArgumentException($"'{version}-{rid}' is not a usable runtime directory name.");
 
-        return Path.Combine(_root, $"{version}-{rid}");
+        return Path.Combine(Root, $"{version}-{rid}");
     }
 
     private static bool IsValidComponent(string? s) =>
@@ -49,9 +54,9 @@ public sealed class RuntimeStore
 
     public IEnumerable<DotnetRuntime> ListInstalled()
     {
-        if (!Directory.Exists(_root)) yield break;
+        if (!Directory.Exists(Root)) yield break;
 
-        foreach (var dir in Directory.EnumerateDirectories(_root).OrderBy(d => d, StringComparer.Ordinal))
+        foreach (var dir in Directory.EnumerateDirectories(Root).OrderBy(d => d, StringComparer.Ordinal))
         {
             var runtime = DotnetRuntimeLocator.Inspect(dir);
             if (runtime is not null) yield return runtime;
@@ -81,7 +86,7 @@ public sealed class RuntimeStore
     public void Remove(DotnetRuntime runtime)
     {
         var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(runtime.Root));
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_root));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Root));
 
         // Only ever inside the store, and never the store itself: this deletes recursively.
         if (!dir.StartsWith(root + Path.DirectorySeparatorChar, PathComparison) || dir == root)

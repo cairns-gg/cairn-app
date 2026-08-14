@@ -44,14 +44,18 @@ public sealed class ModUpdateCache
     /// </summary>
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
-    private readonly string _root;
+    private readonly string? _root;
 
-    public ModUpdateCache(string? root = null) =>
-        _root = root ?? Path.Combine(CairnPaths.CacheRoot, "update-checks");
+    /// <param name="root">
+    /// Somewhere other than Cairn's own cache, or null for that one — which is then read on
+    /// every access rather than settled here, because the root can move while Cairn is
+    /// running. See <see cref="CairnPaths"/>.
+    /// </param>
+    public ModUpdateCache(string? root = null) => _root = root;
 
-    public string Root => _root;
+    public string Root => _root ?? Path.Combine(CairnPaths.CacheRoot, "update-checks");
 
-    private string PathFor(string packId) => Path.Combine(_root, packId + ".json");
+    private string PathFor(string packId) => Path.Combine(Root, packId + ".json");
 
     /// <summary>
     /// What the pack looked like when the answer was computed.
@@ -109,7 +113,7 @@ public sealed class ModUpdateCache
     {
         try
         {
-            Directory.CreateDirectory(_root);
+            Directory.CreateDirectory(Root);
 
             File.WriteAllText(PathFor(packId), JsonSerializer.Serialize(new CachedUpdates
             {
@@ -142,7 +146,7 @@ public sealed class ModUpdateCache
 
         try
         {
-            if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+            if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -157,9 +161,9 @@ public sealed class ModUpdateCache
     {
         try
         {
-            if (!Directory.Exists(_root)) return 0;
+            if (!Directory.Exists(Root)) return 0;
 
-            return Directory.EnumerateFiles(_root, "*.json", SearchOption.AllDirectories)
+            return Directory.EnumerateFiles(Root, "*.json", SearchOption.AllDirectories)
                 .Sum(f => { try { return new FileInfo(f).Length; } catch (IOException) { return 0; } });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -173,8 +177,8 @@ public sealed class ModUpdateCache
     {
         try
         {
-            return Directory.Exists(_root)
-                ? Directory.EnumerateFiles(_root, "*.json").Count()
+            return Directory.Exists(Root)
+                ? Directory.EnumerateFiles(Root, "*.json").Count()
                 : 0;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

@@ -8,11 +8,18 @@ namespace Cairn.Core.Packs;
 /// </summary>
 public sealed class PackStore
 {
-    private readonly string _packsRoot;
+    private readonly string? _packsRoot;
 
-    public PackStore(string? packsRoot = null) => _packsRoot = packsRoot ?? CairnPaths.PacksRoot;
+    /// <param name="packsRoot">
+    /// Somewhere other than Cairn's own packs directory, or null for that one — which is
+    /// then read on every access rather than settled here. The root can move while Cairn is
+    /// running (Preferences → Move…), and a store built at start-up holding the old string
+    /// goes on writing to a directory that has just been deleted: the pack pane shows paths
+    /// under it, and Play re-downloads every mod into it. See <see cref="CairnPaths"/>.
+    /// </param>
+    public PackStore(string? packsRoot = null) => _packsRoot = packsRoot;
 
-    public string PacksRoot => _packsRoot;
+    public string PacksRoot => _packsRoot ?? CairnPaths.PacksRoot;
 
     public string ManifestPath(string id) => Path.Combine(PackDir(id), "pack.json");
     public string LockPath(string id) => Path.Combine(PackDir(id), "pack.lock.json");
@@ -287,7 +294,7 @@ public sealed class PackStore
         if (!IsValidId(id))
             throw new ArgumentException(Lang.Get("pack-id-invalid", id), nameof(id));
 
-        return Path.Combine(_packsRoot, id);
+        return Path.Combine(PacksRoot, id);
     }
 
     public static bool IsValidId(string? id) =>
@@ -315,9 +322,9 @@ public sealed class PackStore
 
     public IEnumerable<string> ListIds()
     {
-        if (!Directory.Exists(_packsRoot)) yield break;
+        if (!Directory.Exists(PacksRoot)) yield break;
 
-        foreach (var dir in Directory.EnumerateDirectories(_packsRoot).OrderBy(d => d, StringComparer.Ordinal))
+        foreach (var dir in Directory.EnumerateDirectories(PacksRoot).OrderBy(d => d, StringComparer.Ordinal))
         {
             var id = Path.GetFileName(dir);
             if (IsValidId(id) && File.Exists(Path.Combine(dir, "pack.json")))

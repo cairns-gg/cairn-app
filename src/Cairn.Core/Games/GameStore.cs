@@ -24,11 +24,18 @@ namespace Cairn.Core.Games;
 /// </summary>
 public sealed class GameStore
 {
-    private readonly string _root;
+    private readonly string? _root;
 
-    public GameStore(string? root = null) => _root = root ?? CairnPaths.GamesRoot;
+    /// <param name="root">
+    /// Somewhere other than Cairn's own games directory — the server front-end passes
+    /// <see cref="CairnPaths.ServersRoot"/> — or null for the default, which is then read on
+    /// every access rather than settled here. The root can move while Cairn is running, and
+    /// a store holding the string it was built with keeps launching from a directory that
+    /// no longer exists. See <see cref="CairnPaths"/>.
+    /// </param>
+    public GameStore(string? root = null) => _root = root;
 
-    public string Root => _root;
+    public string Root => _root ?? CairnPaths.GamesRoot;
 
     /// <summary>What makes a directory a bundle, on the one platform that has the notion.</summary>
     private const string BundleSuffix = ".app";
@@ -52,7 +59,7 @@ public sealed class GameStore
             // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new ArgumentException($"'{version}' is not a usable version directory name.", nameof(version));
 
-        return Path.Combine(_root, DirectoryNameFor(version));
+        return Path.Combine(Root, DirectoryNameFor(version));
     }
 
     /// <summary>Versions become directory names, so they are constrained like pack ids.</summary>
@@ -64,9 +71,9 @@ public sealed class GameStore
 
     public IEnumerable<GameInstall> ListInstalled()
     {
-        if (!Directory.Exists(_root)) yield break;
+        if (!Directory.Exists(Root)) yield break;
 
-        foreach (var dir in Directory.EnumerateDirectories(_root).OrderBy(d => d, StringComparer.Ordinal))
+        foreach (var dir in Directory.EnumerateDirectories(Root).OrderBy(d => d, StringComparer.Ordinal))
         {
             var install = GameInstall.TryAt(dir);
             if (install is not null) yield return Named(install, dir);
@@ -225,7 +232,7 @@ public sealed class GameStore
     /// </summary>
     public IReadOnlyList<string> MigrateToBundles()
     {
-        if (!Bundled || !Directory.Exists(_root)) return [];
+        if (!Bundled || !Directory.Exists(Root)) return [];
 
         var moved = new List<string>();
 
@@ -260,7 +267,7 @@ public sealed class GameStore
     {
         try
         {
-            return Directory.EnumerateDirectories(_root).OrderBy(d => d, StringComparer.Ordinal).ToList();
+            return Directory.EnumerateDirectories(Root).OrderBy(d => d, StringComparer.Ordinal).ToList();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -285,7 +292,7 @@ public sealed class GameStore
     public void Remove(GameInstall install)
     {
         var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(install.Directory));
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_root));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Root));
 
         // Only ever inside the store, and never the store itself: this deletes recursively,
         // and an install Cairn merely found is not Cairn's to delete.

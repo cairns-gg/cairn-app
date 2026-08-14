@@ -7,6 +7,16 @@ namespace Cairn.Core;
 /// pack's directory, because the pack is the instance. Deleting a pack therefore deletes
 /// its worlds, which is what people expect: a world made under a pack's mod set usually
 /// cannot be opened without it, so keeping one behind would strand data nothing can read.
+///
+/// <b>Nothing may capture one of these in a field.</b> The root moves while Cairn is
+/// running — Preferences → Move… writes the pointer and deletes the old tree — so a store
+/// built at start-up holding the string it read then goes on addressing a directory that is
+/// no longer there. That is not theoretical: it shipped, and it looked like a pack pane
+/// still showing C:\ paths after a move, a new pack offered the old location, and Play
+/// re-downloading every mod into the directory the move had just emptied, all of it correct
+/// again after a restart. The types that take a root — <c>PackStore</c>, <c>GameStore</c>,
+/// <c>RuntimeStore</c>, the caches — therefore keep the argument, null and all, and read
+/// through to here on every access.
 /// </summary>
 public static class CairnPaths
 {

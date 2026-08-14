@@ -26,7 +26,7 @@ public sealed class OptimumProvisioner
     private readonly HttpClient _http;
     private readonly GameStore _games;
     private readonly RuntimeStore _runtimes;
-    private readonly string _buildsRoot;
+    private readonly string? _buildsRoot;
 
     public OptimumProvisioner(
         HttpClient http, GameStore games, RuntimeStore runtimes, string? buildsRoot = null)
@@ -34,11 +34,17 @@ public sealed class OptimumProvisioner
         _http = http;
         _games = games;
         _runtimes = runtimes;
-        _buildsRoot = buildsRoot ?? CairnPaths.BuildsRoot;
+        _buildsRoot = buildsRoot;
     }
 
+    /// <summary>
+    /// Read through to <see cref="CairnPaths"/> unless one was given, rather than settled at
+    /// construction: the root can move while Cairn is running.
+    /// </summary>
+    private string BuildsRoot => _buildsRoot ?? CairnPaths.BuildsRoot;
+
     /// <summary>The working tree, kept between builds so a rebuild is not a fresh decompile.</summary>
-    public string WorkingTree => Path.Combine(_buildsRoot, "optimum");
+    public string WorkingTree => Path.Combine(BuildsRoot, "optimum");
 
     /// <summary>
     /// Everything the build printed, kept outside the working tree.
@@ -47,7 +53,7 @@ public sealed class OptimumProvisioner
     /// written inside it would show up as a change to the repository. Kept at all because a
     /// build that failed while nobody was watching is otherwise unexplainable.
     /// </summary>
-    public string LogPath => Path.Combine(_buildsRoot, "optimum-build.log");
+    public string LogPath => Path.Combine(BuildsRoot, "optimum-build.log");
 
     /// <summary>What this would cost, without doing any of it. No network, no processes.</summary>
     public OptimumBuildPlan Plan(string gameVersion, OptimumSource? source = null)
@@ -61,7 +67,7 @@ public sealed class OptimumProvisioner
             AlreadyBuilt = _games.Find(source.InstallName) is not null
                            || GameInstall.TryAt(_games.InstallDir(source.InstallName)) is not null,
             Source = source,
-            FreeBytes = FreeSpace(_buildsRoot),
+            FreeBytes = FreeSpace(BuildsRoot),
         };
     }
 
@@ -136,7 +142,7 @@ public sealed class OptimumProvisioner
         if (!plan.Prereqs.Satisfied) throw new OptimumBuildException(plan.Prereqs.Describe());
         if (!plan.EnoughSpace) throw new OptimumBuildException(plan.Describe());
 
-        Directory.CreateDirectory(_buildsRoot);
+        Directory.CreateDirectory(BuildsRoot);
 
         // Every line goes to the file as well as the caller, so a failure is still
         // explainable after the window is gone.
@@ -244,14 +250,14 @@ public sealed class OptimumProvisioner
 
             await ProcessRunner.RunOrThrowAsync("git",
                     ["clone", "--quiet", source.Url, WorkingTree],
-                    _buildsRoot, log, ct: ct)
+                    BuildsRoot, log, ct: ct)
                 .ConfigureAwait(false);
         }
         else
         {
             await ProcessRunner.RunOrThrowAsync("git",
                     ["-C", WorkingTree, "fetch", "--quiet", "origin"],
-                    _buildsRoot, log, ct: ct)
+                    BuildsRoot, log, ct: ct)
                 .ConfigureAwait(false);
         }
 
@@ -259,7 +265,7 @@ public sealed class OptimumProvisioner
         // part of applying patches, so an ordinary checkout would refuse or merge.
         await ProcessRunner.RunOrThrowAsync("git",
                 ["-C", WorkingTree, "reset", "--hard", "--quiet", source.Ref],
-                _buildsRoot, log, ct: ct)
+                BuildsRoot, log, ct: ct)
             .ConfigureAwait(false);
     }
 
@@ -295,7 +301,7 @@ public sealed class OptimumProvisioner
     }
 
     /// <summary>Where the packager assembles its output before Cairn takes the client from it.</summary>
-    public string PackagerOutput => Path.Combine(_buildsRoot, "optimum-out");
+    public string PackagerOutput => Path.Combine(BuildsRoot, "optimum-out");
 
     /// <summary>
     /// Removes the packager's leftovers.

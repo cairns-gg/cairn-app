@@ -16,7 +16,11 @@ public sealed class ModIconCache(HttpClient http, string? root = null)
     /// <summary>Icons are a few KB; anything this large is not one, so it is not stored.</summary>
     public const int MaxBytes = 4 * 1024 * 1024;
 
-    public string Root { get; } = root ?? CairnPaths.IconCacheRoot;
+    /// <summary>
+    /// Read through to <see cref="CairnPaths"/> unless a root was given, rather than settled
+    /// when the cache was built: the root can move while Cairn is running.
+    /// </summary>
+    public string Root => root ?? CairnPaths.IconCacheRoot;
 
     /// <summary>
     /// Where <paramref name="url"/> is cached. Derived from a hash of the URL, so it is

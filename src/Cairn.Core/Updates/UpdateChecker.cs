@@ -184,7 +184,11 @@ public sealed class UpdateChecker(
     public static readonly TimeSpan NotifyInterval = TimeSpan.FromHours(8);
 
     private readonly string _manifest = manifestUrl ?? DefaultManifest;
-    private readonly string _statePath = statePath ?? CairnPaths.LastUpdateCheckPath;
+    /// <summary>
+    /// Read through unless one was given, rather than settled at construction: the root can
+    /// move while Cairn is running. See <see cref="CairnPaths"/>.
+    /// </summary>
+    private string StatePath => statePath ?? CairnPaths.LastUpdateCheckPath;
     private readonly Func<DateTimeOffset> _now = clock ?? (() => DateTimeOffset.UtcNow);
 
     /// <summary>
@@ -310,7 +314,7 @@ public sealed class UpdateChecker(
         // their working copy is out of date is noise. See CairnVersion.
         if (_current == "dev") return false;
 
-        return LastChecked(_statePath) is not { } last || _now() - last >= CheckInterval;
+        return LastChecked(StatePath) is not { } last || _now() - last >= CheckInterval;
     }
 
     /// <summary>
@@ -389,7 +393,7 @@ public sealed class UpdateChecker(
         if (latest is null || string.IsNullOrWhiteSpace(latest.Version)) return null;
 
         var now = _now();
-        var state = Load(_statePath);
+        var state = Load(StatePath);
 
         var notify = GameVersions.IsNewerVersionThan(latest.Version, _current)
                      && ShouldNotify(state, latest.Version, now);
@@ -398,7 +402,7 @@ public sealed class UpdateChecker(
         // exists to stop asking the server, and it did get asked — and the notification is
         // recorded here rather than after the dialog closes, so a timer firing on top of an
         // open prompt finds nothing left to say.
-        Save(_statePath, new UpdateState(
+        Save(StatePath, new UpdateState(
             LastChecked: now,
             NotifiedVersion: notify ? latest.Version : state.NotifiedVersion,
             NotifiedAt: notify ? now : state.NotifiedAt));

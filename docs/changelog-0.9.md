@@ -125,6 +125,21 @@ have written one of these. Point `CAIRN_LANG_DIR` at a folder holding your own `
 Cairn reads it in preference to the built-in ones and offers it in the picker — no need to
 build anything.
 
+## Moving Cairn's files now takes the launcher with it
+
+**Preferences → Move…** put everything on the new drive, and then the window carried on as
+though it had not: the pack's Settings tab still named the old disk, a new pack was made
+against it, and pressing Play downloaded every mod again into a folder that was no longer
+being used. Restarting Cairn put it all right, because the files had been where they should
+be the whole time — it was the launcher that had not noticed.
+
+It notices now. The pack list, the paths on screen and the next launch all follow the move
+as it finishes, with no restart.
+
+**If this happened to you**, the mods that were downloaded again are in the old location,
+where Cairn will never look for them. It is safe to delete that folder — the only thing in
+there worth keeping is the small `home` file, which is what points Cairn at the new drive.
+
 ## Upgrading
 
 Nothing to do. A pack that carries no mod config behaves exactly as it did, and Cairn
