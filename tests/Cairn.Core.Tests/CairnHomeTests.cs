@@ -147,6 +147,37 @@ public class CairnHomeTests
     }
 
     [Fact]
+    public void Pointing_at_the_default_removes_the_pointer_rather_than_writing_one()
+    {
+        // Sandboxed, because SetPointer writes to the running user's own default root.
+        var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+        var sandbox = Directory.CreateTempSubdirectory("cairn-pointer-").FullName;
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", sandbox);
+
+        try
+        {
+            CairnHome.SetPointer("/mnt/big/cairn");
+
+            Assert.True(File.Exists(CairnHome.PointerPath));
+            Assert.Equal(HomeSource.Pointer, CairnHome.Resolve().Source);
+
+            // Naming the default is the same as naming nothing, and saying it the long way
+            // would leave the directory holding a note about itself — so somebody who moved
+            // home again reads "the default" rather than "the pointer file".
+            CairnHome.SetPointer(sandbox);
+
+            Assert.False(File.Exists(CairnHome.PointerPath));
+            Assert.Equal(HomeSource.Default, CairnHome.Resolve().Source);
+            Assert.Equal(sandbox, CairnHome.Resolve().Root);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", previous);
+            Directory.Delete(sandbox, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Preflight_passes_when_the_pointer_target_is_there()
     {
         var r = new HomeResolution("/mnt/big/cairn", HomeSource.Pointer, null);

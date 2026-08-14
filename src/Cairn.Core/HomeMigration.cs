@@ -110,7 +110,13 @@ public static class HomeMigration
         if (Contains(from, to)) return No($"{to} is inside {from}");
         if (Contains(to, from)) return No($"{to} contains {from}");
 
-        if (Directory.Exists(to) && Directory.EnumerateFileSystemEntries(to).Any())
+        // The pointer does not count as an occupant. Moving away from the default leaves it
+        // behind in the directory just emptied, so it is the one thing standing between
+        // somebody and moving back — and it is Cairn's own bookkeeping, not "whatever is
+        // already there". Refusing over it makes the trip one-way for no reason.
+        if (Directory.Exists(to)
+            && Directory.EnumerateFileSystemEntries(to)
+                .Any(e => !PathsEqual(e, CairnHome.PointerPath)))
             return No($"{to} is not empty. Moving into it would mix Cairn's state with "
                       + "whatever is already there — give it a directory of its own.");
 

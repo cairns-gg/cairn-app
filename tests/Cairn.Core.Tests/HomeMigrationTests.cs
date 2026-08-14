@@ -113,6 +113,34 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
+    public void The_pointer_left_behind_does_not_block_moving_back()
+    {
+        // Moving away from the default empties that directory except for the pointer, which
+        // is Cairn's own bookkeeping. Counting it as an occupant made the trip one-way:
+        // somebody who moved to another disk and wanted to come back was told the original
+        // was "not empty" — by the one file the move itself had put there.
+        var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", To);
+
+        try
+        {
+            Directory.CreateDirectory(To);
+            File.WriteAllText(Path.Combine(To, CairnHome.PointerName), From);
+
+            Assert.True(HomeMigration.Plan(From, To, null, PlentyOfRoom).CanMove);
+
+            // Anything else in there is still somebody's, and still a refusal.
+            File.WriteAllText(Path.Combine(To, "notes.txt"), "mine");
+
+            Assert.False(HomeMigration.Plan(From, To, null, PlentyOfRoom).CanMove);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", previous);
+        }
+    }
+
+    [Fact]
     public void Refused_when_a_server_is_running()
     {
         // A socket means a process with files open on the tree about to be copied.

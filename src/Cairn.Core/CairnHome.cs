@@ -173,6 +173,16 @@ public static class CairnHome
         return null;
     }
 
+    /// <summary>
+    /// Same directory, allowing for a trailing separator and for Windows not caring about
+    /// case. Its own helper rather than string equality, because "the same place written
+    /// differently" is exactly the shape of the bug it exists to avoid.
+    /// </summary>
+    private static bool PathsEqual(string a, string b) => string.Equals(
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
     /// <summary>Null when there is no pointer file, which is the ordinary case.</summary>
     private static string? ReadPointer(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;
@@ -184,7 +194,12 @@ public static class CairnHome
     /// </summary>
     public static void SetPointer(string? root)
     {
-        if (root is null)
+        // Pointing at the default is the same as not pointing anywhere, and saying it the
+        // long way has a cost: `home` would report the root as decided by a file, and moving
+        // back to ~/.cairn would leave that directory holding a note about itself. Somebody
+        // who has moved home again should be back where they started, not one indirection
+        // away from it.
+        if (root is null || PathsEqual(root, DefaultRoot))
         {
             File.Delete(PointerPath);
             return;
