@@ -142,15 +142,18 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
-    public void Moving_copies_the_tree_and_leaves_the_original()
+    public void Moving_relocates_the_tree_and_removes_the_original()
     {
         var result = Move(PlanTo(To));
 
         Assert.True(File.Exists(Path.Combine(To, "packs", "demo", "pack.json")));
         Assert.True(File.Exists(Path.Combine(To, "settings.json")));
 
-        // Never deleted here. Tens of gigabytes are not worth one unverified pass.
-        Assert.True(File.Exists(Path.Combine(From, "settings.json")));
+        // A move, not a copy. Somebody doing this is out of disk space, and leaving both
+        // would answer that with two of everything.
+        Assert.False(Directory.Exists(From));
+        Assert.True(result.Freed > 0);
+        Assert.Null(result.RemovalProblem);
         Assert.Equal(From, result.OldRoot);
     }
 
@@ -219,28 +222,10 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
-    public void Discarding_the_old_copy_frees_the_space()
-    {
-        // The half that makes it a move rather than a copy: somebody moves 40 GB off a disk
-        // because the disk is full, and stopping after the copy leaves them worse off.
-        Move(PlanTo(To));
-
-        var freed = HomeMigration.DeleteOldRoot(From, keep: null);
-
-        Assert.False(Directory.Exists(From));
-        Assert.True(freed > 0);
-
-        // And the copy that matters is untouched.
-        Assert.True(File.Exists(Path.Combine(To, "packs", "demo", "pack.json")));
-    }
-
-    [Fact]
     public void Discarding_keeps_the_file_it_is_told_to()
     {
         // The pointer, when the old root was the default. Taking it would send Cairn back to
         // a default root that is now empty — the move undone by the tidying up.
-        Move(PlanTo(To));
-
         var pointer = Path.Combine(From, "home");
         File.WriteAllText(pointer, To);
 

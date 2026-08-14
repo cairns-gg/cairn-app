@@ -239,16 +239,19 @@ cairn-cli home set <dir>        use a directory that already holds a Cairn root
 cairn-cli home clear            go back to the default
 ```
 
-**The old copy is not deleted as part of the move, and deleting it is one click afterwards.**
-Two steps rather than one because tens of gigabytes are not worth trusting to a single
-unverified pass — but stopping after the copy would leave somebody who moved 40 GB off a
-full disk with 40 GB still on it, which is not a move and does not solve what they came
-with. So the button appears once the copy has been checked, carrying the size, and
-`cairn-cli home discard <dir>` does the same.
+**One confirmation covers the whole of it**, deletion included — copy, check every file,
+repoint, remove the original. Somebody doing this is out of disk space, so a version that
+stopped after the copy would answer that with two of everything and a chore.
 
-Do not delete it by hand. Moving away from the default leaves the pointer file *inside* the
-directory being abandoned, so `rm -rf ~/.cairn` would undo the move and strand the data on
-the far disk. Both front-ends keep that one file; both say so.
+The order is what makes it safe: nothing is removed until every file has been confirmed
+present at its full length and Cairn is already reading the new location. If the removal
+fails — a permission, a file held open — the move still stands and says so, and
+`cairn-cli home discard <dir>` retries it.
+
+What survives is the pointer file, when the old root was the default: it lives *inside* the
+directory being removed and is what now points Cairn at the new location. Both front-ends
+keep it, which is also why `rm -rf ~/.cairn` is not the way to tidy up after a move that
+somehow left something behind.
 
 If the root is a pointer at somewhere that is not there — an unplugged disk, a share that is
 down — Cairn refuses to start rather than falling back. An empty launcher does not read as

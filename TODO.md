@@ -85,17 +85,16 @@ volume, which is the silent-empty-root failure wearing a different hat.
    two honest ways out: quit and reconnect the disk, or start on the default and be told
    where everything still is.
 
-4. ~~**Deleting the old copy**~~ Done, and it turned out to be part of the feature rather
-   than a follow-up. A button labelled Move that leaves both copies in place has not moved
-   anything, and somebody doing this is out of disk space by definition — so the offer
-   appears as soon as the copy has been verified and Cairn repointed, carrying the size, and
-   `cairn-cli home discard` does the same. Two steps rather than one, because tens of
-   gigabytes are not worth a single unverified pass; but both steps are in front of the
-   person, not one of them in a file manager.
+4. ~~**Deleting the old copy**~~ Done, and it belonged in the move rather than beside it. A
+   button labelled Move that leaves both copies has not moved anything, and one that leaves
+   a second button to press has asked twice for a single decision. One confirmation now
+   covers copy, check, repoint and remove.
 
    `DeleteOldRoot` keeps the pointer when it is in there, refuses outright if handed the
    live root, and unlinks a symlink rather than deleting through it — what it points at is
-   somewhere else and not Cairn's to remove.
+   somewhere else and not Cairn's to remove. `cairn-cli home discard` remains for the case
+   where the removal itself failed, which is reported without calling the move a failure:
+   by then everything has arrived and Cairn is reading it.
 
 ## Taking over an imported pack
 

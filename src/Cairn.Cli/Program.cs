@@ -288,8 +288,9 @@ internal static class Program
                 Console.WriteLine($"      {plan.Files} files, {HomeMigration.Describe(plan.Bytes)}"
                                   + (plan.Links > 0 ? $", {plan.Links} links kept as links" : ""));
                 Console.WriteLine();
-                Console.WriteLine("Copies. The old copy is left exactly where it is, and nothing");
-                Console.WriteLine("is repointed until everything has arrived and been checked.");
+                Console.WriteLine("Copies everything, checks it file by file, repoints Cairn, and then");
+                Console.WriteLine("deletes the original. Nothing is removed before the new copy has");
+                Console.WriteLine("been verified — but when this finishes, the old one is gone.");
 
                 if (!args.Contains("--yes"))
                 {
@@ -339,20 +340,19 @@ internal static class Program
                                       + " at their pinned install");
 
                 Console.WriteLine();
-                Console.WriteLine($"The old copy is still at {result.OldRoot}, is no longer read,");
-                Console.WriteLine($"and is using {HomeMigration.Describe(result.Bytes)}. When you are satisfied:");
-                Console.WriteLine();
-                Console.WriteLine($"  cairn-cli home discard {result.OldRoot}");
 
-                // Deleting it by hand is the trap: the pointer lives at the default
-                // location, so moving away from the default leaves it inside the directory
-                // being cleared out, and removing that undoes the move.
-                if (result.KeepInOldRoot is { } keep)
+                if (result.RemovalProblem is { } stuck)
                 {
-                    Console.WriteLine();
-                    Console.WriteLine($"Not `rm -rf` — {keep} lives in there and is what now points");
-                    Console.WriteLine("Cairn at the new location. `home discard` keeps it; deleting");
-                    Console.WriteLine("the directory wholesale would undo this move.");
+                    // The move worked. Leading with the failure would send somebody looking
+                    // for data that is exactly where it should be.
+                    Console.WriteLine($"The original at {result.OldRoot} could not be removed:");
+                    Console.WriteLine($"  {stuck}");
+                    Console.WriteLine($"It is still using {HomeMigration.Describe(result.Bytes)}. To try again:");
+                    Console.WriteLine($"  cairn-cli home discard {result.OldRoot}");
+                }
+                else
+                {
+                    Console.WriteLine($"removed the original, freeing {HomeMigration.Describe(result.Freed)}");
                 }
 
                 return 0;

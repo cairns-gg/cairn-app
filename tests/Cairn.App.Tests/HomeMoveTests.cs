@@ -13,8 +13,8 @@ namespace Cairn.App.Tests;
 ///
 /// HomeMigration owns the rules and is tested against real trees in Cairn.Core.Tests; what
 /// is held here is what the window is responsible for — the button, the refusals arriving as
-/// text rather than exceptions, and the copy actually being followed by the delete that makes
-/// it a move.
+/// text rather than exceptions, and one confirmation being the whole of it: the original is
+/// gone when the move reports finished, not left as a second thing to press.
 ///
 /// The sandbox moves the default root rather than overriding it with CAIRN_HOME, which is
 /// what dev.sh does and for the same reason: CAIRN_HOME outranks the pointer file, so a suite
@@ -184,41 +184,6 @@ public class HomeMoveTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void The_delete_button_is_hidden_until_there_is_an_old_copy()
-    {
-        // Offering to delete something that does not exist yet is worse than not offering.
-        var model = Model();
-        var window = ShowOverview(model);
-
-        var button = window.GetVisualDescendants().OfType<Button>()
-            .Single(b => b.Name == "DeleteOldCopyButton");
-
-        Assert.False(button.IsVisible);
-        Assert.False(model.HasOldCopy);
-        Assert.False(model.DeleteOldCopyCommand.CanExecute(null));
-    }
-
-    [AvaloniaFact]
-    public void The_delete_button_appears_carrying_the_size()
-    {
-        // The size is the entire reason anybody started, so it goes on the button rather
-        // than in prose beside it.
-        var model = Model();
-        var window = ShowOverview(model);
-
-        model.OldCopyPath = Path.Combine(_home, "old");
-        model.OldCopyLabel = "Delete the old copy (1.7 GB)";
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-
-        var button = window.GetVisualDescendants().OfType<Button>()
-            .Single(b => b.Name == "DeleteOldCopyButton");
-
-        Assert.True(button.IsVisible);
-        Assert.Equal("Delete the old copy (1.7 GB)", button.Content as string);
-        Assert.True(model.DeleteOldCopyCommand.CanExecute(null));
-    }
-
-    [AvaloniaFact]
     public void The_progress_bar_shows_only_while_moving()
     {
         // Copying gigabytes takes minutes. A line of text that changes every few seconds
@@ -281,17 +246,13 @@ public class HomeMoveTests : IDisposable
             Assert.Equal(target, CairnPaths.Root);
             Assert.Equal(target, model.CairnHome);
 
-            // The old copy is still there, and is now offered for deletion with its size.
-            Assert.True(model.HasOldCopy);
-            Assert.Contains("Delete the old copy", model.OldCopyLabel);
-            Assert.True(File.Exists(Path.Combine(_home, "settings.json")));
-
-            // Deleting it frees the space and keeps the one file that makes the new
-            // location work — the trap that would otherwise undo the whole move.
-            await model.DeleteOldCopyCommand.ExecuteAsync(null);
-
-            Assert.False(model.HasOldCopy);
+            // One confirmation, one outcome: the original is gone, not left as a chore.
             Assert.False(File.Exists(Path.Combine(_home, "settings.json")));
+            Assert.False(Directory.Exists(Path.Combine(_home, "packs")));
+            Assert.Contains("removed the original", model.MoveAftermath);
+
+            // Except the pointer, which lives in the old root and is what makes the new
+            // location work — taking it would have undone the move.
             Assert.True(File.Exists(Path.Combine(_home, Cairn.Core.CairnHome.PointerName)));
             Assert.Equal(target, CairnPaths.Root);
         }

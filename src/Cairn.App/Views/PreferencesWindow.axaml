@@ -42,12 +42,6 @@
                                     Command="{Binding MoveHomeCommand}"
                                     IsEnabled="{Binding CanMoveHome}" />
 
-                            <!-- Only once there is one, and it carries the size: that
-                                 number is the entire reason anybody started. -->
-                            <Button Name="DeleteOldCopyButton" Padding="12,4"
-                                    Content="{Binding OldCopyLabel}"
-                                    Command="{Binding DeleteOldCopyCommand}"
-                                    IsVisible="{Binding HasOldCopy}" />
                         </StackPanel>
 
                         <!-- Said where the disabled button is, not after a folder picker.

@@ -29,7 +29,13 @@ public sealed record MovePlan(
 public sealed record MoveProgress(int Files, int FilesTotal, long Bytes, long BytesTotal, string Current);
 
 /// <param name="Rewritten">Packs whose recorded install directory was moved with them.</param>
-/// <param name="OldRoot">Still on disk and still full. Deleting it is the caller's to offer.</param>
+/// <param name="OldRoot">Where it came from, now removed unless <paramref name="RemovalProblem"/> says otherwise.</param>
+/// <param name="Freed">Bytes the old copy gave back.</param>
+/// <param name="RemovalProblem">
+/// Why the old copy is still there, or null. Not a failure of the move: by the time this can
+/// happen everything has arrived, been checked and been repointed, so the right answer is to
+/// say the space was not reclaimed rather than to pretend the move did not happen.
+/// </param>
 /// <param name="KeepInOldRoot">
 /// A file inside the old root that must survive it being cleared out, or null.
 ///
@@ -40,22 +46,34 @@ public sealed record MoveProgress(int Files, int FilesTotal, long Bytes, long By
 /// other disk and nothing looking at it.
 /// </param>
 public sealed record MoveResult(
-    int Files, int Links, long Bytes, int Rewritten, string OldRoot, string? KeepInOldRoot);
+    int Files, int Links, long Bytes, int Rewritten, string OldRoot,
+    string? KeepInOldRoot, long Freed, string? RemovalProblem);
 
 public sealed class MoveFailed(string message) : Exception(message);
 
 /// <summary>
 /// Moving everything Cairn keeps from one place to another.
 ///
-/// Copy, verify, repoint, and leave the old copy alone. Never a rename: the whole point is
-/// to cross a volume boundary, where <c>Directory.Move</c> fails — <c>OptimumProvisioner</c>
-/// already hit that and says so. And never a delete: tens of gigabytes are not worth
-/// trusting to one unverified pass, so what to do with the old copy is a separate decision
-/// made after this one is known to have worked.
+/// Copy, verify, repoint, remove. Never a rename: the whole point is to cross a volume
+/// boundary, where <c>Directory.Move</c> fails — <c>OptimumProvisioner</c> already hit that
+/// and says so.
 ///
-/// The order is the safety property. The pointer moves last, so a failure at any earlier
-/// step leaves the original root live and untouched; there is no window in which Cairn is
-/// pointed at a tree that is still being written.
+/// The order is the safety property. The pointer moves second to last, so a failure at any
+/// earlier step leaves the original root live and untouched and there is no window in which
+/// Cairn is pointed at a tree still being written. The original goes only after that, when
+/// it is no longer the live one and every file has been checked.
+///
+/// This did stop after the repoint, leaving the old copy for somebody to deal with. It was
+/// the wrong shape: whoever asks for this is out of disk space, and answering with two
+/// copies and a note about where the second one is has not moved anything. One decision,
+/// taken once, does the whole of it.
+///
+/// What "checked" means is worth being exact about, since the delete rests on it: every file
+/// is confirmed present at its full length. Not hashed — the mods carry SHA-256 in the
+/// lockfile and sync verifies them anyway, and hashing tens of gigabytes would double the
+/// wait to re-answer a question something else already asks. That catches the failures that
+/// happen: a disk filling, a file held open, a permission refused. It would not catch a
+/// silent corruption that preserved the length, which no ordinary copy tool catches either.
 /// </summary>
 public static class HomeMigration
 {
@@ -194,7 +212,28 @@ public static class HomeMigration
         // where clearing out the old directory would take the pointer with it.
         var keep = Contains(plan.From, CairnHome.PointerPath) ? CairnHome.PointerPath : null;
 
-        return new MoveResult(files, links, bytes, rewritten, plan.From, keep);
+        // And then the original goes, which is what makes this a move. Somebody doing this
+        // is out of disk space; stopping here would leave them with two of everything and
+        // less room than they started with, having agreed to a move.
+        //
+        // After the repoint, never before: until that line above, the old root is the live
+        // one. Everything here has already arrived and been checked file by file.
+        var freed = 0L;
+        string? problem = null;
+
+        try
+        {
+            freed = DeleteOldRoot(plan.From, keep, ct);
+        }
+        catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)
+        {
+            // The move happened. Reporting this as a failure would send somebody looking for
+            // data that is exactly where it should be — what is wrong is that the space was
+            // not given back, which is a different sentence.
+            problem = e.Message;
+        }
+
+        return new MoveResult(files, links, bytes, rewritten, plan.From, keep, freed, problem);
     }
 
     /// <summary>
