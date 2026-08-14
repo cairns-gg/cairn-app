@@ -58,9 +58,11 @@ volume, which is the silent-empty-root failure wearing a different hat.
   the old root, and every one of them dangles after a move. Null in the ordinary case, so
   the blast radius is small — but somebody running a pinned Optimum client is exactly the
   person who ran out of C: drive.
-- **Verify before deleting, and do not delete automatically.** Copy, check, write the
-  pointer, and leave the old tree with an offer to remove it. Tens of gigabytes are not
-  worth trusting to one unverified pass.
+- **Verify before deleting.** Copy, check every file, write the pointer, and only then
+  remove the original — it is not the live root until that pointer moves. This said "and do
+  not delete automatically", on the grounds that tens of gigabytes are not worth one
+  unverified pass; what that produced was a second button, which asks twice for a decision
+  already made. The verification is the safeguard, not the extra press.
 - **Refuse while a game or server is running.** Open files cannot be moved on Windows, and
   mods break saves.
 - **Disable the whole thing when `CAIRN_HOME` is set**, and say why — the pointer would be
@@ -75,8 +77,7 @@ volume, which is the silent-empty-root failure wearing a different hat.
    Core so the launcher can drive the same engine. Copies rather than renames, keeps links
    as links, verifies every file arrived at its full length, moves each pack's recorded
    install path with it, and repoints last so a failure anywhere leaves the old root live.
-   Deletes nothing: what to do with the old copy is a decision made after this one is known
-   to have worked.
+   Deleted nothing at this stage; superseded by 4, which folds the removal into the move.
 3. ~~**A Preferences affordance**~~ Done — **Move…** beside the home path, where the sizes
    that make somebody want it already are. The platform's folder picker, `MovePlan`'s cost
    in the confirmation, `MoveProgress` on screen while it runs, and every refusal shown as
