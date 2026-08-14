@@ -27,8 +27,8 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
     public string Id => Manifest.Id;
     public string Display => Manifest.Name ?? Manifest.Id;
 
-    public string Subtitle =>
-        $"game {Manifest.GameVersion}  ·  {Manifest.Mods.Count} mod{(Manifest.Mods.Count == 1 ? "" : "s")}";
+    public string Subtitle => Lang.Plural(
+        "pack-subtitle", Manifest.Mods.Count, Manifest.GameVersion, Manifest.Mods.Count);
 
     /// <summary>
     /// Shown only when the pack has a server. "connect" decides whether launching jumps
@@ -38,7 +38,7 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
     /// </summary>
     public bool HasServer => !string.IsNullOrWhiteSpace(Manifest.Connect);
 
-    public string ServerLine => HasServer ? $"auto-joins {Manifest.Connect}" : "";
+    public string ServerLine => HasServer ? Lang.Get("pack-auto-joins", Manifest.Connect) : "";
 
     private bool _launching;
     private bool _running;
@@ -51,7 +51,8 @@ public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
     /// </summary>
     public bool IsPlaying => _launching;
 
-    public string PlayingLine => _running ? "playing now" : _launching ? "starting…" : "";
+    public string PlayingLine =>
+        _running ? Lang.Get("pack-playing-now") : _launching ? Lang.Get("pack-starting") : "";
 
     /// <summary>Told by MainViewModel, which holds the registry these two come from.</summary>
     public void PlayingChanged(bool launching, bool running)
@@ -116,8 +117,7 @@ public partial class MainViewModel : ViewModelBase
         // One line rather than one per install, because Note is the status bar and each
         // call overwrites the last — three of them say less than one of them does.
         if (_gameStore.MigrateToBundles() is { Count: > 0 } bundled)
-            Note($"made {bundled.Count} game install{(bundled.Count == 1 ? "" : "s")} a bundle, "
-                 + "so macOS scales the game's window properly");
+            Note(Lang.Plural("main-bundled-installs", bundled.Count, bundled.Count));
 
         _install = GameInstall.TryLocate();
         _library = new GameLibrary(_gameStore, _install);
@@ -213,10 +213,11 @@ public partial class MainViewModel : ViewModelBase
             var lines = contents.Describe();
 
             var body = lines.Count == 0
-                ? "There is nothing downloaded under it yet."
-                : "This deletes:\n" + string.Join("\n", lines.Select(l => "  • " + l));
+                ? Lang.Get("delete-nothing-downloaded")
+                : Lang.Get("delete-this-deletes") + "\n"
+                  + string.Join("\n", lines.Select(l => "  • " + l));
 
-            return $"{body}\n\nFrees {Bytes.Human(contents.TotalBytes)}. This cannot be undone.";
+            return body + "\n\n" + Lang.Get("delete-frees", Bytes.Human(contents.TotalBytes));
         }
     }
 
@@ -248,7 +249,8 @@ public partial class MainViewModel : ViewModelBase
         }
 
         var confirmed = await Confirm(new ConfirmViewModel(
-            $"Delete “{DeleteTargetName}”?", DeleteConsequence, "Delete pack"));
+            Lang.Get("delete-title", DeleteTargetName), DeleteConsequence,
+            Lang.Get("delete-confirm")));
 
         if (confirmed) ConfirmDelete();
     }
@@ -354,18 +356,17 @@ public partial class MainViewModel : ViewModelBase
 
             // The status bar rather than a pack's log: this is about the app, and it
             // belongs to no pack.
-            Note($"Cairn {update.Version} is available");
+            Note(Lang.Get("update-available", update.Version));
 
             if (Confirm is null) return;
 
             var wanted = await Confirm(new ConfirmViewModel(
-                $"Cairn {update.Version} is available",
-                $"You are running {CairnVersion.Current}. "
+                Lang.Get("update-available", update.Version),
+                Lang.Get("update-running", CairnVersion.Current) + " "
                 + (update.File is null
-                    ? "The download page has the build for your machine."
-                    : $"The {update.File.Label} build is {update.File.SizeText}.")
-                + "\n\nNothing is installed for you — this opens the download in your browser, "
-                + "and your packs, worlds and settings are untouched by replacing the app.",
+                    ? Lang.Get("update-download-page")
+                    : Lang.Get("update-build-size", update.File.Label, update.File.SizeText))
+                + "\n\n" + Lang.Get("update-nothing-installed"),
                 update.ButtonLabel));
 
             if (wanted) Browser.Open(update.DownloadUrl);
@@ -391,12 +392,12 @@ public partial class MainViewModel : ViewModelBase
             _store.Delete(pack.Id);
             // Otherwise a new pack created under the same id inherits its history.
             _logs.Remove(pack.Id);
-            Note($"deleted pack '{pack.Id}' and its downloaded mods");
+            Note(Lang.Get("main-deleted-pack", pack.Id));
             LoadPacks();
         }
         catch (Exception e)
         {
-            Note($"could not delete '{pack.Id}': {e.Message}");
+            Note(Lang.Get("main-delete-failed", pack.Id, e.Message));
         }
     }
 
@@ -626,7 +627,7 @@ public partial class MainViewModel : ViewModelBase
             }
             catch (Exception e)
             {
-                Note($"could not read pack '{id}': {e.Message}");
+                Note(Lang.Get("main-read-pack-failed", id, e.Message));
             }
         }
 
@@ -636,8 +637,8 @@ public partial class MainViewModel : ViewModelBase
                        ?? Packs.FirstOrDefault();
 
         Status = Packs.Count == 0
-            ? "No packs yet — click “New pack” to make one."
-            : $"{Packs.Count} pack{(Packs.Count == 1 ? "" : "s")}";
+            ? Lang.Get("main-no-packs")
+            : Lang.Plural("main-pack-count", Packs.Count, Packs.Count);
     }
 
     /// <summary>
@@ -740,8 +741,7 @@ public partial class MainViewModel : ViewModelBase
                 _store, id, choice.GameVersion, choice.PackName.Trim(), choice.Plan);
 
             Added(manifest);
-            NoteFor(id, $"imported {manifest.Mods.Count} mods from your Vintage Story install "
-                        + "— press Play to install them into the pack");
+            NoteFor(id, Lang.Get("main-imported-install", manifest.Mods.Count));
 
             // After the pack exists, because a world is copied into it — and because the
             // mods are the pack, while the worlds are what you had been playing in it.
@@ -771,16 +771,17 @@ public partial class MainViewModel : ViewModelBase
 
         foreach (var world in worlds)
         {
-            NoteFor(id, $"copying world '{world.Name}' ({Bytes.Human(world.Size)})…");
+            NoteFor(id, Lang.Get("main-copying-world", world.Name, Bytes.Human(world.Size)));
 
             var copied = await InstalledWorlds.CopyIntoAsync(
                 world, data,
-                new Progress<long>(done => Status =
-                    $"copying world '{world.Name}' — {Bytes.Human(done)} of {Bytes.Human(world.Size)}"));
+                new Progress<long>(done => Status = Lang.Get(
+                    "main-copying-world-progress", world.Name,
+                    Bytes.Human(done), Bytes.Human(world.Size))));
 
             NoteFor(id, copied.Copied
-                ? $"copied world '{world.Name}' — your own copy is untouched"
-                : $"could not copy world '{world.Name}': {copied.Problem}");
+                ? Lang.Get("main-copied-world", world.Name)
+                : Lang.Get("main-copy-world-failed", world.Name, copied.Problem));
         }
     }
 
@@ -899,7 +900,7 @@ public partial class MainViewModel : ViewModelBase
             // connection anyone on the path can rewrite. Loopback has no such path.
             if (PackSources.IsRewritableInFlight(url))
             {
-                ShowImportError("Refusing to import over http — use an https:// address.", url);
+                ShowImportError(Lang.Get("main-refuse-http"), url);
                 return;
             }
 
@@ -918,7 +919,7 @@ public partial class MainViewModel : ViewModelBase
             // happened instead of "not found".
             if (response.StatusCode == HttpStatusCode.Gone)
             {
-                ShowImportError("That pack was withdrawn by whoever published it.", url);
+                ShowImportError(Lang.Get("main-withdrawn"), url);
                 return;
             }
 
@@ -978,7 +979,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void Added(PackManifest manifest)
     {
-        Note($"imported pack '{manifest.Id}' ({manifest.Mods.Count} mods)");
+        Note(Lang.Get("main-imported-pack", manifest.Id, manifest.Mods.Count));
         IsImporting = false;
 
         LoadPacks();
@@ -1164,7 +1165,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception e)
         {
-            Note($"could not load the version list: {e.Message}");
+            Note(Lang.Get("main-version-list-failed", e.Message));
         }
         finally
         {
@@ -1184,7 +1185,7 @@ public partial class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(NewPackName))
         {
-            NewPackError = "Enter a name.";
+            NewPackError = Lang.Get("newpack-enter-name");
             return;
         }
 
@@ -1205,7 +1206,7 @@ public partial class MainViewModel : ViewModelBase
         var gameVersion = NewPackGameVersion?.Trim();
         if (string.IsNullOrWhiteSpace(gameVersion))
         {
-            NewPackError = "Choose a game version.";
+            NewPackError = Lang.Get("newpack-choose-version");
             return;
         }
 
@@ -1220,7 +1221,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         IsCreating = false;
-        Note($"created pack '{id}'");
+        Note(Lang.Get("main-created-pack", id));
         LoadPacks();
         SelectedPack = Packs.FirstOrDefault(p => p.Id == id);
 
@@ -1294,7 +1295,7 @@ public partial class MainViewModel : ViewModelBase
 
             await work(progress, _provisionCts.Token);
 
-            ProvisionStatus = $"Vintage Story {gameVersion} is ready";
+            ProvisionStatus = Lang.Get("provision-ready", gameVersion);
             Say(ProvisionStatus);
 
             Games.RefreshInstalled();
@@ -1304,12 +1305,12 @@ public partial class MainViewModel : ViewModelBase
         {
             // The installer unpacks through a staging directory and removes it on failure,
             // so a cancelled download leaves nothing half-installed.
-            ProvisionStatus = $"Cancelled downloading {gameVersion}";
+            ProvisionStatus = Lang.Get("provision-cancelled", gameVersion);
             Say(ProvisionStatus);
         }
         catch (Exception e)
         {
-            ProvisionStatus = $"Could not prepare {gameVersion}: {e.Message}";
+            ProvisionStatus = Lang.Get("provision-failed", gameVersion, e.Message);
             Say(ProvisionStatus);
         }
         finally
@@ -1324,7 +1325,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanCancelProvision))]
     private void CancelProvision()
     {
-        ProvisionStatus = "cancelling…";
+        ProvisionStatus = Lang.Get("provision-cancelling");
         _provisionCts?.Cancel();
     }
 
