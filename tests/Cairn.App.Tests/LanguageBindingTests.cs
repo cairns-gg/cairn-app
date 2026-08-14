@@ -193,3 +193,72 @@ public class LanguagePickerTests : IDisposable
         }
     }
 }
+
+/// <summary>
+/// The picker and CAIRN_LANG_DIR, which were two halves of a workflow that did not meet.
+/// </summary>
+[Collection(AvaloniaTests.Collection)]
+public class LooseTranslationTests : IDisposable
+{
+    private readonly string _home = Path.Combine(
+        Path.GetTempPath(), "cairn-loose-" + Guid.NewGuid().ToString("n")[..8]);
+
+    private readonly string _lang = Path.Combine(
+        Path.GetTempPath(), "cairn-loosel-" + Guid.NewGuid().ToString("n")[..8]);
+
+    public LooseTranslationTests()
+    {
+        Directory.CreateDirectory(Path.Combine(_home, "packs"));
+        Directory.CreateDirectory(_lang);
+
+        File.WriteAllText(Path.Combine(_lang, "fr.json"),
+            """{ "_language-name": "Français", "tab-modconfig": "Config des mods" }""");
+
+        Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
+        Environment.SetEnvironmentVariable(LanguageChoice.OverrideVariable, _lang);
+    }
+
+    public void Dispose()
+    {
+        Lang.Reset();
+        Environment.SetEnvironmentVariable("CAIRN_HOME", null);
+        Environment.SetEnvironmentVariable(LanguageChoice.OverrideVariable, null);
+
+        foreach (var dir in new[] { _home, _lang })
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+    }
+
+    /// <summary>
+    /// The whole point of the override directory: drop a file in, restart, pick it. It used
+    /// to load and never appear, so reaching it needed CAIRN_LANG set as well — which is a
+    /// second environment variable for people whose defining trait is not wanting to build
+    /// the project.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_translation_dropped_in_the_override_folder_is_offered()
+    {
+        Assert.Contains("Français", new LanguageSettingViewModel().Choices);
+    }
+
+    [AvaloniaFact]
+    public void And_choosing_it_translates_the_window()
+    {
+        var vm = new MainViewModel(new OfflineHandler());
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+
+        new LanguageSettingViewModel().Selected = "Français";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("fr", Lang.Current);
+        Assert.Equal("Config des mods", Lang.Get("tab-modconfig"));
+        Assert.Equal("fr", CairnSettings.Load().Language);
+
+        // The TabControl's items, not its visual descendants: a tab that has never been
+        // selected is not realised, so only the logical list has all five in it.
+        var headers = window.GetVisualDescendants().OfType<TabControl>().First()
+            .Items.OfType<TabItem>().Select(t => t.Header as string).ToList();
+
+        Assert.Contains("Config des mods", headers);
+    }
+}

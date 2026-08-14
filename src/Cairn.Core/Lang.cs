@@ -51,11 +51,15 @@ public static class Lang
     /// <summary>The language tag in force, e.g. <c>en</c>.</summary>
     public static string Current => _catalog.Code;
 
-    /// <summary>Languages this build ships, English first because it is the complete one.</summary>
-    public static IReadOnlyList<string> Available { get; } =
-        LanguageCatalog.Shipped.OrderByDescending(c => c == LanguageCatalog.Default)
-            .ThenBy(c => c, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+    /// <summary>
+    /// Languages that can be chosen, English first because it is the complete one. Includes
+    /// loose files in CAIRN_LANG_DIR, so a translation being worked on is selectable.
+    ///
+    /// Computed rather than held: a file dropped in while the launcher is open should be
+    /// offered by the next Preferences window rather than only after a restart.
+    /// </summary>
+    public static IReadOnlyList<string> Available =>
+        LanguageCatalog.Available(LanguageChoice.OverrideDir);
 
     /// <summary>
     /// Switches language, loading the catalog and its fallbacks.

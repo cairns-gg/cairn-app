@@ -154,7 +154,7 @@ public sealed class LanguageCatalog
     /// </summary>
     private const string ResourcePrefix = "Cairn.Core.assets.cairn.lang.";
 
-    /// <summary>Every language shipped in the build, in no particular order.</summary>
+    /// <summary>Every language built into this assembly, in no particular order.</summary>
     public static IReadOnlyList<string> Shipped { get; } = typeof(LanguageCatalog).Assembly
         .GetManifestResourceNames()
         .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal)
@@ -162,6 +162,35 @@ public sealed class LanguageCatalog
         .Select(n => n[ResourcePrefix.Length..^".json".Length])
         .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
         .ToList();
+
+    /// <summary>
+    /// Every language that can be picked: what is built in, plus whatever loose files are in
+    /// <paramref name="overrideDir"/>.
+    ///
+    /// The two have to be one list. CAIRN_LANG_DIR is the translator's whole workflow — drop
+    /// fr.json in, restart, see your work — and it was only half of one: the file loaded
+    /// perfectly well and the picker never offered it, so the only way to reach it was to also
+    /// set CAIRN_LANG. A mechanism for people who are not going to build the project should not
+    /// need a second environment variable to become visible.
+    /// </summary>
+    public static IReadOnlyList<string> Available(string? overrideDir = null)
+    {
+        var codes = new HashSet<string>(Shipped, StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            if (overrideDir is not null && Directory.Exists(overrideDir))
+                foreach (var file in Directory.EnumerateFiles(overrideDir, "*.json"))
+                    codes.Add(Normalise(Path.GetFileNameWithoutExtension(file)));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The built-in ones are still selectable, which is the important half.
+        }
+
+        // English first because it is the complete one, then by tag so the list is stable.
+        return [.. codes.OrderByDescending(c => c == Default).ThenBy(c => c, StringComparer.OrdinalIgnoreCase)];
+    }
 
     /// <summary>
     /// The catalog for a language, with its fallback chain already built: a regional tag
