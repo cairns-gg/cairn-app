@@ -3035,7 +3035,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            ModConfigError = $"Could not read this pack's mod config: {e.Message}";
+            ModConfigError = Lang.Get("modconfig-unreadable", e.Message);
         }
         finally
         {
@@ -3207,7 +3207,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // could not have started watching it on the way in.
         WatchModConfig();
 
-        if (!Files.OpenFolder(folder)) _log($"could not open {folder}");
+        if (!Files.OpenFolder(folder)) _log(Lang.Get("modconfig-open-failed", folder));
     }
 
     private void RefreshModConfigFilter()
@@ -3238,7 +3238,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public string ModConfigListLine =>
         _allModConfig.Count == 0 || ModConfigSettings.Count == _allModConfig.Count
             ? ""
-            : $"showing {ModConfigSettings.Count} of {_allModConfig.Count}";
+            : Lang.Get("modconfig-showing", ModConfigSettings.Count, _allModConfig.Count);
 
     public bool ShowNoModConfigFound => ModConfigSettings.Count == 0;
 
@@ -3250,23 +3250,18 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // Nothing readable at all, which for a pack nobody has played yet is the
             // ordinary state rather than a problem — the mods write these files when they
             // first run. Distinct from having settings and none of them matching.
-            if (_allModConfig.Count == 0)
-                return "This pack's mods have written no settings Cairn can read yet. "
-                       + "Play it once, and they will be here.";
+            if (_allModConfig.Count == 0) return Lang.Get("modconfig-none-written");
 
-            if (ModConfigSearch.Trim().Length > 0) return "No setting matches that.";
+            if (ModConfigSearch.Trim().Length > 0) return Lang.Get("modconfig-none-match");
 
             // A pack that has not been launched since Cairn started keeping a baseline. Not
             // the same as nothing having changed, and saying so would be a lie about
             // somebody's own pack — every existing pack lands here on first upgrade, with a
             // config folder full of values whose history nothing recorded.
             if (!_allModConfig.Any(r => r.Setting.HasBaseline))
-                return "Cairn has no record of what these mods first wrote, so it cannot tell "
-                       + "which values you changed. It starts keeping one the next time you "
-                       + "play this pack — until then, use Show all.";
+                return Lang.Get("modconfig-no-baseline");
 
-            return "Nothing changed. Every setting is as its mod first wrote it — "
-                   + "tick Show all to carry one anyway.";
+            return Lang.Get("modconfig-none-changed");
         }
     }
 
@@ -3276,11 +3271,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         {
             var carried = _allModConfig.Count(r => r.Carried);
 
+            // Plural rather than a ternary on "s": that ternary is a rule about English
+            // baked into a string nobody could translate around.
             return carried == 0
-                ? "Settings you have changed in your mods' own config files. Tick one to carry "
-                  + "it in the pack, and everyone who installs it gets your value."
-                : $"{carried} setting{(carried == 1 ? "" : "s")} carried in this pack. "
-                  + "Anyone who installs it gets these; anything they change themselves stays theirs.";
+                ? Lang.Get("modconfig-intro")
+                : Lang.Plural("modconfig-carried", carried, carried);
         }
     }
 

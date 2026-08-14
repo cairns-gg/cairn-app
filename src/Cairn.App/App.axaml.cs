@@ -56,6 +56,15 @@ public partial class App : Application
         // than snapping to it a frame later.
         UiScale.Load();
 
+        // And in the right language, for the same reason. No saved preference is read yet:
+        // settings.json is written whole by UiScale.Save, so a second setting in it would be
+        // erased the first time somebody changed the interface scale. That wants a settings
+        // type both share, and it belongs with the Preferences picker rather than ahead of
+        // it — LanguageChoice.Resolve already takes the saved value, so only the reading of
+        // it is missing. Until then this follows Vintage Story, then the system.
+        var (language, _) = LanguageChoice.Resolve();
+        Lang.Use(language, LanguageChoice.OverrideDir);
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Before the model, which reads packs the moment it is built. If the setting

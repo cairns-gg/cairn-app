@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Cairn.Core;
 using Cairn.Core.Launch;
 
 namespace Cairn.App.ViewModels;
@@ -42,6 +43,13 @@ public partial class ModConfigRowViewModel : ViewModelBase
     /// </summary>
     public string BaselineText => _setting.BaselineText;
 
+    /// <summary>
+    /// The baseline as the row shows it. In the view model rather than a StringFormat in the
+    /// markup, because "was {0}" is a sentence and sentences are translated — a StringFormat
+    /// is a literal the catalog cannot reach.
+    /// </summary>
+    public string WasText => Lang.Get("modconfig-was", BaselineText);
+
     /// <summary>Changed from what the mod first wrote — which is to say, worth a look.</summary>
     public bool IsChanged => _setting.IsChanged;
 
@@ -59,7 +67,7 @@ public partial class ModConfigRowViewModel : ViewModelBase
     /// </summary>
     public bool IsOrphan => _setting.Current is null;
 
-    public string OrphanLine => $"no mod in this pack has {Key} any more";
+    public string OrphanLine => Lang.Get("modconfig-orphan", Key);
 
     /// <summary>Travels with the pack. The whole of what this row decides.</summary>
     [ObservableProperty] public partial bool Carried { get; set; }

@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Cairn.App.ViewModels"
         xmlns:core="using:Cairn.Core"
+        xmlns:l="using:Cairn.App"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
@@ -339,7 +340,7 @@
                         and hid each from the other: adding a mod gave no sign of where
                         it went, and the pack was invisible while searching.
                     -->
-                    <TabItem Header="Mods">
+                    <TabItem Header="{l:Tr tab-mods}">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
 
             <!--
@@ -674,7 +675,7 @@
                     </TabItem>
 
                     <!-- Pack settings -->
-                    <TabItem Header="Settings">
+                    <TabItem Header="{l:Tr tab-settings}">
                       <!--
                           This tab had no ScrollViewer, so everything below the fold was
                           unreachable rather than merely out of view — including Delete,
@@ -883,7 +884,7 @@
                         installs the pack gets the answer on first launch and never learns
                         there was a question.
                     -->
-                    <TabItem Header="Hotkeys">
+                    <TabItem Header="{l:Tr tab-hotkeys}">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
                             <StackPanel DockPanel.Dock="Top" Spacing="8">
                                 <TextBlock Text="{Binding Detail.HotkeySummary}" FontSize="12"
@@ -1014,7 +1015,7 @@
                         it does, and ticks it here so it travels — instead of writing "and go
                         and edit this file" in the pack description.
                     -->
-                    <TabItem Header="Mod config">
+                    <TabItem Header="{l:Tr tab-modconfig}">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
                             <StackPanel DockPanel.Dock="Top" Spacing="8">
                                 <TextBlock Text="{Binding Detail.ModConfigSummary}" FontSize="12"
@@ -1022,15 +1023,15 @@
 
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
                                     <TextBox Grid.Column="0" Text="{Binding Detail.ModConfigSearch}"
-                                             PlaceholderText="Search by setting or file" />
+                                             PlaceholderText="{l:Tr modconfig-search-placeholder}" />
 
                                     <!-- A value changed during the very first session was in
                                          the file before anything saw it, so it never reads as
                                          changed. This is how somebody finds it anyway. -->
                                     <CheckBox Grid.Column="1" VerticalAlignment="Center"
-                                              Content="Show all"
+                                              Content="{l:Tr modconfig-show-all}"
                                               IsChecked="{Binding Detail.ShowAllSettings}"
-                                              ToolTip.Tip="Every setting Cairn can read, not only the ones you have changed." />
+                                              ToolTip.Tip="{l:Tr modconfig-show-all-tip}" />
 
                                     <TextBlock Grid.Column="2" VerticalAlignment="Center"
                                                FontSize="11" Opacity="0.6"
@@ -1049,14 +1050,14 @@
                  which is otherwise a path nobody should have to know. -->
                             <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*"
                                   ColumnSpacing="10" Margin="0,8,0,0">
-                                <Button Grid.Column="0" Content="Open config folder"
+                                <Button Grid.Column="0" Content="{l:Tr modconfig-open-folder}"
                                         VerticalAlignment="Center"
                                         Command="{Binding Detail.OpenModConfigFolderCommand}"
                                         ToolTip.Tip="{Binding Detail.ModConfigFolder}" />
 
                                 <TextBlock Grid.Column="1" FontSize="11" Opacity="0.6"
                                            VerticalAlignment="Center" TextWrapping="Wrap"
-                                           Text="Saved into the pack as you tick. A setting ConfigLib keeps in its own file arrives once that mod has run here at least once." />
+                                           Text="{l:Tr modconfig-footer}" />
                             </Grid>
 
                             <TextBlock DockPanel.Dock="Top" Margin="0,14,0,0" FontSize="12"
@@ -1084,7 +1085,7 @@
                                                          this value travel with the pack? -->
                                                     <CheckBox Grid.Column="0" VerticalAlignment="Center"
                                                               IsChecked="{Binding Carried}"
-                                                              ToolTip.Tip="Carry this value in the pack." />
+                                                              ToolTip.Tip="{l:Tr modconfig-carry-tip}" />
 
                                                     <StackPanel Grid.Column="1" Spacing="2">
                                                         <TextBlock Text="{Binding Key}" FontSize="12"
@@ -1108,7 +1109,7 @@
                                                                    Opacity="0.5" MaxWidth="160"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    IsVisible="{Binding ShowBaseline}"
-                                                                   Text="{Binding BaselineText, StringFormat='was {0}'}" />
+                                                                   Text="{Binding WasText}" />
 
                                                         <TextBlock VerticalAlignment="Center" FontSize="12"
                                                                    MinWidth="70" MaxWidth="200"
@@ -1124,7 +1125,7 @@
                         </DockPanel>
                     </TabItem>
 
-                    <TabItem Header="Log">
+                    <TabItem Header="{l:Tr tab-log}">
                         <DockPanel LastChildFill="True" Margin="0,8,0,0">
                             <!--
                                 Cairn's log is only half the story: when the game closes on

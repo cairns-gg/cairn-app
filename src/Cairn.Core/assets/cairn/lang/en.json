@@ -1,0 +1,34 @@
+{
+  "_comment": "Cairn's interface strings. Flat key against text, the same shape every Vintage Story mod ships in assets/<domain>/lang/. Placeholders are {0}, {1} and keep their meaning across languages. A key ending -one or -other is a plural form; see LanguageCatalog.Plural.",
+
+  "pack-id-required": "Pack 'id' is required.",
+  "pack-gameversion-unusable": "Pack 'gameVersion' is not a usable version string: '{0}'. Write a bare version like \"1.22.5\" — the game silently reads \">=1.22.5\" as major version 0, which matches everything.",
+
+  "tab-mods": "Mods",
+  "tab-settings": "Settings",
+  "tab-hotkeys": "Hotkeys",
+  "tab-modconfig": "Mod config",
+  "tab-log": "Log",
+
+  "modconfig-intro": "Settings you have changed in your mods' own config files. Tick one to carry it in the pack, and everyone who installs it gets your value.",
+  "modconfig-carried-one": "{0} setting carried in this pack. Anyone who installs it gets these; anything they change themselves stays theirs.",
+  "modconfig-carried-other": "{0} settings carried in this pack. Anyone who installs it gets these; anything they change themselves stays theirs.",
+
+  "modconfig-search-placeholder": "Search by setting or file",
+  "modconfig-show-all": "Show all",
+  "modconfig-show-all-tip": "Every setting Cairn can read, not only the ones you have changed.",
+  "modconfig-showing": "showing {0} of {1}",
+
+  "modconfig-open-folder": "Open config folder",
+  "modconfig-carry-tip": "Carry this value in the pack.",
+  "modconfig-was": "was {0}",
+  "modconfig-orphan": "no mod in this pack has {0} any more",
+  "modconfig-footer": "Saved into the pack as you tick. A setting ConfigLib keeps in its own file arrives once that mod has run here at least once.",
+
+  "modconfig-none-written": "This pack's mods have written no settings Cairn can read yet. Play it once, and they will be here.",
+  "modconfig-none-match": "No setting matches that.",
+  "modconfig-no-baseline": "Cairn has no record of what these mods first wrote, so it cannot tell which values you changed. It starts keeping one the next time you play this pack — until then, use Show all.",
+  "modconfig-none-changed": "Nothing changed. Every setting is as its mod first wrote it — tick Show all to carry one anyway.",
+  "modconfig-unreadable": "Could not read this pack's mod config: {0}",
+  "modconfig-open-failed": "could not open {0}"
+}

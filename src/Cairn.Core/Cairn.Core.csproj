@@ -31,4 +31,19 @@
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
   </ItemGroup>
+
+  <!--
+    The interface's own strings, laid out the way the game lays out a mod's: one flat JSON
+    file per language under assets/cairn/lang. Embedded rather than copied beside the
+    executable, because all three published projects trim and the app ships as a zip somebody
+    unpacks — a loose file is one more thing that can arrive missing, and it would arrive
+    missing as a window full of raw keys.
+
+    In Core because Core is what does the translating: the sentences a person reads come from
+    PackManifest.Validate, ModConfigChange.Describe and the sync results, which are Core types
+    that both front ends share on purpose.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="assets/cairn/lang/*.json" />
+  </ItemGroup>
 </Project>

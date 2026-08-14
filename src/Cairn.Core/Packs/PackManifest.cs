@@ -159,12 +159,10 @@ public sealed class PackManifest
     public IEnumerable<string> ValidatePack()
     {
         if (string.IsNullOrWhiteSpace(Id))
-            yield return "Pack 'id' is required.";
+            yield return Lang.Get("pack-id-required");
 
         if (!GameVersions.IsPlausibleVersion(GameVersion))
-            yield return $"Pack 'gameVersion' is not a usable version string: '{GameVersion}'. "
-                         + "Write a bare version like \"1.22.5\" — the game silently reads "
-                         + "\">=1.22.5\" as major version 0, which matches everything.";
+            yield return Lang.Get("pack-gameversion-unusable", GameVersion);
 
         // The pack's connect address is handed to the game as the value of --connect, and
         // it arrives from somebody else's pack. See ServerAddress: the point is not that a
