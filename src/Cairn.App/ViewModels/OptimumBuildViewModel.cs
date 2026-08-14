@@ -51,9 +51,9 @@ public sealed partial class OptimumBuildViewModel : ViewModelBase
         _source = source;
         _vanilla = vanilla;
 
-        Title = $"Building Optimum {source.Version}";
+        Title = Lang.Get("optimum-building", source.Version);
         Phase = "starting";
-        Detail = "getting ready";
+        Detail = Lang.Get("optimum-getting-ready");
 
         _flush = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _flush.Tick += (_, _) => Drain();
@@ -154,19 +154,19 @@ public sealed partial class OptimumBuildViewModel : ViewModelBase
 
             Succeeded = true;
             Phase = "done";
-            Detail = $"Optimum {_source.Version} is installed.";
+            Detail = Lang.Get("optimum-installed", _source.Version);
             Fraction = 1;
         }
         catch (OperationCanceledException)
         {
             Phase = "cancelled";
-            Detail = "The build was stopped. Nothing was changed.";
+            Detail = Lang.Get("optimum-stopped");
         }
         catch (Exception e)
         {
             Failed = true;
             Phase = "failed";
-            Detail = "The build did not finish.";
+            Detail = Lang.Get("optimum-failed");
             Error = e.Message;
 
             // Opened rather than merely available: the reason is in the output, and a

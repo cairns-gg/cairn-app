@@ -1,3 +1,4 @@
+using Cairn.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cairn.Core.Hotkeys;
@@ -116,12 +117,12 @@ public partial class HotkeyRowViewModel : ViewModelBase
 
     public bool ShowSharedKey => SharesHeldKey && !string.IsNullOrEmpty(ClashesWith);
 
-    public string SharedKeyLine => $"held alongside {ClashesWith}";
+    public string SharedKeyLine => Lang.Get("hotkeys-held-alongside", ClashesWith);
 
     /// <summary>True while this row is waiting for a keypress to bind.</summary>
     [ObservableProperty] public partial bool Capturing { get; set; }
 
-    public string ButtonLabel => Capturing ? "Press a key…" : EffectiveText;
+    public string ButtonLabel => Capturing ? Lang.Get("hotkeys-press-a-key") : EffectiveText;
 
     partial void OnBindingChanged(KeyBinding? value)
     {

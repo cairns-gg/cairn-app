@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -17,7 +18,8 @@ public sealed partial class WorldRowViewModel(InstalledWorld world) : ViewModelB
     public string Size => Bytes.Human(World.Size);
 
     /// <summary>"last played 3 August", which is how somebody tells two worlds apart.</summary>
-    public string LastPlayed => $"last played {World.LastPlayed.ToLocalTime():d MMMM yyyy}";
+    public string LastPlayed =>
+        Lang.Get("worldimport-last-played", World.LastPlayed.ToLocalTime().ToString("d MMMM yyyy"));
 
     /// <summary>
     /// Off until somebody says otherwise. A world is gigabytes and the copy is theirs to
@@ -68,18 +70,16 @@ public sealed partial class WorldPickerViewModel : ViewModelBase
     {
         get
         {
-            if (!Any) return "No worlds in your Vintage Story install.";
+            if (!Any) return Lang.Get("worldimport-none");
 
             var chosen = Worlds.Where(w => w.Chosen).ToList();
 
             if (chosen.Count == 0)
-                return $"{Worlds.Count} world{(Worlds.Count == 1 ? "" : "s")} in your Vintage "
-                       + "Story install. Tick any you want a copy of.";
+                return Lang.Plural("worldimport-available", Worlds.Count, Worlds.Count);
 
             var bytes = chosen.Sum(w => w.World.Size);
 
-            return $"Copying {chosen.Count} world{(chosen.Count == 1 ? "" : "s")} "
-                   + $"({Bytes.Human(bytes)}). Your own copies stay where they are.";
+            return Lang.Plural("worldimport-copying", chosen.Count, chosen.Count, Bytes.Human(bytes));
         }
     }
 

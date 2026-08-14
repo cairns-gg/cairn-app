@@ -1,3 +1,5 @@
+using Cairn.Core;
+
 namespace Cairn.App.ViewModels;
 
 /// <summary>
@@ -20,7 +22,5 @@ public sealed class HomeProblemViewModel(string problem, string pointsAt)
     /// <summary>Where the setting says the files are — still true, and still where they are.</summary>
     public string PointsAt { get; } = pointsAt;
 
-    public string Reassurance { get; } =
-        "Nothing has been read, written or deleted. Your packs are wherever that path leads, "
-        + "and will be there again when it does.";
+    public string Reassurance { get; } = Lang.Get("home-reassurance");
 }
