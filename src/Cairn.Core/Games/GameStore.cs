@@ -48,6 +48,8 @@ public sealed class GameStore
     public string InstallDir(string version)
     {
         if (!IsValidVersion(version))
+            // Not translated: a guard on Cairn's own invariants, so this sentence only
+            // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new ArgumentException($"'{version}' is not a usable version directory name.", nameof(version));
 
         return Path.Combine(_root, DirectoryNameFor(version));
@@ -288,6 +290,8 @@ public sealed class GameStore
         // Only ever inside the store, and never the store itself: this deletes recursively,
         // and an install Cairn merely found is not Cairn's to delete.
         if (!dir.StartsWith(root + Path.DirectorySeparatorChar, PathComparison) || dir == root)
+            // Not translated: a guard on Cairn's own invariants, so this sentence only
+            // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new InvalidOperationException($"'{install.Directory}' is not a managed install.");
 
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);

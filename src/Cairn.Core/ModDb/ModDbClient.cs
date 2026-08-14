@@ -114,7 +114,7 @@ public sealed class ModDbClient(HttpClient http)
         }
         catch (JsonException e)
         {
-            throw new ModDbException($"ModDB returned a response Cairn could not read: {e.Message}");
+            throw new ModDbException(Lang.Get("moddb-unreadable", e.Message));
         }
     }
 
@@ -123,10 +123,10 @@ public sealed class ModDbClient(HttpClient http)
         var resp = await GetAsync<ModDbModResponse>(
                            $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", ct)
                        .ConfigureAwait(false)
-                   ?? throw new ModDbException($"ModDB returned no body for '{modId}'.");
+                   ?? throw new ModDbException(Lang.Get("moddb-no-body", modId));
 
         if (resp.Mod is null)
-            throw new ModDbException($"ModDB has no mod with id '{modId}' (status {resp.StatusCode}).");
+            throw new ModDbException(Lang.Get("moddb-no-such-mod", modId, resp.StatusCode));
 
         return resp.Mod;
     }
@@ -356,8 +356,8 @@ public sealed class ModDbClient(HttpClient http)
             {
                 var exists = mod.Releases.Any(r => r.ModVersion == pinnedVersion);
                 throw new ModDbException(exists
-                    ? $"{modId} {pinnedVersion} exists but is not marked for game {gameVersion}."
-                    : $"{modId} has no release {pinnedVersion}.");
+                    ? Lang.Get("moddb-not-marked", modId, pinnedVersion, gameVersion)
+                    : Lang.Get("moddb-no-release", modId, pinnedVersion));
             }
 
             return ToResolved(mod, pinned.Release, pinned.Quality!.Value, modId);

@@ -66,19 +66,18 @@ public sealed class PackBundle
         }
         catch (JsonException e)
         {
-            throw new InvalidDataException($"Not valid JSON: {e.Message}", e);
+            throw new InvalidDataException(Lang.Get("bundle-not-json", e.Message), e);
         }
 
         if (bundle?.Pack is null)
-            throw new InvalidDataException("This does not look like a shared pack — no 'pack' section.");
+            throw new InvalidDataException(Lang.Get("bundle-no-pack-section"));
 
         if (bundle.FormatVersion > CurrentFormat)
-            throw new InvalidDataException(
-                $"This pack was exported by a newer Cairn (format {bundle.FormatVersion}).");
+            throw new InvalidDataException(Lang.Get("bundle-newer-format", bundle.FormatVersion));
 
         var problems = bundle.Pack.Validate().ToList();
         if (problems.Count > 0)
-            throw new InvalidDataException("The shared pack is not valid:\n  " + string.Join("\n  ", problems));
+            throw new InvalidDataException(Lang.Get("bundle-invalid") + "\n  " + string.Join("\n  ", problems));
 
         return bundle;
     }

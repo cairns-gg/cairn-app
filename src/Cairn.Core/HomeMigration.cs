@@ -267,7 +267,7 @@ public static class HomeMigration
         // and the test proving it applied passed only because the developer's own ~/.cairn
         // was there.
         if (PathsEqual(oldRoot, CairnPaths.Root))
-            throw new MoveFailed($"{oldRoot} is where Cairn is keeping its files now");
+            throw new MoveFailed(Lang.Get("move-already-here", oldRoot));
 
         if (!Directory.Exists(oldRoot)) return 0;
 
@@ -320,19 +320,17 @@ public static class HomeMigration
             switch (entry.Kind)
             {
                 case EntryKind.Directory when !Directory.Exists(target):
-                    throw new MoveFailed($"{target} did not arrive; nothing has been repointed");
+                    throw new MoveFailed(Lang.Get("move-missing", target));
 
                 case EntryKind.Link when new FileInfo(target).LinkTarget is null:
-                    throw new MoveFailed($"{target} did not arrive as a link; nothing has been repointed");
+                    throw new MoveFailed(Lang.Get("move-missing-link", target));
 
                 case EntryKind.File:
                     var copied = new FileInfo(target);
                     if (!copied.Exists)
-                        throw new MoveFailed($"{target} did not arrive; nothing has been repointed");
+                        throw new MoveFailed(Lang.Get("move-missing", target));
                     if (copied.Length != entry.Length)
-                        throw new MoveFailed(
-                            $"{target} is {copied.Length} bytes and should be {entry.Length}; "
-                            + "nothing has been repointed");
+                        throw new MoveFailed(Lang.Get("move-wrong-size", target, copied.Length, entry.Length));
                     break;
             }
         }

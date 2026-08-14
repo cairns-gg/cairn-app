@@ -109,10 +109,8 @@ public static class WindowsCodeSignature
     {
         if (Problem(path) is not { } problem) return;
 
-        throw new GameInstallException(
-            $"Refusing to run {Path.GetFileName(path)}: {problem} "
-            + "Cairn only runs the Vintage Story installer when Windows itself confirms it "
-            + "was signed by the people who make the game.");
+        throw new GameInstallException(Lang.Get(
+            "install-refusing-unsigned", Path.GetFileName(path), problem));
     }
 
     // ---- WinVerifyTrust ----

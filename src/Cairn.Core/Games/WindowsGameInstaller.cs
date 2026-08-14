@@ -79,7 +79,7 @@ public static class WindowsGameInstaller
         foreach (var arg in BuildArguments(targetDirectory, logPath)) psi.ArgumentList.Add(arg);
 
         using var process = Process.Start(psi)
-                            ?? throw new GameInstallException($"Could not start {installerPath}.");
+                            ?? throw new GameInstallException(Lang.Get("install-could-not-start", installerPath));
 
         try
         {
@@ -118,8 +118,8 @@ public static class WindowsGameInstaller
         };
 
         throw new GameInstallException(logPath is null
-            ? $"Installing Vintage Story failed: {detail}."
-            : $"Installing Vintage Story failed: {detail}. Its log is at {logPath}.");
+            ? Lang.Get("install-failed", detail)
+            : Lang.Get("install-failed-log", detail, logPath));
     }
 
     /// <summary>

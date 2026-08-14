@@ -100,7 +100,7 @@ public static class ProcessRunner
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            throw new OptimumBuildException($"Could not run {fileName}: {e.Message}", e);
+            throw new OptimumBuildException(Lang.Get("optimum-could-not-run", fileName, e.Message), e);
         }
 
         process.BeginOutputReadLine();

@@ -27,23 +27,20 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         CancellationToken ct = default)
     {
         if (!release.CanInstall)
-            throw new GameInstallException(
-                $"{release.Version} for {release.Platform} ships as '{release.Artifact.FileName}', "
-                + "which Cairn does not know how to install. Install it manually, then point "
-                + "Cairn at the resulting install.");
+            throw new GameInstallException(Lang.Get(
+                "install-unknown-artifact", release.Version, release.Platform, release.Artifact.FileName));
 
         // The Windows client is an installer rather than a tarball; it is run, not unpacked.
         if (release.IsWindowsInstaller)
         {
             if (!OperatingSystem.IsWindows())
-                throw new GameInstallException(
-                    $"{release.Artifact.FileName} is a Windows installer and can only be run on Windows.");
+                throw new GameInstallException(Lang.Get("install-windows-only", release.Artifact.FileName));
 
             return await InstallFromInstallerAsync(release, progress, ct).ConfigureAwait(false);
         }
 
         var url = release.Artifact.DownloadUrl
-                  ?? throw new GameInstallException($"No download URL for {release.Version}.");
+                  ?? throw new GameInstallException(Lang.Get("install-no-url", release.Version));
 
         var target = store.InstallDir(release.Version);
         if (Directory.Exists(target) && GameInstall.TryAt(target) is { } existing) return existing;
@@ -97,8 +94,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         }
 
         var install = GameInstall.TryAt(target)
-                      ?? throw new GameInstallException(
-                          $"Unpacked {release.Version} but {target} does not look like a game install.");
+                      ?? throw new GameInstallException(Lang.Get("install-not-a-game", release.Version, target));
 
         progress?.Report(new InstallProgress(InstallPhase.Done, 1, 1, install.Version));
         return install;
@@ -116,7 +112,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         GameRelease release, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         var url = release.Artifact.DownloadUrl
-                  ?? throw new GameInstallException($"No download URL for {release.Version}.");
+                  ?? throw new GameInstallException(Lang.Get("install-no-url", release.Version));
 
         var target = store.InstallDir(release.Version);
         if (Directory.Exists(target) && GameInstall.TryAt(target) is { } existing) return existing;
@@ -172,9 +168,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         }
 
         var install = GameInstall.TryAt(target)
-                      ?? throw new GameInstallException(
-                          $"Installed {release.Version} but {target} does not look like a game "
-                          + $"install. The installer's log is at {log}.");
+                      ?? throw new GameInstallException(Lang.Get("install-not-a-game-log", release.Version, target, log));
 
         // Only kept for a failure worth reporting.
         TryDeleteFile(log);
@@ -231,9 +225,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         // Every artifact the catalogue publishes carries an md5, so an entry without one
         // is not a normal case to tolerate.
         if (string.IsNullOrWhiteSpace(expectedMd5))
-            throw new GameInstallException(
-                "The version manifest published no md5 for this download, so there is "
-                + "nothing to check it against. Refusing to install it.");
+            throw new GameInstallException(Lang.Get("install-no-md5"));
 
         progress?.Report(new InstallProgress(InstallPhase.Verifying, 0, 0, "checking md5"));
 
@@ -242,8 +234,7 @@ public sealed class GameInstaller(HttpClient http, GameStore store)
         var actual = Convert.ToHexStringLower(hash);
 
         if (!string.Equals(actual, expectedMd5.Trim(), StringComparison.OrdinalIgnoreCase))
-            throw new GameInstallException(
-                $"Download is corrupt: md5 {actual} does not match the published {expectedMd5}.");
+            throw new GameInstallException(Lang.Get("install-corrupt", actual, expectedMd5));
     }
 
     /// <summary>

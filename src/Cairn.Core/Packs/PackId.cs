@@ -124,6 +124,8 @@ public static class PackId
             if (!taken(candidate)) return candidate;
         }
 
+        // Not translated: a guard on Cairn's own invariants, so this sentence only
+        // appears when Cairn has a bug and its audience is whoever reads the report.
         throw new InvalidOperationException($"No free id left for '{wanted}'.");
     }
 

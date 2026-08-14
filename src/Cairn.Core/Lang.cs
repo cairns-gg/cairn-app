@@ -13,6 +13,21 @@ namespace Cairn.Core;
 /// Static and mutable, like <see cref="UiScale"/> in the app and for the same reason: it is
 /// one setting the whole process shares, and a change to it has to reach windows that are
 /// already open. <see cref="Changed"/> is how they follow.
+///
+/// <para><b>What does not go through here.</b> Every exception Core throws can reach a person
+/// — the front ends catch <c>Exception</c> and show <c>e.Message</c> in eighteen places — so
+/// "is it an exception?" is not the question. The question is whether a person can cause it.
+///
+/// A download that fails its checksum, a ModDB id that does not exist, a sign-in that
+/// expires, a move that runs out of disk: somebody did something, and what they are told is
+/// the product speaking to them. Those are translated.
+///
+/// A guard that fires because a path escaped the store, or because an id generator ran out,
+/// or because an SDK unpacked without an SDK in it, is Cairn saying it has a bug. Those stay
+/// in English on purpose, and each one says so where it is thrown. The audience for that
+/// sentence is whoever reads the issue it gets pasted into, and a translated one is worse
+/// there: it cannot be searched for, and the person best placed to fix it cannot read it.
+/// Leaving them is a decision, not an omission.</para>
 /// </summary>
 public static class Lang
 {

@@ -70,7 +70,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // somebody who clicked Add on a search result.
         var problems = manifest.ValidatePack().ToList();
         if (problems.Count > 0)
-            throw new InvalidDataException("Pack manifest is invalid:\n  " + string.Join("\n  ", problems));
+            throw new InvalidDataException(Lang.Get("pack-manifest-invalid") + "\n  " + string.Join("\n  ", problems));
 
         Directory.CreateDirectory(modsDir);
 

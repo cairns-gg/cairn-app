@@ -56,7 +56,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
         await ThrowIfFailed(response, "start signing in").ConfigureAwait(false);
 
         return await response.Content.ReadFromJsonAsync<DeviceFlow>(ct).ConfigureAwait(false)
-               ?? throw new CairnsException("The server did not say how to sign in.");
+               ?? throw new CairnsException(Lang.Get("cairns-no-signin-method"));
     }
 
     /// <summary>
@@ -107,7 +107,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
                 .ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(granted?.Token))
-                throw new CairnsException("The server approved the sign-in but sent no token.");
+                throw new CairnsException(Lang.Get("cairns-no-token"));
 
             var session = new CairnsSession { Server = Server, Token = granted.Token };
             session.Username = await WhoAmIAsync(session, ct).ConfigureAwait(false) ?? "";
@@ -115,7 +115,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
             return session;
         }
 
-        throw new CairnsException("The sign-in code expired before it was approved.");
+        throw new CairnsException(Lang.Get("cairns-code-expired"));
     }
 
     public async Task<string?> WhoAmIAsync(CairnsSession session, CancellationToken ct = default)
@@ -154,7 +154,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
         await ThrowIfFailed(response, "publish").ConfigureAwait(false);
 
         return await response.Content.ReadFromJsonAsync<PublishResult>(ct).ConfigureAwait(false)
-               ?? throw new CairnsException("The server accepted the pack but said nothing about it.");
+               ?? throw new CairnsException(Lang.Get("cairns-no-answer"));
     }
 
     /// <summary>
@@ -275,7 +275,7 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
         var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            throw new CairnsException($"Not signed in — could not {doing}.");
+            throw new CairnsException(Lang.Get("cairns-not-signed-in", doing));
 
         try
         {
@@ -283,18 +283,18 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
 
             if (problems?.Problems is { Length: > 0 })
                 throw new CairnsException(
-                    $"Could not {doing}:\n  "
+                    Lang.Get("cairns-could-not", doing) + "\n  "
                     + string.Join("\n  ", problems.Problems.Select(Printable)));
 
             if (!string.IsNullOrWhiteSpace(problems?.Error))
-                throw new CairnsException($"Could not {doing}: {Printable(problems.Error)}");
+                throw new CairnsException(Lang.Get("cairns-could-not-why", doing, Printable(problems.Error)));
         }
         catch (JsonException)
         {
             // Not the shape we expected; fall through to the status line.
         }
 
-        throw new CairnsException($"Could not {doing}: the server answered {(int)response.StatusCode}.");
+        throw new CairnsException(Lang.Get("cairns-could-not-status", doing, (int)response.StatusCode));
     }
 
     private sealed record TokenResponse([property: JsonPropertyName("token")] string Token);

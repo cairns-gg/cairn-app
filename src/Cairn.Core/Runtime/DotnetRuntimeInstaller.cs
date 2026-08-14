@@ -34,6 +34,8 @@ public sealed class RuntimeStore
     public string InstallDir(string version, string rid)
     {
         if (!IsValidComponent(version) || !IsValidComponent(rid))
+            // Not translated: a guard on Cairn's own invariants, so this sentence only
+            // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new ArgumentException($"'{version}-{rid}' is not a usable runtime directory name.");
 
         return Path.Combine(_root, $"{version}-{rid}");
@@ -83,6 +85,8 @@ public sealed class RuntimeStore
 
         // Only ever inside the store, and never the store itself: this deletes recursively.
         if (!dir.StartsWith(root + Path.DirectorySeparatorChar, PathComparison) || dir == root)
+            // Not translated: a guard on Cairn's own invariants, so this sentence only
+            // appears when Cairn has a bug and its audience is whoever reads the report.
             throw new InvalidOperationException($"'{runtime.Root}' is not a managed runtime.");
 
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
@@ -158,17 +162,17 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
     {
         var index = await http.GetFromJsonAsync<ReleasesIndex>(ReleasesIndexUrl, Json, ct)
                         .ConfigureAwait(false)
-                    ?? throw new DotnetRuntimeException("Could not read the .NET releases index.");
+                    ?? throw new DotnetRuntimeException(Lang.Get("dotnet-no-index"));
 
         var channel = index.Entries.FirstOrDefault(e =>
             Version.TryParse(e.ChannelVersion, out var v) && v.Major == major);
 
         if (channel?.ReleasesJson is null)
-            throw new DotnetRuntimeException($"No .NET {major} channel is published.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-no-channel", major));
 
         return await http.GetFromJsonAsync<ChannelReleases>(channel.ReleasesJson, Json, ct)
                    .ConfigureAwait(false)
-               ?? throw new DotnetRuntimeException($"Could not read the .NET {major} channel.");
+               ?? throw new DotnetRuntimeException(Lang.Get("dotnet-channel-unreadable", major));
     }
 
     /// <summary>
@@ -185,7 +189,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         var releases = await LoadChannelAsync(major, ct).ConfigureAwait(false);
 
         var sdk = releases.Releases.FirstOrDefault()?.Sdk
-                  ?? throw new DotnetRuntimeException($"No SDK listed for .NET {major}.");
+                  ?? throw new DotnetRuntimeException(Lang.Get("dotnet-no-sdk", major));
 
         // Named for the same reason the runtime asset is named below: an rid lists several
         // archives and the first is not the one wanted.
@@ -195,8 +199,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
             && f.Name.StartsWith("dotnet-sdk", StringComparison.OrdinalIgnoreCase));
 
         if (file?.Url is null)
-            throw new DotnetRuntimeException(
-                $".NET SDK {sdk.Version} publishes no archive for {rid}.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-no-sdk-archive", sdk.Version, rid));
 
         return new DotnetRuntimeRelease(sdk.Version, rid, file.Url, file.Hash);
     }
@@ -209,7 +212,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
 
         // releases[0] is the newest; its runtime is what latest-runtime refers to.
         var runtime = releases.Releases.FirstOrDefault()?.Runtime
-                      ?? throw new DotnetRuntimeException($"No runtime listed for .NET {major}.");
+                      ?? throw new DotnetRuntimeException(Lang.Get("dotnet-no-runtime", major));
 
         // Named, not merely first. Every rid lists an apphost pack alongside the runtime,
         // and it comes first:
@@ -227,8 +230,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
             && f.Name.StartsWith("dotnet-runtime", StringComparison.OrdinalIgnoreCase));
 
         if (file?.Url is null)
-            throw new DotnetRuntimeException(
-                $".NET {runtime.Version} publishes no runtime archive for {rid}.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-no-runtime-archive", runtime.Version, rid));
 
         return new DotnetRuntimeRelease(runtime.Version, rid, file.Url, file.Hash);
     }
@@ -251,15 +253,10 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         // cannot carry a forward slash — but it can carry backslashes, and on Windows
         // "a\..\..\evil.exe" is a directory traversal that Path.Combine will honour.
         if (!BareFileName.IsBare(release.FileName))
-            throw new DotnetRuntimeException(
-                $"The .NET release index gave '{release.FileName}' as a file name, which is "
-                + "not a plain one. Refusing to download it.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-bad-filename", release.FileName));
 
         if (!IsKnownDownloadHost(release.Url))
-            throw new DotnetRuntimeException(
-                $"The .NET release index points at {Origin(release.Url)} for "
-                + $"{release.FileName}, which is not where Microsoft publishes runtimes. "
-                + "Refusing to download it.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-bad-origin", Origin(release.Url), release.FileName));
 
         // Asked before the download rather than after it. Refusing a hashless release is
         // not new, but it used to happen once ~80 MB had already been fetched — a check
@@ -269,9 +266,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         // tolerate; the verification itself still runs after the download, because that
         // one genuinely needs the bytes.
         if (release.Sha512 is not { Length: > 0 })
-            throw new DotnetRuntimeException(
-                $"The .NET release index published no hash for {release.FileName}, so "
-                + "there is nothing to check it against. Refusing to install it.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-no-hash", release.FileName));
 
         Directory.CreateDirectory(store.Root);
         var archive = Path.Combine(store.Root, release.FileName + ".partial");
@@ -306,8 +301,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         }
 
         return DotnetRuntimeLocator.Inspect(target)
-               ?? throw new DotnetRuntimeException(
-                   $"Unpacked .NET {release.Version} but {target} has no shared framework.");
+               ?? throw new DotnetRuntimeException(Lang.Get("dotnet-no-framework", release.Version, target));
     }
 
     private async Task DownloadAsync(
@@ -350,8 +344,7 @@ public sealed class DotnetRuntimeInstaller(HttpClient http, RuntimeStore store)
         var actual = Convert.ToHexStringLower(hash);
 
         if (!string.Equals(actual, expected.Trim(), StringComparison.OrdinalIgnoreCase))
-            throw new DotnetRuntimeException(
-                "Runtime download is corrupt: sha512 does not match the published value.");
+            throw new DotnetRuntimeException(Lang.Get("dotnet-corrupt"));
     }
 
     private static void TryDelete(string dir)

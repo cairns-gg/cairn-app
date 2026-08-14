@@ -158,6 +158,8 @@ public sealed class OptimumProvisioner
         // for one game version holding another.
         var declared = OptimumSource.ReadGameVersion(WorkingTree);
         if (declared is not null && !source.Supports(declared))
+            // Not translated: Cairn's own pin disagreeing with what it points at is a
+            // packaging mistake in Cairn, not something the person running it can act on.
             throw new OptimumBuildException(
                 $"This Optimum revision builds for Vintage Story {declared}, not "
                 + $"{source.GameVersion}. Cairn's pinned revision is out of step with itself.");
@@ -207,6 +209,7 @@ public sealed class OptimumProvisioner
 
         var installed = await installer.InstallAsync(release, relay, ct).ConfigureAwait(false);
 
+        // Not translated: it says so itself.
         return DotnetSdkLocator.Inspect(installed.Root)
                ?? throw new OptimumBuildException(
                    "The downloaded .NET SDK does not look like an SDK. This is a bug in Cairn.");
@@ -336,7 +339,7 @@ public sealed class OptimumProvisioner
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                throw new OptimumBuildException($"Could not remove {path}: {e.Message}", e);
+                throw new OptimumBuildException(Lang.Get("optimum-could-not-remove", path, e.Message), e);
             }
         }
 
@@ -440,8 +443,7 @@ public sealed class OptimumProvisioner
             .ConfigureAwait(false);
 
         return FindPackagedClient(output)
-               ?? throw new OptimumBuildException(
-                   "The build finished but produced no client directory. See " + LogPath);
+               ?? throw new OptimumBuildException(Lang.Get("optimum-no-client-dir", LogPath));
     }
 
     /// <summary>
@@ -507,8 +509,7 @@ public sealed class OptimumProvisioner
         WriteMarker(target, source);
 
         return GameInstall.TryAt(target)
-               ?? throw new OptimumBuildException(
-                   $"The client was built but {target} is not a usable install. See {LogPath}");
+               ?? throw new OptimumBuildException(Lang.Get("optimum-not-usable", target, LogPath));
     }
 
     /// <summary>
@@ -525,9 +526,7 @@ public sealed class OptimumProvisioner
             .FirstOrDefault(name => File.Exists(Path.Combine(dir, name)));
 
         if (launcher is null)
-            throw new OptimumBuildException(
-                $"The packaged client has no Optimum launcher in it, so Cairn would run the "
-                + $"stock game instead. See {source.Url} — this is a change in its packaging.");
+            throw new OptimumBuildException(Lang.Get("optimum-no-launcher", source.Url));
 
         var marker = JsonSerializer.Serialize(new Dictionary<string, string>
         {

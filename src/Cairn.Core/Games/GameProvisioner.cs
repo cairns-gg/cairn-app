@@ -93,8 +93,7 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
                 .ConfigureAwait(false);
 
             server = games.FindServer(gameVersion)
-                     ?? throw new GameInstallException(
-                         $"Installed Vintage Story {gameVersion} but it has no server in it.");
+                     ?? throw new GameInstallException(Lang.Get("install-no-server", gameVersion));
         }
 
         await EnsureRuntimeAsync(server, progress, ct).ConfigureAwait(false);
@@ -139,14 +138,12 @@ public sealed class GameProvisioner(HttpClient http, GameStore games, RuntimeSto
             .ConfigureAwait(false);
 
         var release = releases.FirstOrDefault(r => r.Version == gameVersion)
-                      ?? throw new GameInstallException(
-                          $"No {string.Join(" or ", platformKeys)} download is published "
-                          + $"for {gameVersion}.");
+                      ?? throw new GameInstallException(Lang.Get(
+                             "install-no-download", string.Join(" or ", platformKeys), gameVersion));
 
         if (!release.CanInstall)
-            throw new GameInstallException(
-                $"{gameVersion} ships as {release.Artifact.FileName} on this platform, which "
-                + "Cairn cannot install. Install it manually, then Cairn will detect it.");
+            throw new GameInstallException(Lang.Get(
+                "install-cannot-install", gameVersion, release.Artifact.FileName));
 
         var installer = new GameInstaller(http, games);
         var relay = new Progress<InstallProgress>(p => progress?.Report(

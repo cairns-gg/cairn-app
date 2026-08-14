@@ -164,5 +164,5 @@ public sealed class GameLauncher(GameInstall install)
 
     public Process Launch(LaunchOptions options)
         => Process.Start(BuildStartInfo(options))
-           ?? throw new InvalidOperationException($"Could not start {install.Executable}.");
+           ?? throw new InvalidOperationException(Lang.Get("launch-could-not-start", install.Executable));
 }

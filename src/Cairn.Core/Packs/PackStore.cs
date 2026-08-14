@@ -118,7 +118,7 @@ public sealed class PackStore
     public PackManifest ApplyUpdate(string id, PackUpdatePlan plan, PackBundle bundle)
     {
         var theirs = bundle.Pack
-                     ?? throw new InvalidDataException("The update has no pack.");
+                     ?? throw new InvalidDataException(Lang.Get("pack-update-has-no-pack"));
 
         var merged = plan.Merge();
         merged.Id = id;
@@ -285,8 +285,7 @@ public sealed class PackStore
         // validated rather than trusted. Without this, an id of "../../etc" would let a
         // pack write outside the store.
         if (!IsValidId(id))
-            throw new ArgumentException(
-                $"'{id}' is not a valid pack id. Use letters, digits, '-' and '_' only.", nameof(id));
+            throw new ArgumentException(Lang.Get("pack-id-invalid", id), nameof(id));
 
         return Path.Combine(_packsRoot, id);
     }
@@ -344,7 +343,7 @@ public sealed class PackStore
         string id, string gameVersion, string? name = null, string? connect = null,
         string? description = null)
     {
-        if (Exists(id)) throw new InvalidOperationException($"Pack '{id}' already exists.");
+        if (Exists(id)) throw new InvalidOperationException(Lang.Get("pack-already-exists", id));
 
         var manifest = new PackManifest
         {
@@ -392,7 +391,7 @@ public sealed class PackStore
         ImportIntent? intent = null)
     {
         var manifest = bundle.Pack
-                       ?? throw new InvalidDataException("The bundle has no pack.");
+                       ?? throw new InvalidDataException(Lang.Get("bundle-has-no-pack"));
 
         if (!string.IsNullOrWhiteSpace(asId)) manifest.Id = asId.Trim();
 

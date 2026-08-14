@@ -258,7 +258,7 @@ public sealed class PackManifest
     /// </summary>
     public static PackManifest Load(string path)
         => JsonSerializer.Deserialize<PackManifest>(File.ReadAllText(path), JsonOptions)
-           ?? throw new InvalidDataException($"{path} is empty or not a pack manifest.");
+           ?? throw new InvalidDataException(Lang.Get("pack-manifest-empty", path));
 
     public void Save(string path)
     {
