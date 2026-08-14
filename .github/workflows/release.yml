@@ -14,9 +14,13 @@ on:
 # Read is what checkout needs and all any job here needs by default. The one job that
 # writes — `release`, which creates the GitHub release — declares `contents: write` for
 # itself and always did, so granting it to everybody bought nothing and cost a great deal:
-# actions/checkout persists the token into .git/config as an http.extraheader for the whole
-# job, so `test` handed repository write to every package `dotnet test` restores. One of
-# those could push a v* tag and originate a release from source of its choosing.
+# actions/checkout leaves the token where git will use it for the whole job, so `test`
+# handed repository write to every package `dotnet test` restores. One of those could push a
+# v* tag and originate a release from source of its choosing.
+#
+# Deliberately not naming where it leaves it: it was an http.extraheader in .git/config, and
+# checkout v6 moved it to a file of its own. The reason survives either arrangement, and a
+# comment naming the mechanism would now be describing one that is gone.
 #
 # Not `{}`: this repository is private, so a checkout with no permissions cannot clone it.
 permissions:
@@ -41,10 +45,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -76,10 +80,10 @@ jobs:
       notarised: ${{ steps.notarise.outputs.done }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -281,7 +285,7 @@ jobs:
           done
           ls -lh dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/*
@@ -292,10 +296,10 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -334,7 +338,7 @@ jobs:
 
           ls -lh dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cross
           path: dist/*
@@ -369,7 +373,7 @@ jobs:
       R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -533,7 +537,7 @@ jobs:
       # The bundle goes with them. It is what the `attestation` field in the manifest names,
       # and the jobs that publish only ever see what is uploaded here — a manifest naming a
       # file that never left this runner would be worse than no attestation at all.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: |
@@ -627,7 +631,7 @@ jobs:
       NOTARISED: ${{ needs.macos.outputs.notarised }}
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: env.R2_ACCESS_KEY_ID != ''
         with:
           path: dist
@@ -767,9 +771,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
