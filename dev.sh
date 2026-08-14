@@ -67,6 +67,13 @@ ENV_ARGS=()
 # behaves exactly as it does for somebody who never set either.
 [ -n "$HOME_DIR" ] && { export CAIRN_DEFAULT_HOME="$HOME_DIR"; ENV_ARGS+=(--env "CAIRN_DEFAULT_HOME=$HOME_DIR"); }
 
+# `open` does not inherit the shell's environment, so anything not named here simply does
+# not reach the app on macOS — which is how CAIRN_LANG_DIR=... ./dev.sh --run appeared to
+# do nothing at all. Forwarded when set, so a translator testing a loose lang file gets the
+# same behaviour they would get running the binary directly.
+[ -n "${CAIRN_LANG:-}" ] && ENV_ARGS+=(--env "CAIRN_LANG=$CAIRN_LANG")
+[ -n "${CAIRN_LANG_DIR:-}" ] && ENV_ARGS+=(--env "CAIRN_LANG_DIR=$CAIRN_LANG_DIR")
+
 case "$(uname -s)" in
   Darwin) RID_OS=osx ;;
   Linux)  RID_OS=linux ;;

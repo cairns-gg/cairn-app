@@ -1,5 +1,5 @@
 {
-  "_comment": "DRAFT. Machine-written, not reviewed by a French speaker. Loaded with CAIRN_LANG_DIR for testing; deliberately not in src/Cairn.Core/assets so it cannot ship by accident. Anything absent falls back to English, which is what a half-finished translation should look like.",
+  "_comment": "Traduction provisoire, écrite par une machine et pas encore relue par un francophone. Tout ce qui manque retombe sur l'anglais. À faire relire avant de l'annoncer.",
 
   "_language-name": "Français",
 

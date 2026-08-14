@@ -211,8 +211,8 @@ public class LooseTranslationTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_home, "packs"));
         Directory.CreateDirectory(_lang);
 
-        File.WriteAllText(Path.Combine(_lang, "fr.json"),
-            """{ "_language-name": "Français", "tab-modconfig": "Config des mods" }""");
+        File.WriteAllText(Path.Combine(_lang, "xx.json"),
+            """{ "_language-name": "Testish", "tab-modconfig": "Config des mods" }""");
 
         Environment.SetEnvironmentVariable("CAIRN_HOME", _home);
         Environment.SetEnvironmentVariable(LanguageChoice.OverrideVariable, _lang);
@@ -237,7 +237,9 @@ public class LooseTranslationTests : IDisposable
     [AvaloniaFact]
     public void A_translation_dropped_in_the_override_folder_is_offered()
     {
-        Assert.Contains("Français", new LanguageSettingViewModel().Choices);
+        // A code nothing ships, so this can only pass by way of the override directory —
+        // fr is embedded now and would have made the assertion true either way.
+        Assert.Contains("Testish", new LanguageSettingViewModel().Choices);
     }
 
     [AvaloniaFact]
@@ -247,12 +249,12 @@ public class LooseTranslationTests : IDisposable
         var window = new MainWindow { DataContext = vm };
         window.Show();
 
-        new LanguageSettingViewModel().Selected = "Français";
+        new LanguageSettingViewModel().Selected = "Testish";
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("fr", Lang.Current);
+        Assert.Equal("xx", Lang.Current);
         Assert.Equal("Config des mods", Lang.Get("tab-modconfig"));
-        Assert.Equal("fr", CairnSettings.Load().Language);
+        Assert.Equal("xx", CairnSettings.Load().Language);
 
         // The TabControl's items, not its visual descendants: a tab that has never been
         // selected is not realised, so only the logical list has all five in it.
