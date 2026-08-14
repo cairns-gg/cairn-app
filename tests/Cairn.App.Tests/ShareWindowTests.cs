@@ -83,23 +83,44 @@ public class ShareWindowTests
     }
 
     [AvaloniaFact]
-    public void A_server_address_is_surfaced_and_kept_for_an_unlisted_pack()
+    public void A_first_share_is_listed_and_its_server_address_is_surfaced_and_stripped()
     {
         var (_, vm) = Show(Plan(connect: "anego.example.com:42420"));
 
         Assert.True(vm.HasConnect);
         Assert.Contains("anego.example.com:42420", vm.ConnectWarning);
 
-        // Unlisted is the default, and a pack handed to your own players is exactly when
-        // the address is wanted.
-        Assert.False(vm.IsPublic);
-        Assert.False(vm.StripConnect);
+        // Listed, because the default used to be unlisted and what that produced was people
+        // who had shared a pack and did not know nobody could find it. The address goes with
+        // that choice rather than against it: public and stripped is the pair.
+        Assert.True(vm.IsPublic);
+        Assert.True(vm.StripConnect);
+    }
+
+    [AvaloniaFact]
+    public void Going_unlisted_does_not_put_the_server_address_back_on_its_own()
+    {
+        var (_, vm) = Show(Plan(connect: "anego.example.com:42420"));
+
+        vm.IsPublic = false;
+
+        // Unlisted is the pack you hand to your own players, which is exactly when the
+        // address is wanted — and it still has to be asked for. Nothing here ever moves
+        // toward disclosing it: an unlisted pack's link gets pasted into a chat like any
+        // other, so "I made it more private" must not quietly add a server address to what
+        // gets published. Include is one tick away, beside the address it names.
+        Assert.True(vm.StripConnect);
     }
 
     [AvaloniaFact]
     public void Going_public_strips_the_server_address()
     {
         var (_, vm) = Show(Plan(connect: "anego.example.com:42420"));
+
+        // From an unlisted pack that had said to include it, which is the only way round
+        // this can happen now that a first share is public and stripped.
+        vm.IsPublic = false;
+        vm.StripConnect = false;
 
         vm.IsPublic = true;
 

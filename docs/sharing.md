@@ -343,8 +343,8 @@ Then, and on every share after that. Mostly disclosure rather than configuration
 │  Signed in as dizzyd               [Sign out]  │
 │                                                │
 │  URL         cairns.gg/dizzyd/[ anego       ]  │
-│  Visibility  ( ) Public — listed in browse     │
-│              (•) Unlisted — anyone with link   │
+│  Visibility  (•) Public — listed in browse     │
+│              ( ) Unlisted — anyone with link   │
 │                                                │
 │  Publishing 6 mods at these exact versions     │
 │  glassview 1.3.0 · unchisel 1.2.0 (pinned) · … │
@@ -371,9 +371,21 @@ Each of these produces a pack that works for the author and is broken for everyo
 which is the worst failure mode a sharing site has.
 
 **`connect` is a privacy leak.** `PackManifest.Connect` carries a real host and port.
-Publishing publicly publishes your server address. Surface it every time; default to
-**strip for public, include for unlisted** — an unlisted pack handed to your own players
-is precisely when you want the connect field, and a public pack almost never is.
+Publishing publicly publishes your server address. Surface it every time; **strip it**
+unless the author says otherwise. An unlisted pack handed to your own players is precisely
+when the connect field is wanted, so that is the one case where Include is worth reaching
+for — but nothing sets it for them. Cairn only ever moves that control toward *not*
+disclosing the address: choosing Public strips it, and choosing Unlisted leaves it stripped,
+because an unlisted link gets pasted into a chat like any other and "I made it more private"
+must not quietly add a server address to what gets published.
+
+**Visibility defaults to Public**, and did not always. Unlisted was the default on the
+reasoning that the quieter choice is the safer one; what it produced was authors who had
+shared a pack and had no idea nobody could find it, because a preselected radio above a
+single button is not a decision anybody makes — it is one they accept. The privacy given up
+is narrower than the words suggest: an unlisted pack's URL is public either way, so what the
+setting decides is whether a pack can be *discovered*, not whether it can be reached. The
+part that is genuinely sensitive is the server address, and the default above strips it.
 
 **Mods that aren't on ModDB cannot be reproduced.** A locally built zip resolves fine on
 the author's machine and is a dead entry on the recipient's. Cross-check every `modid`

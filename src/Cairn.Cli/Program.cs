@@ -147,7 +147,7 @@ internal static class Program
               cairn-cli login [--no-browser]          sign in to cairns.gg
               cairn-cli logout                        forget this machine's token
               cairn-cli whoami                        who this machine is signed in as
-              cairn-cli publish <id> [--slug x] [--public] [--keep-server]  share a pack
+              cairn-cli publish <id> [--slug x] [--unlisted] [--keep-server]  share a pack
               cairn-cli unpublish <id>                withdraw a published pack
 
             Packs live under $CAIRN_HOME, then whatever `home set` recorded, then
@@ -1465,7 +1465,7 @@ internal static class Program
     private static async Task<int> Publish(
         PackStore store, ModDbClient moddb, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli publish <id> [--slug x] [--public]");
+        if (args.Length < 2) return Fail("usage: cairn-cli publish <id> [--slug x] [--unlisted]");
 
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
@@ -1508,7 +1508,11 @@ internal static class Program
         foreach (var mod in plan.Unresolvable)
             Console.WriteLine($"  ! {mod.ModId} is not on ModDB — recipients cannot install it");
 
-        var isPublic = args.Contains("--public");
+        // Listed unless told otherwise, matching the Share window — a pack shared by
+        // somebody who did not notice the setting should be findable, not quietly hidden.
+        // --public is still accepted and means what it says, so anything that passed it
+        // keeps working.
+        var isPublic = !args.Contains("--unlisted");
 
         // A public pack almost never wants a real server address in it, and an unlisted one
         // usually does. --keep-server overrides, because sometimes it is deliberate.

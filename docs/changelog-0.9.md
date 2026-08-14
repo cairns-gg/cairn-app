@@ -125,6 +125,21 @@ have written one of these. Point `CAIRN_LANG_DIR` at a folder holding your own `
 Cairn reads it in preference to the built-in ones and offers it in the picker — no need to
 build anything.
 
+## Packs you share are listed by default
+
+Sharing a pack offers **Public** or **Unlisted**, and it used to arrive on Unlisted. That is
+a fine thing to choose and a poor thing to be given: plenty of packs were shared by people
+who had no idea nobody could find them, because the setting was already answered and the
+only thing left to press was Publish.
+
+New shares now start on **Public — listed in browse**, so a pack you share can be found and
+tried. Unlisted is the same one tick away it always was, and a pack you have already
+published keeps whatever it was published with.
+
+**Your server address is still stripped**, and now in both directions — choosing Unlisted
+does not put it back on its own. An unlisted link gets pasted into a chat like any other, so
+if you want the address in the pack you hand your own players, tick **Include** beside it.
+
 ## Moving Cairn's files now takes the launcher with it
 
 **Preferences → Move…** put everything on the new drive, and then the window carried on as

@@ -57,13 +57,26 @@ public sealed partial class ShareViewModel : ViewModelBase
 
         AlreadyPublished = link?.Published is not null;
         Revision = link?.Revision ?? 0;
-        IsPublic = link?.Published?.Visibility == "public";
+
+        // Listed, on a first publish. It was unlisted, on the reasoning that the quieter
+        // choice is the safer default — and what that produced was authors who had shared a
+        // pack and did not know that nobody could find it. A preselected radio above a
+        // single button is not a decision anybody makes; it is one they accept.
+        //
+        // The privacy given up is smaller than the wording suggests. An unlisted pack's URL
+        // is public either way — being unlisted is being absent from browse, not from its
+        // own address — so what this changes is whether a pack can be discovered, not
+        // whether it can be reached. The part that is genuinely sensitive is the server
+        // address, and defaulting to public strips that rather than exposing it.
+        //
+        // A pack already published keeps whatever was chosen for it, here and below.
+        IsPublic = _published is null || _published.Visibility == "public";
 
         // A pack handed to your own players is exactly when the server address is wanted,
         // and a public one almost never is — so a first publish strips it for public and
         // keeps it for unlisted. A re-publish keeps whatever was chosen last time.
-        StripConnect = link?.Published is { } published
-            ? published.Connect == "stripped"
+        StripConnect = _published is not null
+            ? _published.Connect == "stripped"
             : IsPublic;
     }
 
