@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -50,12 +51,12 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
     /// </summary>
     public string Label => Change.Kind switch
     {
-        ModChangeKind.Added => "adds",
-        ModChangeKind.Removed => "removes",
-        ModChangeKind.Repinned => "moves",
-        ModChangeKind.DroppedByYou => "you removed",
-        ModChangeKind.PinConflict => "you pinned",
-        ModChangeKind.Yours => "yours",
+        ModChangeKind.Added => Lang.Get("packupdate-adds"),
+        ModChangeKind.Removed => Lang.Get("packupdate-removes"),
+        ModChangeKind.Repinned => Lang.Get("packupdate-moves"),
+        ModChangeKind.DroppedByYou => Lang.Get("packupdate-you-removed"),
+        ModChangeKind.PinConflict => Lang.Get("packupdate-you-pinned"),
+        ModChangeKind.Yours => Lang.Get("packupdate-yours"),
         _ => "",
     };
 
@@ -82,10 +83,11 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
     /// </summary>
     public string ChoiceLabel => Change.Kind switch
     {
-        ModChangeKind.DroppedByYou => Take ? "put it back" : "leave it out",
+        ModChangeKind.DroppedByYou =>
+            Take ? Lang.Get("packupdate-put-back") : Lang.Get("packupdate-leave-out"),
         ModChangeKind.PinConflict => Take
-            ? $"use theirs ({Change.Theirs ?? "newest"})"
-            : $"keep yours ({Change.Mine ?? "newest"})",
+            ? Lang.Get("packupdate-use-theirs", Change.Theirs ?? Lang.Get("packupdate-newest"))
+            : Lang.Get("packupdate-keep-yours", Change.Mine ?? Lang.Get("packupdate-newest")),
         _ => "",
     };
 
@@ -182,18 +184,12 @@ public sealed partial class PackUpdateViewModel(
             var going = Plan.RemovedByReset.ToList();
             if (going.Count == 0) return "";
 
-            var text = $"This removes {going.Count} mod{(going.Count == 1 ? "" : "s")} from the "
-                       + $"pack: {string.Join(", ", going.Take(6))}"
-                       + (going.Count > 6 ? ", …" : "") + ".";
+            var text = Lang.Plural("packupdate-removes-mods", going.Count, going.Count,
+                string.Join(", ", going.Take(6)) + (going.Count > 6 ? ", …" : ""));
 
             if (_worlds.Count > 0)
-                text += $" This pack has {_worlds.Count} world"
-                        + $"{(_worlds.Count == 1 ? "" : "s")} "
-                        + $"({string.Join(", ", _worlds.Take(3))}"
-                        + (_worlds.Count > 3 ? ", …" : "")
-                        + "). A world keeps the blocks and items of the mods it was built "
-                        + "with, so anything placed by a mod being removed will be gone "
-                        + "from it. Back them up first.";
+                text += " " + Lang.Plural("packupdate-world-warning", _worlds.Count, _worlds.Count,
+                    string.Join(", ", _worlds.Take(3)) + (_worlds.Count > 3 ? ", …" : ""));
 
             return text;
         }
@@ -218,22 +214,20 @@ public sealed partial class PackUpdateViewModel(
     public string Summary => Plan.Summary();
 
     public string ApplyLabel => Reset
-        ? $"Reset to revision {Plan.ToRevision}"
-        : $"Update to revision {Plan.ToRevision}";
+        ? Lang.Get("packupdate-apply-reset", Plan.ToRevision)
+        : Lang.Get("packupdate-apply-update", Plan.ToRevision);
 
     public bool HasChanges => Changes.Count > 0;
 
     public bool HasChoices => Plan.Choices.Any();
 
     public string ChoiceNote =>
-        $"{Plan.Choices.Count()} thing{(Plan.Choices.Count() == 1 ? "" : "s")} you changed "
-        + "differ from the author's. Yours are kept unless you say otherwise.";
+        Lang.Plural("packupdate-choices", Plan.Choices.Count(), Plan.Choices.Count());
 
     public bool GameVersionChanges => Plan.GameVersionChanges;
 
     public string GameVersionNote =>
-        $"The author moved this pack from Vintage Story {Plan.PreviousGameVersion} to "
-        + $"{Plan.GameVersion}. Every mod in it is resolved again for the new version.";
+        Lang.Get("packupdate-game-version", Plan.PreviousGameVersion, Plan.GameVersion);
 
     /// <summary>
     /// Said plainly, because the alternative reading — "it worked out what you changed" —
@@ -241,8 +235,5 @@ public sealed partial class PackUpdateViewModel(
     /// </summary>
     public bool IsBlind => !Plan.HasBase;
 
-    public string BlindNote =>
-        "This pack was imported before Cairn recorded what its author's copy looked like, "
-        + "so a mod you removed cannot be told from one the author has just added. Anything "
-        + "listed as added may be a mod you took out.";
+    public string BlindNote => Lang.Get("packupdate-blind");
 }
