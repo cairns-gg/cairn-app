@@ -28,7 +28,8 @@ public class InstalledGameViewModel(
     /// <summary>Cairn only deletes what Cairn installed.</summary>
     public bool CanRemove => IsManaged;
 
-    public string Origin => IsManaged ? "installed by Cairn" : "found on this machine";
+    public string Origin =>
+        IsManaged ? Lang.Get("games-installed-by-cairn") : Lang.Get("games-found-here");
 
     public string Version => Install.Version;
 
@@ -39,7 +40,7 @@ public class InstalledGameViewModel(
     /// </summary>
     public string Display => Install.Describe;
     public string Directory => Install.Directory;
-    public string Needs => $"needs .NET {Install.RequiredFramework}";
+    public string Needs => Lang.Get("games-needs-dotnet", Install.RequiredFramework);
     public string RuntimeLine => runtime.Describe();
     public int RequiredDotnetMajor => Install.RequiredFramework.Major;
 
@@ -64,8 +65,8 @@ public partial class AvailableGameViewModel(GameRelease release, bool installed)
     /// <summary>Derived from the property, not the constructor argument, so it stays
     /// correct after an install completes.</summary>
     public string Note => CanInstall
-        ? IsInstalled ? "installed" : ""
-        : "not downloadable by Cairn";
+        ? IsInstalled ? Lang.Get("games-note-installed") : ""
+        : Lang.Get("games-note-not-downloadable");
 
     partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(Note));
 }
@@ -154,7 +155,7 @@ public partial class GamesViewModel : ViewModelBase
         Error = null;
         ProgressFraction = 0;
         ProgressIndeterminate = true;
-        Progress = $"resolving .NET {major}…";
+        Progress = Lang.Get("games-resolving-dotnet", major);
 
         try
         {
@@ -167,14 +168,14 @@ public partial class GamesViewModel : ViewModelBase
                 ProgressIndeterminate = p.Fraction is null;
                 ProgressFraction = p.Fraction ?? 0;
                 Progress = p.Phase == "downloading"
-                    ? $"downloading .NET {release.Version} — {p.Done / 1024 / 1024} MB"
+                    ? Lang.Get("games-downloading-dotnet", release.Version, p.Done / 1024 / 1024)
                     : p.Phase;
             });
 
             var installed = await installer.InstallAsync(release, progress);
 
             _log($"installed .NET {release.Version} -> {installed.Root}");
-            Progress = $"installed .NET {release.Version}";
+            Progress = Lang.Get("games-installed-dotnet", release.Version);
 
             RefreshInstalled();
             _onLibraryChanged();
@@ -249,7 +250,7 @@ public partial class GamesViewModel : ViewModelBase
         }
         catch (Exception e)
         {
-            Error = $"Could not read the version catalog: {e.Message}";
+            Error = Lang.Get("games-catalog-failed", e.Message);
         }
         finally
         {
@@ -266,7 +267,7 @@ public partial class GamesViewModel : ViewModelBase
         Error = null;
         ProgressFraction = 0;
         ProgressIndeterminate = true;
-        Progress = $"starting {chosen.Version}…";
+        Progress = Lang.Get("games-starting", chosen.Version);
 
         try
         {
@@ -279,21 +280,21 @@ public partial class GamesViewModel : ViewModelBase
                 Progress = p.Phase switch
                 {
                     InstallPhase.Downloading =>
-                        $"downloading {chosen.Version} — {p.Done / 1024 / 1024} MB"
-                        + (p.Fraction is { } f ? $" ({f * 100:F0}%)" : ""),
-                    InstallPhase.Verifying => "verifying download",
+                        Lang.Get("games-downloading", chosen.Version, p.Done / 1024 / 1024)
+                        + (p.Fraction is { } f ? Lang.Get("games-percent", f * 100) : ""),
+                    InstallPhase.Verifying => Lang.Get("games-verifying"),
                     // Carries "… — 412 MB written" once unpacking or the installer is
                     // under way, which is the only thing moving during the longest step.
                     InstallPhase.Extracting => p.Detail,
-                    InstallPhase.Finishing => "arranging files",
-                    _ => $"installed {p.Detail}",
+                    InstallPhase.Finishing => Lang.Get("games-arranging"),
+                    _ => Lang.Get("games-installed-detail", p.Detail),
                 };
             });
 
             var install = await installer.InstallAsync(chosen.Release, progress);
 
             _log($"installed game {install.Version} -> {install.Directory}");
-            Progress = $"installed {install.Version}";
+            Progress = Lang.Get("games-installed-version", install.Version);
             chosen.IsInstalled = true;
 
             RefreshInstalled();
@@ -326,9 +327,8 @@ public partial class GamesViewModel : ViewModelBase
         var packs = _packsUsing(chosen.Version);
 
         RemoveConsequence = packs.Count == 0
-            ? $"Delete {chosen.Version} from disk. No pack targets it."
-            : $"{Listed(packs)} {(packs.Count == 1 ? "targets" : "target")} {chosen.Version}. "
-              + "Playing will download it again; worlds and mods are untouched.";
+            ? Lang.Get("games-remove-unused", chosen.Version)
+            : Lang.Plural("games-remove-used", packs.Count, Listed(packs), chosen.Version);
 
         ConfirmingRemove = true;
     }
@@ -339,9 +339,9 @@ public partial class GamesViewModel : ViewModelBase
     /// <summary>Names them rather than counting them: which packs is the actual question.</summary>
     private static string Listed(IReadOnlyList<string> names) => names.Count switch
     {
-        1 => $"“{names[0]}”",
-        2 => $"“{names[0]}” and “{names[1]}”",
-        _ => $"“{names[0]}”, “{names[1]}” and {names.Count - 2} more",
+        1 => Lang.Get("names-one", names[0]),
+        2 => Lang.Get("names-two", names[0], names[1]),
+        _ => Lang.Get("names-many", names[0], names[1], names.Count - 2),
     };
 
     [RelayCommand]

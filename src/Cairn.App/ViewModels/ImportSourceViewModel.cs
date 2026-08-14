@@ -1,3 +1,4 @@
+using Cairn.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -69,17 +70,17 @@ public sealed partial class ImportRowViewModel(InstalledMod mod) : ViewModelBase
     /// "unknown" is accurate and says nothing; "ModDB has no mod with this id" tells you it
     /// is a private build and there is nothing to fix.
     /// </summary>
-    public string Verdict => candidate is null ? "checking…" : candidate.Verdict switch
+    public string Verdict => candidate is null ? Lang.Get("importsrc-checking") : candidate.Verdict switch
     {
-        ImportVerdict.Ready => "will be imported",
-        ImportVerdict.Newest => "a different version",
-        ImportVerdict.Accepted => "not marked for this game",
-        ImportVerdict.Unreadable => "cannot be read",
-        ImportVerdict.Duplicate => "a second copy",
-        ImportVerdict.Disabled => "switched off",
-        ImportVerdict.Unknown => "not on ModDB",
-        ImportVerdict.Incompatible => "nothing for this game version",
-        _ => "could not be checked",
+        ImportVerdict.Ready => Lang.Get("importsrc-verdict-ready"),
+        ImportVerdict.Newest => Lang.Get("importsrc-verdict-newest"),
+        ImportVerdict.Accepted => Lang.Get("importsrc-verdict-accepted"),
+        ImportVerdict.Unreadable => Lang.Get("importsrc-verdict-unreadable"),
+        ImportVerdict.Duplicate => Lang.Get("importsrc-verdict-duplicate"),
+        ImportVerdict.Disabled => Lang.Get("importsrc-verdict-disabled"),
+        ImportVerdict.Unknown => Lang.Get("importsrc-verdict-unknown"),
+        ImportVerdict.Incompatible => Lang.Get("importsrc-verdict-incompatible"),
+        _ => Lang.Get("importsrc-verdict-unchecked"),
     };
 
     /// <summary>
@@ -158,7 +159,7 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         ModsDir = modsDir;
         GameVersion = playedOn ?? gameVersion;
 
-        PackName = "My mods";
+        PackName = Lang.Get("importsrc-default-name");
     }
 
     // ---- which of the three ----
@@ -204,7 +205,8 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         set { if (value) Source = ImportSource.Paste; }
     }
 
-    public string ImportLabel => Source == ImportSource.Install ? "Create pack" : "Import";
+    public string ImportLabel =>
+        Source == ImportSource.Install ? Lang.Get("importsrc-create") : Lang.Get("importsrc-import");
 
     // ---- a link, or pasted text ----
 
@@ -252,8 +254,8 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
     /// <summary>Where the mods are coming from and what they will be built for.</summary>
     public string InstallNote => PlayedOn is null
-        ? $"No Vintage Story install found, so the pack will target game {GameVersion}."
-        : $"Your Vintage Story install is {PlayedOn}, and the pack will be built for it.";
+        ? Lang.Get("importsrc-no-install", GameVersion)
+        : Lang.Get("importsrc-install-is", PlayedOn);
 
     [ObservableProperty] public partial string PackName { get; set; }
 
@@ -322,7 +324,7 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
             if (scan.Mods.Count == 0)
             {
-                Summary = $"No mod zips in {ModsDir}.";
+                Summary = Lang.Get("importsrc-no-zips", ModsDir);
                 return;
             }
 
@@ -333,14 +335,14 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
             var checking = Mods.ToDictionary(r => r.FileName, StringComparer.OrdinalIgnoreCase);
             var done = 0;
 
-            Summary = $"{scan.Mods.Count} mods in that folder — checking them against ModDB";
+            Summary = Lang.Get("importsrc-scanning", scan.Mods.Count);
 
             var plan = await _importer.PlanAsync(
                 scan, GameVersion, _disabled, PlayedOn,
                 new System.Progress<ImportCandidate>(c =>
                 {
                     if (checking.TryGetValue(c.Mod.FileName, out var row)) row.Decide(c);
-                    Progress = $"checked {++done} of {scan.Mods.Count}";
+                    Progress = Lang.Get("importsrc-checked", ++done, scan.Mods.Count);
                 }),
                 ct);
 
@@ -363,11 +365,12 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
             var taking = plan.Count(c => c.Included);
 
-            Summary = $"{taking} of {scan.Mods.Count} mods can go in a pack for game {GameVersion}"
+            // Two sentences rather than one built by concatenation: the tail inflects a
+            // noun and its verb together, and the head has to be able to precede it in
+            // whatever order a language puts them.
+            Summary = Lang.Get("importsrc-scanned", taking, scan.Mods.Count, GameVersion)
                       + (scan.Ignored.Count > 0
-                          ? $"; {scan.Ignored.Count} other file"
-                            + $"{(scan.Ignored.Count == 1 ? "" : "s")} in the folder "
-                            + $"{(scan.Ignored.Count == 1 ? "is" : "are")} not a zipped mod"
+                          ? Lang.Plural("importsrc-ignored", scan.Ignored.Count, scan.Ignored.Count)
                           : "");
 
             Scanned = taking > 0;
@@ -404,6 +407,6 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// </summary>
     public string? IdProblem =>
         Source == ImportSource.Install && string.IsNullOrWhiteSpace(PackName)
-            ? "Give the pack a name."
+            ? Lang.Get("importsrc-needs-name")
             : null;
 }
