@@ -32,8 +32,19 @@ public partial class LanguageSettingViewModel : ViewModelBase
     /// repository builds with InvariantGlobalization, so there is no ICU and every culture
     /// reports its own tag as its name. Each lang file names itself instead.
     /// </summary>
-    private static string NativeName(string code) =>
-        LanguageCatalog.Load(code, LanguageChoice.OverrideDir).Name;
+    private static string NativeName(string code)
+    {
+        var name = LanguageCatalog.Load(code, LanguageChoice.OverrideDir).Name;
+
+        // A catalog that named nothing answers with its own tag. That happens for a regional
+        // code Cairn does not ship a file for — Vintage Story is set to pt-pt and Cairn carries
+        // pt — where the strings come from the base language and the name should too, rather
+        // than the note reading "set to pt-pt".
+        if (name != code || !code.Contains('-')) return name;
+
+        var baseCode = code[..code.IndexOf('-')];
+        return LanguageCatalog.Load(baseCode, LanguageChoice.OverrideDir).Name;
+    }
 
     /// <summary>
     /// Applied as it is picked, like the interface scale: every label binds through

@@ -130,9 +130,14 @@ public sealed class LanguageCatalog
     /// </summary>
     private static string PluralForm(string code, int count)
     {
-        var language = code.Split('-')[0];
+        // The region can disagree with its own language, which is why this looks at the whole
+        // tag before the base. CLDR gives pt the Brazilian rule — zero takes the singular — and
+        // pt-PT the European one, where it does not. A player whose Vintage Story is set to
+        // pt-pt reads Portuguese out of pt.json through the fallback, and would otherwise get
+        // Brazilian agreement with European words.
+        if (code == "pt-pt") return count == 1 ? "one" : "other";
 
-        return language switch
+        return code.Split('-')[0] switch
         {
             "fr" or "pt" => count is 0 or 1 ? "one" : "other",
             _ => count == 1 ? "one" : "other",
