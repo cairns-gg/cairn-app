@@ -22,6 +22,14 @@
 
 <p><strong>If one of those settings shapes the world</strong>, the terrain you already have was generated against the mod's default and stays as it is; the pack's value applies to ground generated from here on. Whether that is worth starting a world over is a judgement only you can make, and on an established server it usually is not.</p>
 
+<h2>Updates notice a revision that only changes mod settings</h2>
+
+<p><strong>0.9.1.</strong> Publishing a revision that changed nothing but a mod setting &mdash; a normal thing to publish, and the whole point of the feature below &mdash; produced a revision nobody could take. Every follower checking for it said <strong>"already on the author's newest revision"</strong> and stopped there. <code>cairn-server update</code> said it and exited 0, so a server sat on revision 10 while its author published 11, with nothing anywhere reporting a problem.</p>
+
+<p>Cairn works out whether an update does anything by comparing the two manifests field by field, and mod settings were not among the fields it compared. Neither were keybinds nor the server address, once; both were fixed when found, and this is the same omission a third time. It now compares mod settings too, and a revision that changes them says <strong>"changes mod settings"</strong> alongside the mods it adds and removes, rather than arriving unannounced.</p>
+
+<p><strong>A second problem in the same place, which cost more.</strong> When an update <em>did</em> go through &mdash; because a mod changed as well &mdash; the pack's mod settings were dropped on the way. Taking any revision at all emptied them, so a follower who updated lost every value the pack carried and got no word that it had happened. Both halves are fixed together; there is nothing to do about a pack this happened to beyond taking the author's next revision, which now brings the settings with it.</p>
+
 <h2>A pack can carry the mod settings that make mods work together</h2>
 
 <p>Some mods only get along once you have edited one of their config files. Terrain Slabs needs Footprints named in a list before the two behave together; plenty of other pairs are the same. Until now the author of a pack worked that out once and then had to write "and go and edit this file" in the description &mdash; so everyone who installed the pack either did it by hand or, more often, did not, and ran a pack that was quietly worse than the author's copy of it.</p>

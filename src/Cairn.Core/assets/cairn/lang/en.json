@@ -641,6 +641,7 @@
   "packupdate-stops-joining": "stops joining a server",
   "packupdate-joins": "joins {0}",
   "packupdate-changes-keybinds": "changes keybinds",
+  "packupdate-changes-modconfig": "changes mod settings",
   "packupdate-no-mod-changes": "Revision {0} changes no mods.",
   "packupdate-summary": "Revision {0}: {1}.",
   "packupdate-check-describe": "revision {0} is available (you have {1})",

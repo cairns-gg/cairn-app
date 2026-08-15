@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Cairn.Core.Packs;
 
 /// <summary>What an update would do to one mod, and why.</summary>
@@ -222,16 +224,46 @@ public sealed class PackUpdatePlan
     }
 
     /// <summary>
+    /// Whether the author's mod config changes.
+    ///
+    /// The third field to arrive after this check was written and the third to be left out
+    /// of it, which is the pattern rather than the accident: the plan compares content, so
+    /// every field added to a manifest has to be added here too or a revision changing only
+    /// that field reports "already on the author's newest revision" and exits 0. A server
+    /// following a pack sat on revision 10 while the author published 11, with no way to
+    /// tell that anything was wrong.
+    ///
+    /// Compared per file with <see cref="JsonNode.DeepEquals"/>, since the value is a sparse
+    /// object and two of them differing anywhere is a change.
+    /// </summary>
+    public bool ModConfigChanges
+    {
+        get
+        {
+            var mine = _mine.ModConfig ?? [];
+            var theirs = _theirs.ModConfig ?? [];
+
+            if (mine.Count != theirs.Count) return true;
+
+            foreach (var (file, patch) in mine)
+                if (!theirs.TryGetValue(file, out var other) || !JsonNode.DeepEquals(patch, other))
+                    return true;
+
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Whether applying this would alter anything at all.
     ///
-    /// Includes the two fields above deliberately. They are taken from the author
+    /// Includes the three fields above deliberately. They are taken from the author
     /// unconditionally — there is no question to answer about them, which is why they are
     /// not in <see cref="Choices"/> — but "nothing to do" has to mean nothing, or the
     /// dialog that says so is how a change gets made.
     /// </summary>
     public bool AnyChange =>
         GameVersionChanges || TheirChanges.Any() || Choices.Any()
-        || ConnectChanges || KeybindsChange;
+        || ConnectChanges || KeybindsChange || ModConfigChanges;
 
     public string Summary()
     {
@@ -255,6 +287,7 @@ public sealed class PackUpdatePlan
         }
 
         if (KeybindsChange) parts.Add(Lang.Get("packupdate-changes-keybinds"));
+        if (ModConfigChanges) parts.Add(Lang.Get("packupdate-changes-modconfig"));
 
         return parts.Count == 0
             ? Lang.Get("packupdate-no-mod-changes", ToRevision)
@@ -383,6 +416,18 @@ public sealed class PackUpdatePlan
             GameVersion = _theirs.GameVersion,
             Connect = _theirs.Connect,
             Keybinds = MergeKeybinds(),
+
+            // Theirs, whole, and not merged the way keybinds are. The protection a merge
+            // would provide already exists one layer down: ModConfigFiles keeps its own
+            // record of what the pack last asked for, so a value somebody changed here stays
+            // theirs at apply time no matter what the manifest declares. What the manifest
+            // holds is the author's list of what the pack carries, and for a follower that
+            // is the author's to write.
+            //
+            // Named at all because it was not, and the comment above said what that costs
+            // before it happened a second time: an update silently emptied the field, so
+            // taking any revision at all threw away every mod setting the pack carried.
+            ModConfig = _theirs.ModConfig,
             Mods = [],
         };
 

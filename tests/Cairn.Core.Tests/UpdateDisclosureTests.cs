@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Cairn.Core.Packs;
 using Xunit;
 
@@ -15,13 +16,18 @@ namespace Cairn.Core.Tests;
 public class UpdateDisclosureTests
 {
     private static PackManifest Pack(string? connect = null,
-        Dictionary<string, string>? keybinds = null) => new()
+        Dictionary<string, string>? keybinds = null, string? modConfig = null) => new()
     {
         Id = "anego",
         GameVersion = "1.22.5",
         Mods = [new PackMod { ModId = "glassview" }],
         Connect = connect,
         Keybinds = keybinds,
+        ModConfig = modConfig is null ? null
+            : new Dictionary<string, JsonObject>
+            {
+                ["watersheds.yaml"] = (JsonNode.Parse(modConfig) as JsonObject)!,
+            },
     };
 
     private static PackUpdatePlan Between(PackManifest mine, PackManifest theirs) =>
@@ -66,6 +72,51 @@ public class UpdateDisclosureTests
     }
 
     /// <summary>
+    /// The same defect a third time. Mod config arrived after this check was written and was
+    /// left out of it, so an author who published a revision changing nothing but a mod
+    /// setting — which is a normal thing to publish — was told by every follower that they
+    /// were already on the newest revision. A server sat on revision 10 against an upstream
+    /// 11 and exited 0 about it.
+    /// </summary>
+    [Fact]
+    public void A_revision_that_only_changes_mod_config_is_a_change()
+    {
+        var plan = Between(
+            Pack(modConfig: """{ "flow_multiplier": 1 }"""),
+            Pack(modConfig: """{ "flow_multiplier": 4 }"""));
+
+        Assert.True(plan.ModConfigChanges);
+        Assert.True(plan.AnyChange);
+        Assert.Contains("changes mod settings", plan.Summary());
+    }
+
+    [Fact]
+    public void Mod_config_appearing_or_going_away_is_a_change_too()
+    {
+        Assert.True(Between(Pack(), Pack(modConfig: """{ "flow_multiplier": 4 }""")).ModConfigChanges);
+        Assert.True(Between(Pack(modConfig: """{ "flow_multiplier": 4 }"""), Pack()).ModConfigChanges);
+    }
+
+    /// <summary>
+    /// The half that actually loses data. Merge names every field it carries across, and a
+    /// field left out empties on every update — which the comment there already said, having
+    /// been written when the pack's hotkeys were lost that way. Mod config was added without
+    /// being named, so taking any revision at all threw away everything the pack carried.
+    /// </summary>
+    [Fact]
+    public void An_update_carries_the_authors_mod_config_across_rather_than_emptying_it()
+    {
+        var mine = Pack(modConfig: """{ "flow_multiplier": 1 }""");
+        var theirs = Pack(modConfig: """{ "flow_multiplier": 4 }""");
+        theirs.GameVersion = "1.22.6";
+
+        var merged = Between(mine, theirs).Merge();
+
+        Assert.NotNull(merged.ModConfig);
+        Assert.Equal(4, merged.ModConfig!["watersheds.yaml"]["flow_multiplier"]!.GetValue<int>());
+    }
+
+    /// <summary>
     /// And an identical revision is still nothing, or the dialog cries wolf on every check
     /// and stops being read — which is the failure this replaces, in the other direction.
     /// </summary>
@@ -74,12 +125,15 @@ public class UpdateDisclosureTests
     {
         var same = Between(
             Pack(connect: "play.example:42420",
-                 keybinds: new Dictionary<string, string> { ["walk"] = "W" }),
+                 keybinds: new Dictionary<string, string> { ["walk"] = "W" },
+                 modConfig: """{ "flow_multiplier": 1 }"""),
             Pack(connect: "play.example:42420",
-                 keybinds: new Dictionary<string, string> { ["walk"] = "W" }));
+                 keybinds: new Dictionary<string, string> { ["walk"] = "W" },
+                 modConfig: """{ "flow_multiplier": 1 }"""));
 
         Assert.False(same.ConnectChanges);
         Assert.False(same.KeybindsChange);
+        Assert.False(same.ModConfigChanges);
         Assert.False(same.AnyChange);
     }
 

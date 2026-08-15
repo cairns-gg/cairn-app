@@ -51,6 +51,27 @@ against the mod's default and stays as it is; the pack's value applies to ground
 from here on. Whether that is worth starting a world over is a judgement only you can make,
 and on an established server it usually is not.
 
+## Updates notice a revision that only changes mod settings
+
+**0.9.1.** Publishing a revision that changed nothing but a mod setting — a normal thing to
+publish, and the whole point of the feature above — produced a revision nobody could take.
+Every follower checking for it said **"already on the author's newest revision"** and stopped
+there. `cairn-server update` said it and exited 0, so a server sat on revision 10 while its
+author published 11, with nothing anywhere reporting a problem.
+
+Cairn works out whether an update does anything by comparing the two manifests field by
+field, and mod settings were not among the fields it compared. Neither were keybinds nor the
+server address, once; both were fixed when found, and this is the same omission a third time.
+It now compares mod settings too, and a revision that changes them says **"changes mod
+settings"** alongside the mods it adds and removes, rather than arriving unannounced.
+
+**A second problem in the same place, which cost more.** When an update *did* go through —
+because a mod changed as well — the pack's mod settings were dropped on the way. Taking any
+revision at all emptied them, so a follower who updated lost every value the pack carried and
+got no word that it had happened. Both halves are fixed together; there is nothing to do about
+a pack this happened to beyond taking the author's next revision, which now brings the
+settings with it.
+
 ## A pack can carry the mod settings that make mods work together
 
 Some mods only get along once you have edited one of their config files. Terrain Slabs needs
