@@ -825,10 +825,19 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             // Copied into the instance the pane is bound to rather than swapped for the
             // new one: every row, header and command already points at this object.
+            //
+            // Every field, for the reason PackUpdatePlan.Merge gives about its own list. One
+            // left out here is worse than one left out there: the merge reached disk, so this
+            // object is the only thing still holding the old value — and Persist writes it
+            // whole on the next ordinary edit. Reorder a mod after taking an update and the
+            // author's keybinds and mod settings were quietly replaced by the ones they had
+            // just been updated away from.
             Manifest.Name = merged.Name;
             Manifest.Description = merged.Description;
             Manifest.GameVersion = merged.GameVersion;
             Manifest.Connect = merged.Connect;
+            Manifest.Keybinds = merged.Keybinds;
+            Manifest.ModConfig = merged.ModConfig;
             Manifest.Mods.Clear();
             Manifest.Mods.AddRange(merged.Mods);
 
@@ -852,6 +861,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             ReloadShare();
             RefreshGameState();
             RefreshLock();
+
+            // Both tabs read the manifest that just changed under them, and a tick showing
+            // the pack's old answer is one somebody would correct — writing the old answer
+            // back as though they had chosen it. Hotkeys only if that tab has already paid
+            // for its scan; forced, because the rows are stale rather than absent.
+            LoadModConfig();
+            if (_hotkeysLoaded) _ = LoadHotkeysAsync(force: true);
+
             OnPropertyChanged(nameof(Title));
             _onChanged();
 

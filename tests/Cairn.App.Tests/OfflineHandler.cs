@@ -28,6 +28,21 @@ public sealed class OfflineHandler : HttpMessageHandler
             Content = new StringContent(body),
         };
 
+    /// <summary>
+    /// The same body every time, rather than one response handed out repeatedly.
+    ///
+    /// <see cref="Serve"/> keeps the response itself, so reading it consumes the content and
+    /// the second request for that URL gets an empty one. Fine where a test fetches once, and
+    /// a trap where it does not: selecting a followed pack checks for a revision, and
+    /// applying one fetches again on purpose — the second read came back empty and the update
+    /// reported the author unreachable, which looks exactly like a bug in the code under test.
+    /// </summary>
+    public Dictionary<string, (string Body, HttpStatusCode Status)> Bodies { get; } = [];
+
+    public void ServeAlways(string endingWith, string body,
+        HttpStatusCode status = HttpStatusCode.OK) =>
+        Bodies[endingWith] = (body, status);
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken ct)
     {
@@ -38,6 +53,13 @@ public sealed class OfflineHandler : HttpMessageHandler
         foreach (var (ending, reply) in Replies)
             if (url.EndsWith(ending, StringComparison.OrdinalIgnoreCase))
                 return Task.FromResult(reply);
+
+        foreach (var (ending, reply) in Bodies)
+            if (url.EndsWith(ending, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(new HttpResponseMessage(reply.Status)
+                {
+                    Content = new StringContent(reply.Body),
+                });
 
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
         {

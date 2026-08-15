@@ -3367,6 +3367,92 @@ public class MainWindowTests : IDisposable
         Assert.Null(vm.Detail.Error);
     }
 
+    /// <summary>
+    /// The pack document a follower takes, carrying the two fields that are not mods: the
+    /// author's keybinds and the mod settings the pack sets for people.
+    /// </summary>
+    private static string PublishedWithSettings(string modConfigValue, string keybind) =>
+        JsonSerializer.Serialize(new
+        {
+            formatVersion = 1,
+            pack = new
+            {
+                id = "anego",
+                name = "Anego",
+                gameVersion = "1.22.5",
+                mods = new[] { new { modid = "carryon" }, new { modid = "betterruins" } },
+                keybinds = new Dictionary<string, string> { ["carryon-pickup"] = keybind },
+                modConfig = new Dictionary<string, object>
+                {
+                    ["betterruins.yaml"] = new Dictionary<string, object>
+                    {
+                        ["megastructures_min_distance"] = modConfigValue,
+                    },
+                },
+            },
+            @lock = new { gameVersion = "1.22.5", mods = Array.Empty<object>() },
+            publishedBy = "dizzyd",
+            canonicalUrl = "https://cairns.gg/dizzyd/anego",
+            revision = 4,
+        });
+
+    /// <summary>
+    /// Taking an update and then touching anything at all.
+    ///
+    /// The merge reaches disk correctly; the risk is entirely in the copy back into the
+    /// instance the pane is bound to. That list named five of the manifest's fields and left
+    /// out keybinds and mod config, so the view model went on holding the pre-update values
+    /// — and Persist writes the manifest whole on the next ordinary edit. Reordering a mod
+    /// after an update wrote the author's old answers back over the ones just taken, with
+    /// nothing said and nothing to see until the next launch applied them.
+    ///
+    /// Driven end to end rather than by inspecting the copy, because what makes it a bug is
+    /// the save that happens later: asserting on the field would pass against a view model
+    /// that never persisted anything.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task An_update_is_not_undone_by_the_next_edit_to_the_pack()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+        store.SaveLink("anego", new PackLink
+        {
+            Role = PackRole.Follower,
+            Following = true,
+            Url = "https://cairns.gg/dizzyd/anego",
+            Revision = 1,
+        });
+
+        var http = new OfflineHandler();
+        http.ServeAlways("/dizzyd/anego.json", PublishedWithSettings("2500", "K"));
+
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.ConfirmPackUpdate = _ => Task.FromResult(true);
+        await vm.Detail.ApplyPackUpdateCommand.ExecuteAsync(null);
+
+        // The author's revision landed, both on disk and in the object the pane holds.
+        Assert.Null(vm.Detail.Error);
+        Assert.Equal("2500", store.Load("anego").ModConfig!["betterruins.yaml"]
+            ["megastructures_min_distance"]!.GetValue<string>());
+        Assert.Equal("K", store.Load("anego").Keybinds!["carryon-pickup"]);
+
+        // Now any ordinary edit, which saves the manifest whole. The description is the
+        // smallest one that touches neither field being asserted on.
+        vm.Detail.EditDescription = "mine";
+        vm.Detail.SaveSettingsCommand.Execute(null);
+
+        var after = store.Load("anego");
+
+        Assert.Equal("mine", after.Description);
+        Assert.NotNull(after.ModConfig);
+        Assert.Equal("2500",
+            after.ModConfig!["betterruins.yaml"]["megastructures_min_distance"]!.GetValue<string>());
+        Assert.Equal("K", after.Keybinds!["carryon-pickup"]);
+    }
+
     [AvaloniaFact]
     public async Task Copy_diagnostics_puts_the_report_on_the_clipboard()
     {

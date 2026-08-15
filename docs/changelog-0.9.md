@@ -72,6 +72,14 @@ got no word that it had happened. Both halves are fixed together; there is nothi
 a pack this happened to beyond taking the author's next revision, which now brings the
 settings with it.
 
+**And in the launcher, an update could be undone by the next thing you did.** Taking a
+revision wrote it to disk correctly, but the pack on screen went on holding the author's
+*previous* keybinds and mod settings — so the next ordinary edit, renaming the pack or
+changing its description, saved those old values back over the ones just taken. Nothing said
+so, and the pack looked right until the next launch applied the wrong settings. The window now
+takes the whole revision, and the Hotkeys and Mod config tabs refresh with it rather than
+showing answers that are one revision out of date.
+
 ## A pack can carry the mod settings that make mods work together
 
 Some mods only get along once you have edited one of their config files. Terrain Slabs needs
