@@ -217,6 +217,61 @@ public class ModConfigYamlTests : IDisposable
         Assert.False(File.Exists(Config("seafarer.yaml")));
     }
 
+    /// <summary>
+    /// The other half of the wait, and the half that was missing: the launch the refusal
+    /// promises. Waiting one session is only a cost if the session after it collects.
+    ///
+    /// It did not. The refusal recorded the patch anyway, so the file ConfigLib wrote in
+    /// between — holding nothing but the mod's own defaults — came back as a value differing
+    /// from what the pack last asked for, which is the definition of an edit the player owns.
+    /// Kept, on that launch and on every launch after it. A dedicated server following a pack
+    /// simply never got the author's answer for any ConfigLib mod, and said "left alone" about
+    /// settings nobody had touched.
+    /// </summary>
+    [Fact]
+    public void The_launch_after_the_wait_is_the_one_that_collects()
+    {
+        var declared = Declare("seafarer.yaml", """{ "drying-rain-rot-multiplier": 5 }""");
+
+        Assert.Equal(ModConfigOutcome.Refused, Assert.Single(Apply(declared)).Outcome);
+
+        // The session in between: the mod loads for the first time and ConfigLib writes the
+        // file, with the mod's defaults in it and no idea the pack ever asked for anything.
+        WriteConfig("seafarer.yaml", Seafarer);
+
+        var applied = Assert.Single(Apply(declared));
+
+        Assert.Equal(ModConfigOutcome.Applied, applied.Outcome);
+        Assert.Contains("drying-rain-rot-multiplier: 5\n", File.ReadAllText(Config("seafarer.yaml")));
+    }
+
+    /// <summary>
+    /// Waiting is not the pack giving the setting up. Nothing is recorded for a file that is
+    /// not there, and the report of what the pack has stopped asking for reads the same
+    /// record — so the gap must not be mistaken for a key dropped from the manifest and
+    /// announced as released to somebody who is still waiting for it.
+    /// </summary>
+    [Fact]
+    public void A_config_file_deleted_between_launches_is_waited_for_rather_than_released()
+    {
+        var declared = Declare("seafarer.yaml", """{ "drying-rain-rot-multiplier": 5 }""");
+
+        WriteConfig("seafarer.yaml", Seafarer);
+        Assert.Equal(ModConfigOutcome.Applied, Assert.Single(Apply(declared)).Outcome);
+
+        // The mod is removed from the pack's Mods folder, or the admin clears ModConfig out.
+        File.Delete(Config("seafarer.yaml"));
+
+        var refused = Assert.Single(Apply(declared));
+        Assert.Equal(ModConfigOutcome.Refused, refused.Outcome);
+        Assert.Equal("modconfig-why-not-yet", refused.Detail!.Key);
+
+        // And the wait still collects, rather than the file coming back to a record that
+        // says the pack already had its say about these keys.
+        WriteConfig("seafarer.yaml", Seafarer);
+        Assert.Equal(ModConfigOutcome.Applied, Assert.Single(Apply(declared)).Outcome);
+    }
+
     // ---- and everything else behaves as it does for JSON ----
 
     /// <summary>

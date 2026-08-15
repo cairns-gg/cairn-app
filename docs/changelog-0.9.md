@@ -1,7 +1,38 @@
-# What's new in Cairn 0.9.0
+# What's new in Cairn 0.9.1
 
 Everything that changed since the 0.8 series, in one place. Nothing here needs any action
 from you unless it says so.
+
+## ConfigLib settings a pack carries now actually arrive
+
+**0.9.1.** A pack can carry mod settings. For mods that keep theirs in a ConfigLib `.yaml`,
+0.9.0 said the value would arrive on your second launch, because ConfigLib writes that file
+itself the first time the mod runs. It did not arrive on the second launch either. It never
+arrived.
+
+Cairn waited for the file, correctly — and then wrote down that it had already asked for
+those values. So when the file turned up, holding nothing but the mod's own defaults, it read
+as settings you had deliberately changed, and Cairn left them alone out of politeness. Every
+launch, for ever, reporting "left alone — it has been changed here" about a setting nobody
+had ever touched.
+
+It hit ConfigLib `.yaml` mods only; a pack's values for ordinary `.json` config files landed
+on the first launch as they always did. It hit `cairn-server` hardest, where a good half of
+those settings are the server-side rules the pack exists to set.
+
+**If you ran 0.9.0 and a pack's ConfigLib settings never took**, upgrading is not quite
+enough on its own — the note Cairn wrote to itself is still there, and it still says you own
+those values. Delete this file and the next launch sets things right:
+
+```
+<your pack>/data/cairn-modconfig.json
+```
+
+On a server that is `~/.cairn/packs/<pack>/data/cairn-modconfig.json`. It is safe to delete:
+it holds only Cairn's record of what the pack last asked for, and losing it means the next
+launch treats the pack's values as a first word again. Settings you genuinely changed
+yourself and want to keep, change back afterwards — or edit the file and remove just the
+entry for the mod that was stuck.
 
 ## A pack can carry the mod settings that make mods work together
 
