@@ -113,6 +113,7 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 <ul>
   <li><strong>Your settings stop overwriting each other.</strong> Cairn kept its preferences in a file that was rewritten whole by whichever setting you had just changed, so a second setting would have vanished the first time you dragged the interface-size slider. That is why there was never more than one. It now keeps every setting it knows about, and every setting it does <em>not</em> &mdash; so a preference written by a newer Cairn survives being opened by an older one.</li>
   <li><strong>A few sentences that were wrong in English got fixed</strong>, found by writing them out properly for translation: "1 thing you changed differ from the author's" now says <em>differs</em>, and the dialog that asks about a mod with no release for your game version no longer works out which version it means by taking its own sentence apart.</li>
+  <li><strong><code>cairn-server</code> can say which build it is.</strong> It could not, by any spelling &mdash; so the one question every report about a server starts with had no answer on the box itself. <code>cairn-server version</code> answers it, <code>--version</code> and <code>-v</code> do the same, and <code>run</code> prints it as its first line so <code>journalctl</code> has it for a server nobody watched start.</li>
 </ul>
 
 <h2>Upgrading</h2>

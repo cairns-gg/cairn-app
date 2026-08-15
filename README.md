@@ -513,7 +513,11 @@ cairn-server update [<id>]                             take the author's newer r
 cairn-server command [<id>] "/whitelist add dizzy"     talk to a running server
 cairn-server unit [<id>] [--user] [--write]            systemd unit for it
 cairn-server list                                      what is on this machine
+cairn-server version                                   which build this is
 ```
+
+`run` prints that version as its first line too, so the answer is in `journalctl` for a
+server nobody watched start.
 
 It is a **separate program from `cairn-cli`**, which is a development tool with two dozen
 commands and is deliberately not shipped. Both are thin: what a sync installs, which install

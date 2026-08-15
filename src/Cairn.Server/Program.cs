@@ -51,6 +51,7 @@ public static class Program
                 "command" => await Command(packs, args),
                 "unit" => Unit(packs, args),
                 "list" => List(packs),
+                "version" or "--version" or "-v" => Version(),
                 _ => Fail($"unknown command '{args[0]}' — try: cairn-server help"),
             };
         }
@@ -64,8 +65,8 @@ public static class Program
 
     private static void Usage()
     {
-        Console.WriteLine("""
-            cairn-server - runs a Vintage Story server on a Cairn pack
+        Console.WriteLine($"""
+            cairn-server {Describe()} - runs a Vintage Story server on a Cairn pack
 
               cairn-server install <url|file> [--id <id>] [--follow|--fork]
                                                             follow a pack and install its server
@@ -74,10 +75,36 @@ public static class Program
               cairn-server command [<id>] <text>            send a console command to a running server
               cairn-server unit [<id>] [--user] [--write]   systemd unit for it
               cairn-server list                             packs on this machine
+              cairn-server version                          which build this is
 
             With one pack installed, <id> can be left out.
             """);
     }
+
+    /// <summary>
+    /// Which build this is, on its own — <c>version</c>, <c>--version</c> and <c>-v</c>, because
+    /// somebody checking a binary on a box they have just sshed into will type one of the three
+    /// and should not have to find out which.
+    /// </summary>
+    private static int Version()
+    {
+        Console.WriteLine($"cairn-server {Describe()}");
+        return 0;
+    }
+
+    /// <summary>
+    /// The version, with the commit where a build was stamped with one.
+    ///
+    /// The same shape <see cref="Diagnostics"/> prints, and for the same reason: a version
+    /// identifies a release to a person, and the commit identifies the source to somebody
+    /// checking that the binary on the box matches the repository they are reading. An
+    /// unstamped build says <c>dev</c> rather than inventing a number — see
+    /// <see cref="CairnVersion"/>.
+    /// </summary>
+    private static string Describe() =>
+        CairnVersion.Commit is { } commit
+            ? $"{CairnVersion.Current} ({commit})"
+            : CairnVersion.Current;
 
     private static int Fail(string message)
     {
@@ -301,6 +328,12 @@ public static class Program
     private static async Task<int> Run(
         PackStore packs, GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
     {
+        // First line of the run, so journald keeps it. This is a service nobody watches
+        // start, and every question asked about one afterwards — why did it not take the
+        // pack's config, why did it not update — begins with which build was running, which
+        // otherwise nothing anywhere records.
+        Console.WriteLine($"cairn-server {Describe()}");
+
         var id = Resolve(packs, args);
         var socket = CairnPaths.ConsoleSocket(id);
 

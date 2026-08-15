@@ -221,6 +221,10 @@ there worth keeping is the small `home` file, which is what points Cairn at the 
   properly for translation: "1 thing you changed differ from the author's" now says
   *differs*, and the dialog that asks about a mod with no release for your game version no
   longer works out which version it means by taking its own sentence apart.
+- **`cairn-server` can say which build it is.** It could not, by any spelling — so the one
+  question every report about a server starts with had no answer on the box itself.
+  `cairn-server version` answers it, `--version` and `-v` do the same, and `run` prints it
+  as its first line so `journalctl` has it for a server nobody watched start.
 
 ## Upgrading
 
