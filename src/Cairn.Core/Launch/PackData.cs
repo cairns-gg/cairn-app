@@ -157,7 +157,8 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
             // Runs whether or not the manifest declares any, because the record of what the
             // pack last asked for has to be brought up to date when the answer is "nothing
             // any more" — that is what stops a removed value being reported forever.
-            foreach (var change in ModConfigFiles.Apply(store.DataDir(id), manifest.ModConfig))
+            foreach (var change in ModConfigFiles.Apply(
+                         store.DataDir(id), manifest.ModConfig, store.ModsDir(id)))
                 config?.Add(change);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException

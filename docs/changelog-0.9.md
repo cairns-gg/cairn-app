@@ -20,6 +20,17 @@ It hit ConfigLib `.yaml` mods only; a pack's values for ordinary `.json` config 
 on the first launch as they always did. It hit `cairn-server` hardest, where a good half of
 those settings are the server-side rules the pack exists to set.
 
+**And they no longer wait at all.** Rather than fixing the second launch, 0.9.1 writes those
+files before the first one, from the settings description the mod ships inside its own zip —
+so a pack's values are in place before anything reads them. That matters most for the settings
+that shape the world: how far apart ruins stand, how often a structure spawns. Those are read
+while terrain is being generated, and terrain is not built again when the number changes
+later. Under 0.9.0 a server's first world was generated against the mod's defaults no matter
+what the pack said, and the only fix was to delete the world and start again.
+
+Where a mod does not describe its settings well enough to write the file safely, Cairn waits
+for ConfigLib as before and says so. It never writes over a file that already exists.
+
 **If you ran 0.9.0 and a pack's ConfigLib settings never took**, upgrading is not quite
 enough on its own — the note Cairn wrote to itself is still there, and it still says you own
 those values. Delete this file and the next launch sets things right:
@@ -32,7 +43,13 @@ On a server that is `~/.cairn/packs/<pack>/data/cairn-modconfig.json`. It is saf
 it holds only Cairn's record of what the pack last asked for, and losing it means the next
 launch treats the pack's values as a first word again. Settings you genuinely changed
 yourself and want to keep, change back afterwards — or edit the file and remove just the
-entry for the mod that was stuck.
+entry for the mod that was stuck. Writing the file ahead of time does not help here, because
+by now it exists and Cairn will not write over one.
+
+**If one of those settings shapes the world**, the terrain you already have was generated
+against the mod's default and stays as it is; the pack's value applies to ground generated
+from here on. Whether that is worth starting a world over is a judgement only you can make,
+and on an established server it usually is not.
 
 ## A pack can carry the mod settings that make mods work together
 
@@ -83,9 +100,10 @@ without editing anything by hand.
 **Mods that use ConfigLib are covered**, both kinds — the ones where ConfigLib is just an
 in-game editor for the mod's own config file, and the ones where it keeps the settings itself
 in a `.yaml`. Anything you change through ConfigLib's screen afterwards stays yours, as
-always. One wrinkle for the second kind: ConfigLib writes that file the first time the mod
-runs, so a pack's value for it arrives on your **second** launch rather than your first.
-Cairn says so when it happens.
+always. Those `.yaml` files do not exist until the mod has run once, so **0.9.1 writes them
+ahead of time** from the mod's own settings description, and the pack's values are in place
+for your first launch. Where a mod does not describe itself well enough to do that safely,
+Cairn waits for it and says so, and the value arrives on the launch after.
 
 A few files still cannot be carried, and Cairn says so instead of pretending: `.ini` files,
 files whose contents are a list rather than a set of settings, and files containing `//`

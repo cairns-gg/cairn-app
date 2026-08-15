@@ -165,8 +165,13 @@ public static class ModConfigFiles
     /// <see cref="Packs.PackManifest.ModConfig"/>: file path relative to <c>ModConfig/</c>,
     /// against a sparse object holding only the values the pack asserts.
     /// </param>
+    /// <param name="modsDir">
+    /// The pack's <c>Mods/</c>, where given. Only ConfigLib's YAML needs it, and only on the
+    /// launch before the mod that owns the file has ever run — see <see cref="Seed"/>. Omitted,
+    /// an absent YAML file is waited for exactly as it was before seeding existed.
+    /// </param>
     public static IReadOnlyList<ModConfigChange> Apply(
-        string dataPath, IReadOnlyDictionary<string, JsonObject>? declared)
+        string dataPath, IReadOnlyDictionary<string, JsonObject>? declared, string? modsDir = null)
     {
         var record = LoadRecord(dataPath);
         if ((declared is null || declared.Count == 0) && record.Count == 0) return [];
@@ -192,6 +197,10 @@ public static class ModConfigFiles
 
             var full = Path.Combine(DirectoryIn(dataPath), Native(file));
             var yaml = IsYaml(file);
+
+            // Before the read, so what follows is the ordinary path over a file that exists.
+            if (yaml && modsDir is not null) Seed(full, file, modsDir);
+
             var (root, text, rewritable, why) = Read(full);
 
             if (root is null || !rewritable)
@@ -252,6 +261,41 @@ public static class ModConfigFiles
 
         SaveRecord(dataPath, next);
         return changes;
+    }
+
+    /// <summary>
+    /// Writes the file ConfigLib has not written yet, from the mod's own schema, so a pack's
+    /// value for it lands on the first launch instead of the second.
+    ///
+    /// The second launch is not a small cost. These settings are ordinary gameplay rules, and
+    /// several of them — how far apart ruins stand, how often a structure spawns — are read
+    /// during worldgen. A launch that runs on the mod's defaults does not merely apply the
+    /// wrong number for a session: it generates terrain with it, and terrain is not revisited
+    /// when the number changes. On a dedicated server that means a world thrown away and
+    /// regenerated, by an administrator whose whole reason for following the pack was to get
+    /// the author's answers.
+    ///
+    /// Everything about it is the mod's own word, taken from the zip beside the file:
+    /// <see cref="ConfigLibPatches"/> is null unless it is certain, and this does nothing
+    /// unless it is not null. So the worst case is the behaviour that was there before —
+    /// wait, and let ConfigLib write its own file.
+    ///
+    /// Never over an existing file. A file on disk is ConfigLib's or the player's, and this
+    /// has nothing to add to either.
+    /// </summary>
+    private static void Seed(string full, string file, string modsDir)
+    {
+        if (File.Exists(full)) return;
+
+        // ConfigLib names the file after the asset domain, which is what the schema is
+        // looked up by. Anything else in ModConfig/ that happens to end in .yaml belongs to
+        // something we know nothing about.
+        var domain = Path.GetFileNameWithoutExtension(file);
+        if (domain.Length == 0 || file.Contains('/')) return;
+
+        if (ConfigLibPatches.For(modsDir, domain) is not { } schema) return;
+
+        Save(full, ModConfigYaml.Seed(schema));
     }
 
     /// <summary>
@@ -545,11 +589,11 @@ public static class ModConfigFiles
         {
             if (!File.Exists(path))
                 return yaml
-                    // ConfigLib writes the whole file itself the first time the mod loads,
-                    // and the version line it puts at the top decides whether the file is
-                    // honoured at all — get that wrong and it overwrites every setting with
-                    // its defaults. So this waits for the file rather than inventing one, and
-                    // the cost is exactly one session: it is there from the next launch.
+                    // Reached only when the file could not be seeded — no mods directory to
+                    // look in, or no schema in it to be sure of. See Seed: ConfigLib's version
+                    // line decides whether the file is honoured at all, and getting it wrong
+                    // overwrites every setting with the mod's defaults, so a file that cannot
+                    // be written from the mod's own word is waited for rather than invented.
                     ? (null, null, false, new Message("modconfig-why-not-yet"))
 
                     // Absent JSON is the ordinary first launch, and the whole file is the

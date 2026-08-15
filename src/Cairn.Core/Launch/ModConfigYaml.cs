@@ -126,6 +126,38 @@ internal static class ModConfigYaml
     /// <summary>Whether the file names this setting, which is whether it may be written.</summary>
     public static bool Has(JsonObject values, string key) => Lookup(values, key) is not null;
 
+    /// <summary>
+    /// The file ConfigLib would have written, from the schema in the mod's own patch file.
+    ///
+    /// Deliberately the mod's <em>defaults</em> and not the pack's values, even though the
+    /// pack's are what we are here for. Written this way the seeded file is the same starting
+    /// point a launch that waited for ConfigLib would have had, and everything downstream —
+    /// which values get applied, what is reported, what the record says somebody owns — is
+    /// decided by the one merge that decides it for every other file. Writing the pack's
+    /// values directly would make the merge find nothing to do and say nothing, and a launch
+    /// that silently agreed with itself is how the last bug in here stayed invisible.
+    ///
+    /// None of ConfigLib's presentation: no section banners, no descriptions, no
+    /// <c>(default: …)</c> notes. Those come from the mod's lang assets and are regenerated
+    /// wholesale the first time it saves. A partial file is honoured as long as the version
+    /// matches — <c>if (!values.ContainsKey(setting.YamlCode)) continue;</c> — so the two
+    /// lines of provenance are worth more here than a reproduction that would be replaced
+    /// within the session anyway.
+    /// </summary>
+    public static string Seed(ConfigLibSchema schema)
+    {
+        var text = new StringBuilder();
+
+        text.Append("# Written by Cairn from this mod's own configlib-patches.json, before the\n");
+        text.Append("# mod first ran. ConfigLib rewrites it in full the first time it loads.\n");
+        text.Append($"{VersionKey}: {schema.Version}\n");
+
+        foreach (var (key, value) in schema.Defaults)
+            text.Append($"{key}: {Format(value)}\n");
+
+        return text.ToString();
+    }
+
     private static JsonNode? Lookup(IReadOnlyDictionary<string, JsonNode?> source, string key)
     {
         foreach (var (existing, value) in source)

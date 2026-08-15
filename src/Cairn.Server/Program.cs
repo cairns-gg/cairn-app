@@ -328,7 +328,8 @@ public static class Program
         // they changed because the pack spent its life on a server.
         ModConfigFiles.Capture(packs.DataDir(id));
 
-        foreach (var change in ModConfigFiles.Apply(packs.DataDir(id), packs.Load(id).ModConfig))
+        foreach (var change in ModConfigFiles.Apply(
+                     packs.DataDir(id), packs.Load(id).ModConfig, packs.ModsDir(id)))
             Console.WriteLine($"  {change.Describe()}");
 
         var options = new LaunchOptions
