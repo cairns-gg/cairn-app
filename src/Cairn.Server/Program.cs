@@ -320,6 +320,14 @@ public static class Program
         // login and applies hotkeys into clientsettings.json. There is no keyboard here and
         // no session to carry, and writing a client settings file next to a dedicated server
         // would be a file that nothing ever reads.
+        //
+        // Before Apply, so the pack's own values are not recorded as the mod's. Nothing on a
+        // server reads the baseline today — it is the Mod config tab's, and this program has
+        // no tab — but a pack directory is the same thing on both ends, and an admin who
+        // copies one to a desktop to publish it should not find the tab unable to say what
+        // they changed because the pack spent its life on a server.
+        ModConfigFiles.Capture(packs.DataDir(id));
+
         foreach (var change in ModConfigFiles.Apply(packs.DataDir(id), packs.Load(id).ModConfig))
             Console.WriteLine($"  {change.Describe()}");
 
@@ -367,6 +375,11 @@ public static class Program
         await process.WaitForExitAsync();
         await stopping.CancelAsync();
         try { await console; } catch (OperationCanceledException) { }
+
+        // Here as well as on the way in, and for the same reason PackData.AfterExit does it:
+        // the first run of a pack is exactly the one where the mods' config files do not
+        // exist yet when it starts, so this is the first moment they can be seen at all.
+        ModConfigFiles.Capture(packs.DataDir(id));
 
         Console.WriteLine($"server exited with {process.ExitCode}");
         return process.ExitCode;
