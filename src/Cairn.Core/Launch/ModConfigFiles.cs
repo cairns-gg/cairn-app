@@ -503,6 +503,22 @@ public static class ModConfigFiles
     /// <summary>
     /// Whether this is one of ConfigLib's own files, which are edited as text rather than
     /// rebuilt from a tree. See <see cref="ModConfigYaml"/>.
+    ///
+    /// <c>.yaml</c> and deliberately not <c>.yml</c>, which reads like an oversight and has
+    /// been raised as one. ConfigLib writes the only YAML this understands, and it never
+    /// writes that spelling: its assembly (1.12.0) holds exactly two config-file extensions,
+    /// <c>.yaml</c> and <c>.json</c>, and no <c>.yml</c> string at all. Measured against a
+    /// real 78-mod pack on 2026-08-14: thirteen mods ship <c>configlib-patches.json</c>,
+    /// seven of them let ConfigLib generate the file and every one came out
+    /// <c>&lt;domain&gt;.yaml</c>; the four declaring a <c>file</c> of their own all named a
+    /// <c>.json</c>.
+    ///
+    /// So this is not a spelling to be generous about. It decides *how a file is edited* —
+    /// YAML by replacing scalars line by line and never creating the file, JSON by merging a
+    /// tree — and the one way a <c>.yml</c> could turn up in <c>ModConfig/</c> is a mod
+    /// declaring <c>"file": "x.yml"</c>, which takes ConfigLib's JSON branch and writes JSON
+    /// into it. Answering true here for that file would hand a JSON document to the YAML
+    /// editor. If <c>.yml</c> is ever accepted, it belongs on the JSON side.
     /// </summary>
     internal static bool IsYaml(string file) =>
         file.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase);
