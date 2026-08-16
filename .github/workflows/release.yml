@@ -289,6 +289,11 @@ jobs:
         with:
           name: macos
           path: dist/*
+          # A handoff to the publish jobs in this same run, not a copy of the release —
+          # what ships lives in the GitHub release and in R2. A week is enough to re-run a
+          # failed publish or pull a binary to debug one; the 90-day default kept every
+          # build of every tag and was most of the account's Actions storage.
+          retention-days: 7
 
   # Windows and Linux cross-publish from one runner: these are single-file binaries with
   # no platform tooling behind them, unlike the macOS bundle.
@@ -342,6 +347,7 @@ jobs:
         with:
           name: cross
           path: dist/*
+          retention-days: 7
 
   # The manifest is made and signed here, in a job that holds the signing key and no
   # credential that can write to object storage — which is the entire point of it existing
@@ -545,6 +551,7 @@ jobs:
             dist/manifest.json.minisig
             dist/SHA256SUMS
             dist/*.intoto.jsonl
+          retention-days: 7
 
   # Does the R2 credential actually work — asked before a release depends on the answer.
   #
