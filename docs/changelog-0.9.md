@@ -1,7 +1,42 @@
-# What's new in Cairn 0.9.1
+# What's new in Cairn 0.9.2
 
 Everything that changed since the 0.8 series, in one place. Nothing here needs any action
 from you unless it says so.
+
+## A mod your mods need is no longer refused for want of a tag
+
+**0.9.2.** Mods can require other mods, and Cairn fetches those for you. If ModDB carried no
+release of one of them marked for the version your pack is on, Cairn refused it — installing
+the mod that wanted it, leaving out the thing it wanted, and putting the reason in the Log
+tab. The game then disabled the mod on startup over a dependency that never arrived, and
+there was nothing you could do about it from the pack: a mod that is only there because
+something else requires it has no row you can accept anything on.
+
+Cairn now installs it, on the word of the mod that asked for it. That is the ordinary case
+for a bridge or a compatibility patch — Floral Zones' 1.22 bridge is built for 1.22 and
+requires seven region mods whose newest releases are marked for 1.21, which is the entire
+reason the bridge exists.
+
+It is not done quietly. The mod's row says **marked for 1.21.5, 1.21.6** beside its version,
+for as long as that is true, and the log says which of your mods asked for it on every
+launch rather than only the first:
+
+```
+floralzonesmediterraneanregion 1.0.19 is marked for 1.21.5, 1.21.6, not 1.22.5
+ — installed because floralzones122bridge requires it, and it may misbehave
+```
+
+**Mods you add yourself are unchanged.** One with nothing marked for your game version still
+asks before it goes in, and still records that you were the one who said so. What is new for
+those is the row: a mod you accepted months ago now says what it is marked for whenever you
+open the pack, instead of only in the log of the launch that installed it.
+
+**And removing a mod now takes what it brought with it.** Mods pulled in by another mod have
+never had a Remove button of their own — the mod that wants them would only bring them back
+— so removing the one that wanted them is how they go. That worked on the next Play and not
+before it, which left a pack sitting there with seven mods requiring nothing and no way to
+shift any of them. The launcher now settles the pack as soon as you remove something, the
+same way it already did when you add something.
 
 ## ConfigLib settings a pack carries now actually arrive
 
@@ -241,6 +276,11 @@ there worth keeping is the small `home` file, which is what points Cairn at the 
 
 ## Smaller things
 
+- **A mod row too long for the window wraps instead of running off it.** **0.9.2.** The
+  name, the id, the version and any notes about a mod all sat on one line that could not
+  shrink, so a mod with a long name — required by another mod, with something to say about
+  what it is marked for — quietly lost whatever came last off the right-hand edge. The row
+  now grows to a second line, and only when it has to.
 - **Your settings stop overwriting each other.** Cairn kept its preferences in a file that
   was rewritten whole by whichever setting you had just changed, so a second setting would
   have vanished the first time you dragged the interface-size slider. That is why there was
