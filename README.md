@@ -365,8 +365,13 @@ Four things follow from that shape:
   the next sync installs from the lock without resolving anything and would report an
   untested mod as a clean, matched one.
 
-It applies only to mods a manifest names. A dependency discovered inside a zip is nobody's
-testimony, so it fails as it always did.
+**A dependency is accepted by the mod that requires it**, since it has no manifest entry to
+hold an acceptance and no row to offer one — refusing it produced a pack nobody could argue
+with, holding the mod that asked and not the mod it asked for. Floral Zones' 1.22 bridge is
+marked for 1.22 and requires seven region mods last marked for 1.21, which is what a bridge
+mod is. The line names who wanted it: *"1.0.19 is marked for 1.21.5, 1.21.6, not 1.22.5 —
+installed because floralzones122bridge requires it, and it may misbehave"*. See
+[docs/dependencies.md](docs/dependencies.md).
 
 ## Version strings: write bare versions
 

@@ -108,8 +108,36 @@ the current format outright).
 - **A version minimum that cannot be met** — the newest release for this game version is
   older than what the dependent asks for. Warn rather than fail: the game itself only
   checks at load, and a pack that installs with a warning beats one that refuses.
+- **A dependency with no release marked for this game version** — installed anyway, on the
+  word of the mod that requires it, and warned about on every sync naming who wanted it.
+  See below.
 - **A mod that fails to download** — its dependencies are not discovered, and should not
   be guessed at. It is already a failed step.
+
+## Who accepts a mod ModDB has not marked
+
+A mod the manifest names carries an `acceptedFor` when somebody said they ran it against a
+version it publishes nothing for; without one it fails, loudly, and the launcher's *Add
+anyway* and `cairn-cli add --accept-unmarked` are how that testimony gets written down.
+
+A dependency has no manifest entry, so it can hold no acceptance — and no control anywhere
+could write one, since dependency rows carry no actions for the reasons above. Applying the
+named-mod rule to it therefore had exactly one outcome: refusal, with no argument available.
+
+So a dependency is accepted by **the mod that requires it**. Floral Zones' 1.22 bridge is
+marked for 1.22 and requires seven region mods last marked for 1.21 — a mismatch that is the
+entire purpose of a bridge mod. Refusing them installed the bridge and nothing it bridges,
+which the game then disables on startup over the missing dependency, so the refusal bought
+no safety; it only moved where the pack broke and took away the lever. The requirer is also
+the better witness: its author shipped a release for this game version that names these mods
+by id, which is a stronger statement about the pairing than a user ticking a box.
+
+It is not silent. The release is recorded in the lock as `markedFor`, the sync warns every
+run — *"installed because floralzones122bridge requires it, and it may misbehave"* — and the
+row says `marked for 1.21.5, 1.21.6` in the pack's mod list for as long as it is true.
+
+A mod the manifest names is unaffected, including one that is also required by something
+else: it is in the pack because you asked for it, so it is yours to accept.
 
 ## What cannot be known in advance
 

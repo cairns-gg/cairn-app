@@ -335,9 +335,10 @@ public sealed class ModDbClient(HttpClient http)
     /// Returns null when the mod has no release for this game version at all.
     /// </summary>
     /// <param name="acceptUnmarked">
-    /// Whether to consider releases marked for no version like this pack's. Off unless the
-    /// manifest carries an acceptance for this mod: it is somebody's testimony that they
-    /// ran it, not a thing to infer.
+    /// Whether to consider releases marked for no version like this pack's. Off unless
+    /// somebody has vouched for this mod — the manifest carrying an acceptance, or another
+    /// mod requiring it by id. Testimony, in other words, rather than a thing to infer;
+    /// <c>PackSyncer.PendingMod.AcceptsUnmarked</c> is where it is decided.
     /// </param>
     public async Task<ResolvedRelease?> ResolveAsync(
         string modId, string gameVersion, string? pinnedVersion = null,

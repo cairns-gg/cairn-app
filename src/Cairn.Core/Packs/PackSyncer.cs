@@ -265,11 +265,11 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 // an untrusted URL costs a lookup rather than a different mod version.
                 var wanted = lockApplies ? prior!.Version : want.Version;
 
-                // Only for a mod whose manifest entry carries an acceptance covering this
-                // pack's version. Everything else resolves as it always has, so a mod that
-                // has simply not caught up still fails loudly rather than being installed
-                // on a guess.
-                var accepted = want.AcceptsUnmarkedFor(manifest.GameVersion);
+                // Only for a mod somebody has vouched for — see PendingMod.AcceptsUnmarked.
+                // Everything else resolves as it always has, so a mod the pack names and
+                // that has simply not caught up still fails loudly rather than being
+                // installed on a guess.
+                var accepted = want.AcceptsUnmarked(manifest.GameVersion);
 
                 try
                 {
@@ -319,10 +319,17 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             // about what the pack is running, and a pack leaning on an untested
             // combination should say so every time somebody looks, not once when it was
             // added and never again.
+            //
+            // Named differently for a dependency, because "the pack accepts it" is not true
+            // of one: nobody ticked anything, and the person reading the line cannot act on
+            // it without being told which of their mods asked for it.
             if (release.Quality == MatchQuality.Unmarked)
-                Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    Lang.Get("sync-unmarked", release.ModVersion,
-                                            DescribeVersions(release.GameVersions), manifest.GameVersion)));
+                Record(new SyncStep(SyncAction.Warned, want.ModId, want.RequiredBy is null
+                    ? Lang.Get("sync-unmarked", release.ModVersion,
+                        DescribeVersions(release.GameVersions), manifest.GameVersion)
+                    : Lang.Get("sync-unmarked-dependency", release.ModVersion,
+                        DescribeVersions(release.GameVersions), manifest.GameVersion,
+                        want.RequiredBy)));
 
             if (ModSides.WrongSide(release.Side, side))
                 Record(new SyncStep(SyncAction.Warned, want.ModId,
@@ -446,8 +453,30 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     private sealed record PendingMod(
         string ModId, string? Version, string? RequiredBy = null, string? AcceptedFor = null)
     {
-        public bool AcceptsUnmarkedFor(string gameVersion) =>
-            new PackMod { ModId = ModId, AcceptedFor = AcceptedFor }.AcceptsUnmarkedFor(gameVersion);
+        /// <summary>
+        /// Whether a release ModDB marks for no version like this pack's may be installed
+        /// for this mod. Two different people can say so, and neither is Cairn guessing.
+        ///
+        /// For a mod the manifest names it is whoever named it: <see cref="AcceptedFor"/>
+        /// is where that testimony is written down, and without it the mod fails loudly.
+        ///
+        /// For a dependency it is the mod that requires it, which is both the only party
+        /// who ever said anything about the pairing and the better witness. Floral Zones'
+        /// 1.22 bridge is marked for 1.22 and names seven region mods last marked for
+        /// 1.21 — that mismatch is the entire purpose of a bridge mod, and refusing the
+        /// regions left a pack holding a bridge to nothing.
+        ///
+        /// Refusing protected nobody, either. A dependency has no manifest entry to hold
+        /// an acceptance and no control anywhere that could write one, so there was no way
+        /// out of the failure short of adding every one of those mods by hand — and the
+        /// mod that wanted them installed regardless, for the game to disable on startup
+        /// over the dependency that was never fetched. It says so on every sync instead,
+        /// naming who wanted it.
+        /// </summary>
+        public bool AcceptsUnmarked(string gameVersion) =>
+            RequiredBy is not null
+            || new PackMod { ModId = ModId, AcceptedFor = AcceptedFor }
+                .AcceptsUnmarkedFor(gameVersion);
     }
 
     /// <summary>
@@ -457,8 +486,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
     /// lets you judge whether you believe it, where "not marked for your version" only
     /// repeats what the warning already said. Truncated because ModDB entries routinely
     /// list a dozen.
+    ///
+    /// Public because the launcher says the same thing on the mod's row, from the lock's
+    /// own <c>markedFor</c>, and two spellings of one fact is how a row and a log line end
+    /// up disagreeing about the same mod.
     /// </summary>
-    private static string DescribeVersions(IReadOnlyList<string>? versions)
+    public static string DescribeVersions(IReadOnlyList<string>? versions)
     {
         if (versions is null || versions.Count == 0) return Lang.Get("sync-no-game-version");
 

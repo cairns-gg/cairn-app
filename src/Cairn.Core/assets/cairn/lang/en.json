@@ -690,6 +690,7 @@
   "sync-no-release-marked": "no release marked for game {0}{1}",
   "sync-same-minor": "{0} is not marked for {1} exactly, only for another release in that minor series",
   "sync-unmarked": "{0} is marked for {1}, not {2} — installed because the pack accepts it, and it may misbehave",
+  "sync-unmarked-dependency": "{0} is marked for {1}, not {2} — installed because {3} requires it, and it may misbehave",
   "sync-wrong-side": "ModDB marks this as {0}-side; installing it {1} may do nothing",
   "sync-bad-filename": "refusing a mod filename that {0}: '{1}'",
   "sync-bad-url": "refusing a download that {0} — mods are code",

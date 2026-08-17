@@ -40,8 +40,13 @@ public class PackSyncDependencyTests : IDisposable
     /// mod loads in-game while its dependencies are invisible here.
     /// </param>
     /// <param name="notZip">Mods served as bytes that are not an archive at all.</param>
+    /// <param name="stale">
+    /// Mods whose releases are marked for the previous minor and nothing since — a mod that
+    /// has not been rebuilt for the version the pack targets.
+    /// </param>
     private sealed class Stub(Dictionary<string, string[]> world, string newest = "1.0.0",
-        HashSet<string>? unreadable = null, HashSet<string>? notZip = null)
+        HashSet<string>? unreadable = null, HashSet<string>? notZip = null,
+        HashSet<string>? stale = null)
         : HttpMessageHandler
     {
         public List<string> Looked { get; } = [];
@@ -58,6 +63,8 @@ public class PackSyncDependencyTests : IDisposable
                 if (!world.ContainsKey(id))
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
 
+                var marked = stale?.Contains(id) == true ? "\"1.21.6\"" : "\"1.22.5\"";
+
                 var body = $$"""
                 {"statuscode":"200","mod":{
                   "modid":1,"assetid":2,"name":"{{id}}","urlalias":"{{id}}","side":"client",
@@ -65,11 +72,11 @@ public class PackSyncDependencyTests : IDisposable
                     {"releaseid":1,"fileid":1,"modidstr":"{{id}}","modversion":"{{newest}}",
                      "filename":"{{id}}_{{newest}}.zip",
                      "mainfile":"https://moddbcdn.vintagestory.at/{{id}}_{{newest}}.zip",
-                     "tags":["1.22.5"]},
+                     "tags":[{{marked}}]},
                     {"releaseid":2,"fileid":2,"modidstr":"{{id}}","modversion":"1.0.0",
                      "filename":"{{id}}_1.0.0.zip",
                      "mainfile":"https://moddbcdn.vintagestory.at/{{id}}_1.0.0.zip",
-                     "tags":["1.22.5"]}
+                     "tags":[{{marked}}]}
                   ]
                 }
                 }
@@ -122,9 +129,10 @@ public class PackSyncDependencyTests : IDisposable
 
     private (PackSyncer Syncer, Stub Handler) Make(
         Dictionary<string, string[]> world, string newest = "1.0.0",
-        HashSet<string>? unreadable = null, HashSet<string>? notZip = null)
+        HashSet<string>? unreadable = null, HashSet<string>? notZip = null,
+        HashSet<string>? stale = null)
     {
-        var handler = new Stub(world, newest, unreadable, notZip);
+        var handler = new Stub(world, newest, unreadable, notZip, stale);
         var http = new HttpClient(handler);
         return (new PackSyncer(new ModDbClient(http), http), handler);
     }
@@ -410,6 +418,74 @@ public class PackSyncDependencyTests : IDisposable
 
         Assert.Contains("more than once", report.Steps.Single(s => s.Action == SyncAction.Failed).Detail);
         Assert.Equal(["carryon"], report.Lock.Mods.Select(m => m.ModId).ToArray());
+    }
+
+    /// <summary>
+    /// The Floral Zones case, which is what this rule was written for. A bridge mod marked
+    /// for 1.22 requires region mods last marked for 1.21 — the mismatch being the entire
+    /// purpose of a bridge — and Cairn refused every region, installed the bridge, and left
+    /// a pack the game would disable on startup. Nothing on a dependency row could accept
+    /// anything, so the only way out was adding seven mods by hand.
+    /// </summary>
+    [Fact]
+    public async Task A_dependency_marked_for_nothing_like_this_game_version_is_installed_anyway()
+    {
+        var (syncer, _) = Make(
+            new()
+            {
+                ["floralzones122bridge"] = ["floralzonesmediterraneanregion"],
+                ["floralzonesmediterraneanregion"] = [],
+            },
+            stale: ["floralzonesmediterraneanregion"]);
+
+        var report = await syncer.SyncAsync(Pack("floralzones122bridge"), ModsDir, LockPath);
+
+        Assert.False(report.Failed);
+        Assert.Equal(2, report.Lock.Mods.Count);
+
+        // Recorded as what it is. The lock is "exactly what was installed", and an entry
+        // marked for another version is how a follower's copy knows to say so too.
+        var region = report.Lock.Mods.Single(m => m.ModId == "floralzonesmediterraneanregion");
+        Assert.Equal(["1.21.6"], region.MarkedFor);
+    }
+
+    [Fact]
+    public async Task And_says_which_mod_asked_for_it()
+    {
+        var (syncer, _) = Make(
+            new()
+            {
+                ["floralzones122bridge"] = ["floralzonesmediterraneanregion"],
+                ["floralzonesmediterraneanregion"] = [],
+            },
+            stale: ["floralzonesmediterraneanregion"]);
+
+        var report = await syncer.SyncAsync(Pack("floralzones122bridge"), ModsDir, LockPath);
+
+        // "the pack accepts it" is untrue of a mod nobody added, and leaves the reader with
+        // no way to tell which of their mods is responsible for it.
+        var warning = Assert.Single(report.Warnings, w => w.ModId == "floralzonesmediterraneanregion");
+        Assert.Contains("1.21.6", warning.Detail);
+        Assert.Contains("floralzones122bridge requires it", warning.Detail);
+    }
+
+    /// <summary>
+    /// The edge of the rule. A dependency is vouched for by the mod that requires it; a mod
+    /// the pack names is vouched for by whoever named it, and nobody has — so it fails as it
+    /// always did, with the manifest entry and the launcher's Add anyway both able to say
+    /// otherwise. See <see cref="UnmarkedModTests"/>.
+    /// </summary>
+    [Fact]
+    public async Task A_mod_the_pack_names_itself_is_still_refused()
+    {
+        var (syncer, _) = Make(
+            new() { ["oreveintracers"] = [] },
+            stale: ["oreveintracers"]);
+
+        var report = await syncer.SyncAsync(Pack("oreveintracers"), ModsDir, LockPath);
+
+        Assert.True(report.Failed);
+        Assert.Empty(report.Lock.Mods);
     }
 
     [Fact]
