@@ -71,6 +71,28 @@ public partial class ModRowViewModel : ViewModelBase
     public string RequiredByNote =>
         IsDependency ? Lang.Get("mods-required-by", string.Join(", ", Locked!.RequiredBy!)) : "";
 
+    // ---- releases nobody marked for this game version ----
+
+    /// <summary>
+    /// True when what is installed was never marked for the version this pack targets. The
+    /// lock records the versions it <em>was</em> marked for precisely then and at no other
+    /// time, so its presence is the flag.
+    ///
+    /// Sync says this too, once per mod per run, and that was the only place it was said —
+    /// so the state of a pack half of whose mods are running on somebody's say-so could
+    /// only be recovered by reading the log. A row that is running something untested
+    /// should look like it whenever anybody opens the pack.
+    /// </summary>
+    public bool IsUnmarked => Locked?.MarkedFor is not null;
+
+    /// <summary>
+    /// Which versions it <em>is</em> marked for — worded by the syncer, so the row and the
+    /// log line it corresponds to cannot drift apart.
+    /// </summary>
+    public string UnmarkedNote => IsUnmarked
+        ? Lang.Get("mods-marked-for", PackSyncer.DescribeVersions(Locked!.MarkedFor))
+        : "";
+
     /// <summary>
     /// Whether this row's controls are offered at all.
     ///

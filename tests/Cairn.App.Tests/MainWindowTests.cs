@@ -274,6 +274,109 @@ public class MainWindowTests : IDisposable
         Assert.Equal("required by carryon", lib.RequiredByNote);
     }
 
+    /// <summary>
+    /// A mod running on somebody's say-so rather than on ModDB's word says so on its row.
+    ///
+    /// Sync says it too, once per mod per run, into the log — which is where nobody looks
+    /// to find out what a pack is. A pack whose dependencies were installed for a version
+    /// they were never marked for is a normal pack now, and the row is where that has to
+    /// be visible a month later.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_mod_marked_for_another_game_version_says_so_on_its_row()
+    {
+        WriteBridgePack();
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "bridge");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var region = vm.Detail!.Mods.Single(m => m.ModId == "floralzonesmediterraneanregion");
+        Assert.True(region.IsUnmarked);
+        Assert.Equal("marked for 1.21.5, 1.21.6", region.UnmarkedNote);
+
+        // And the ordinary mod beside it carries no such note: one on every row would say
+        // nothing about any of them.
+        Assert.False(vm.Detail.Mods.Single(m => m.ModId == "floralzones122bridge").IsUnmarked);
+
+        Assert.Contains(VisibleText(window), t => t == "marked for 1.21.5, 1.21.6");
+    }
+
+    /// <summary>
+    /// Where the first version of that row went wrong, and what a rendered-and-visible
+    /// assertion cannot see on its own.
+    ///
+    /// The row's contents sat in a horizontal StackPanel, which measures its children
+    /// against infinite width — so a long row did not shrink and was not clipped by its
+    /// column: it overflowed, drew underneath the buttons beside it, and ran off the edge
+    /// of the window. Everything about it still reported as visible, because it was, in
+    /// coordinates nobody can see. What was lost was whatever came last, which is exactly
+    /// where a warning added later ends up.
+    ///
+    /// So this asserts position rather than presence, with the names ModDB really serves:
+    /// "Floral Zones: Mediterranean Region" beside its id, its version, a note saying what
+    /// requires it and another saying what it is marked for is more than a row's width, and
+    /// the row has to grow rather than spill.
+    /// </summary>
+    [AvaloniaFact]
+    public void And_stays_inside_the_window_when_the_row_is_too_long_for_one_line()
+    {
+        WriteBridgePack();
+
+        var vm = new MainViewModel(new OfflineHandler());
+        var window = new MainWindow { DataContext = vm, Width = 900, Height = 700 };
+        window.Show();
+
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "bridge");
+
+        // Offline, rows fall back to bare ids — which are narrower than the names anybody
+        // with a network connection is looking at.
+        foreach (var row in vm.Detail!.Mods)
+            row.Name = row.ModId == "floralzones122bridge"
+                ? "Floral Zones 1.22 Bridge — Standalone"
+                : "Floral Zones: Mediterranean Region";
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var note = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "marked for 1.21.5, 1.21.6");
+
+        var right = note.TranslatePoint(new Point(note.Bounds.Width, 0), window);
+        Assert.NotNull(right);
+        Assert.True(right!.Value.X <= window.Width,
+            $"the note ends at x={right.Value.X:0} in a {window.Width:0}px window");
+    }
+
+    /// <summary>
+    /// A pack in the shape that made this rule necessary: a bridge mod marked for the
+    /// pack's version, and a region mod it requires that is marked only for the previous
+    /// one. See <c>PackSyncer.PendingMod.AcceptsUnmarked</c>.
+    /// </summary>
+    private void WriteBridgePack()
+    {
+        WritePack("bridge", "Bridge", "1.22.5", null, ["floralzones122bridge"]);
+
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "bridge", "pack.lock.json"),
+            """
+            {"gameVersion":"1.22.5","mods":[
+              {"modid":"floralzones122bridge","version":"0.6.1",
+               "filename":"floralzones122bridge_0.6.1.zip",
+               "url":"https://moddbcdn.vintagestory.at/floralzones122bridge_0.6.1.zip",
+               "releaseId":1,"fileId":1,
+               "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+              {"modid":"floralzonesmediterraneanregion","version":"1.0.19",
+               "filename":"floralzonesmediterraneanregion_1.0.19.zip",
+               "url":"https://moddbcdn.vintagestory.at/floralzonesmediterraneanregion_1.0.19.zip",
+               "releaseId":2,"fileId":2,
+               "sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+               "requiredBy":["floralzones122bridge"],
+               "markedFor":["1.21.5","1.21.6"]}
+            ]}
+            """);
+    }
+
     [AvaloniaFact]
     public void A_dependency_stays_with_its_requirer_rather_than_sorting_away_from_it()
     {

@@ -474,30 +474,71 @@
 
                                                 <!-- Indented and dimmed: a dependency is here
                                                      because of the row above it, not because
-                                                     the pack asked for it. -->
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                                            Spacing="8" VerticalAlignment="Center">
+                                                     the pack asked for it.
+
+                                                     Wrapping, not stacking. A horizontal
+                                                     StackPanel measures its children against
+                                                     infinite width, so a long row did not
+                                                     shrink or clip — it overflowed the
+                                                     column, drew under the buttons to its
+                                                     right, and lost whatever came last off
+                                                     the edge of the window. Which was
+                                                     silent: a mod named "Floral Zones:
+                                                     Central Australian Region", required by
+                                                     another mod and running unmarked, has
+                                                     more to say than 500px of row, and the
+                                                     note that mattered most was the one at
+                                                     the end. This grows the row instead, and
+                                                     only when it has to. -->
+                                                <DockPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <!-- Outside the wrap, so a second line
+                                                         lands under the mod's name rather
+                                                         than under the arrow pointing at
+                                                         it. -->
                                                     <TextBlock Text="↳" FontSize="12" Opacity="0.5"
+                                                               DockPanel.Dock="Left"
+                                                               Margin="0,0,8,0"
                                                                VerticalAlignment="Center"
                                                                IsVisible="{Binding IsDependency}" />
-                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                                <WrapPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center" />
                                                     <!-- Kept, quietly: the id is what the
                                                          manifest and lockfile record. -->
                                                     <TextBlock Text="{Binding ModId}" FontSize="11"
+                                                               Margin="0,0,8,0"
                                                                Opacity="0.55" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding InstalledVersion}"
                                                                IsVisible="{Binding HasInstalledVersion}"
+                                                               Margin="0,0,8,0"
                                                                FontSize="11" Opacity="0.75"
                                                                VerticalAlignment="Center" />
+                                                    <!-- Both warnings before the caption that
+                                                         merely repeats the row above, so the
+                                                         line that wraps away is the one worth
+                                                         least. -->
+                                                    <TextBlock Text="{l:Tr mods-server-side}"
+                                                               IsVisible="{Binding IsServerSide}"
+                                                               Margin="0,0,8,0"
+                                                               FontSize="11" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource VsWarningBrush}" />
+                                                    <!-- Running on somebody's say-so rather
+                                                         than on ModDB's word. Said here as
+                                                         well as in the log, because the log
+                                                         is not where anybody looks to see
+                                                         what a pack is. -->
+                                                    <TextBlock Text="{Binding UnmarkedNote}"
+                                                               IsVisible="{Binding IsUnmarked}"
+                                                               Margin="0,0,8,0"
+                                                               FontSize="11" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource VsWarningBrush}" />
                                                     <TextBlock Text="{Binding RequiredByNote}"
                                                                IsVisible="{Binding IsDependency}"
                                                                FontSize="11" Opacity="0.55"
                                                                VerticalAlignment="Center" />
-                                                    <TextBlock Text="{l:Tr mods-server-side}"
-                                                               IsVisible="{Binding IsServerSide}"
-                                                               FontSize="11" VerticalAlignment="Center"
-                                                               Foreground="{DynamicResource VsWarningBrush}" />
-                                                </StackPanel>
+                                                </WrapPanel>
+                                                </DockPanel>
 
                                                 <TextBlock Grid.Column="2" Text="{l:Tr mods-downloading}" FontSize="11"
                                                            Opacity="0.6" VerticalAlignment="Center"
