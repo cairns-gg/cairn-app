@@ -349,6 +349,41 @@ public class MainWindowTests : IDisposable
     }
 
     /// <summary>
+    /// Removing a mod takes what it dragged in with it.
+    ///
+    /// Rows come from the lockfile, and only a sync rebuilds one — so removing a mod that
+    /// had pulled in others edited the manifest, dropped its own row, and left theirs on
+    /// screen: still installed, requiring nothing, and offering no Remove button, because a
+    /// dependency row deliberately has none. Nothing could shift them until the next Play.
+    /// Adding a mod has always synced in the background for the mirror-image reason.
+    /// </summary>
+    [AvaloniaFact]
+    public void Removing_a_mod_takes_the_dependencies_it_pulled_in_with_it()
+    {
+        WriteBridgePack();
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "bridge");
+
+        var region = vm.Detail!.Mods.Single(m => m.ModId == "floralzonesmediterraneanregion");
+        Assert.True(region.IsDependency);
+        Assert.False(region.CanChange);   // no Remove of its own, by design
+
+        var bridge = vm.Detail.Mods.Single(m => m.ModId == "floralzones122bridge");
+        bridge.RequestRemoveCommand.Execute(null);
+        bridge.ConfirmRemoveCommand.Execute(null);
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.Detail.Mods);
+
+        // The lock is the record of what is installed, so the row going is not enough: the
+        // zip has to stop being accounted for, or the next sync leaves it in the folder.
+        var lockFile = File.ReadAllText(Path.Combine(_home, "packs", "bridge", "pack.lock.json"));
+        Assert.DoesNotContain("floralzonesmediterraneanregion", lockFile);
+    }
+
+    /// <summary>
     /// A pack in the shape that made this rule necessary: a bridge mod marked for the
     /// pack's version, and a region mod it requires that is marked only for the previous
     /// one. See <c>PackSyncer.PendingMod.AcceptsUnmarked</c>.

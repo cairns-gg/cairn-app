@@ -1779,24 +1779,66 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             m => string.Equals(m.ModId, hit.ModId, StringComparison.OrdinalIgnoreCase));
         if (added is not null) added.Downloading = true;
 
-        _ = SyncAfterAddAsync();
+        _ = SyncAfterEditAsync();
     }
 
+    /// <summary>Whether the sync currently running is one of these, rather than a launch.</summary>
+    private bool _quietSync;
+
     /// <summary>
-    /// Fetches what was just added, without being asked.
+    /// Set when the pack is edited again while a quiet sync is running. See
+    /// <see cref="SyncAfterEditAsync"/>.
+    /// </summary>
+    private bool _syncAgain;
+
+    /// <summary>
+    /// Settles the pack against the manifest that was just edited, without being asked.
     ///
     /// Adding a mod only writes a line to the manifest, so before this the row sat there
     /// with no version and nothing happened until the next Play. It also matters for
     /// dependencies: they are declared inside the zip, so a mod's requirements cannot be
     /// known — or shown — until it has actually been downloaded.
+    ///
+    /// Removing one needs it just as much, and for the mirror-image reason. The rows come
+    /// from the lock, and the lock is only rebuilt by a sync — so removing a mod that had
+    /// pulled in seven others left those seven on screen, still installed, now requiring
+    /// nothing, and wearing no Remove button because a dependency row does not have one.
+    /// The pack looked stuck with mods nobody could get rid of until the next Play. The
+    /// closure is Core's to compute and not something to reproduce here: sync drops them
+    /// from the lock and deletes the zips, exactly as it always did.
     /// </summary>
-    private async Task SyncAfterAddAsync()
+    private async Task SyncAfterEditAsync()
     {
-        // A launch or an update is already going to sync, and two at once would race for
-        // the same directory and lockfile.
+        // Coalesced rather than dropped. Removing three mods in a row used to run one sync
+        // and skip the other two, settling the pack against the manifest as it stood
+        // partway through — the same stale rows, arrived at less obviously. The run in
+        // flight goes round again instead, against the manifest as it now is.
+        if (_quietSync)
+        {
+            _syncAgain = true;
+            return;
+        }
+
+        // A launch or an update is already going to sync and rebuild these rows, and two at
+        // once would race for the same directory and lockfile.
         if (IsBusy || IsLaunching) return;
 
-        await RunSyncAsync(quiet: true);
+        _quietSync = true;
+
+        try
+        {
+            do
+            {
+                _syncAgain = false;
+                await RunSyncAsync(quiet: true);
+            }
+            while (_syncAgain && !IsLaunching);
+        }
+        finally
+        {
+            _quietSync = false;
+            _syncAgain = false;
+        }
     }
 
     // ---- updates ----
@@ -1956,6 +1998,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         foreach (var hit in SearchHits.Where(
                      h => string.Equals(h.ModId, row.ModId, StringComparison.OrdinalIgnoreCase)))
             hit.AlreadyInPack = false;
+
+        // Whatever this mod was the only reason for goes with it — see SyncAfterEditAsync.
+        _ = SyncAfterEditAsync();
     }
 
     private void OpenHitPage(SearchHitViewModel hit)

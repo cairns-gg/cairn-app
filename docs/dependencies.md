@@ -185,3 +185,15 @@ been downloaded and its `modinfo.json` read. The added row says *downloading…*
 reaches it. That sync is quiet: it installs and logs, but a failure does not raise the
 pane's error banner, because adding the mod did work and Play will report properly when it
 retries.
+
+**Removing one triggers the same sync**, and needs it more. Rows are drawn from the lock,
+and only a sync rebuilds one, so removing `floralzones122bridge` dropped its own row and
+left the seven regions it had pulled in sitting there — installed, requiring nothing, and
+carrying no Remove of their own by the rule above. The pack looked stuck with mods nobody
+could shift until the next Play. The closure belongs to the syncer and is not something a
+view model should recompute to grey out a row: sync drops them from the lock and deletes
+the zips, which it already did. The launcher just has to ask.
+
+Those syncs are coalesced rather than dropped. One already running used to make the next
+edit skip its own, which settled the pack against a manifest as it stood partway through
+removing three mods — the same stale rows, arrived at less obviously.
