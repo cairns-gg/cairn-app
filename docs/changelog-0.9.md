@@ -221,11 +221,16 @@ installed, a pack that will not import, a disk with no room on it — the senten
 it comes from the same file as everything else, because the moment you most want your own
 language is the moment something has failed.
 
-**The translations are drafts, and they say so.** English is complete. Spanish, French and
-both Portuguese variants cover the interface you see most — tabs, buttons, the mod list, the
-Mod config tab, Preferences — and are waiting on a professional reviewer before anyone should
-trust them. Anything not translated yet shows in English rather than going blank, so a
-half-finished language reads as half-finished.
+**The translations are drafts, and they say so.** English is complete, and **0.9.2 finishes
+the other four**: Spanish, French and both Portuguese variants now carry every sentence Cairn
+can say rather than the screens you see most. That last part matters where it always did —
+the sentence explaining a mod that would not install, a download that was corrupt, a disk
+with no room on it. Those were exactly the ones still coming out in English, because they are
+the ones nobody sees while translating the buttons.
+
+They are still machine-written and still waiting on a reviewer who speaks the language, which
+each file says at the top. Anything added later shows in English until somebody translates
+it, rather than going blank.
 
 Five to choose from:
 
