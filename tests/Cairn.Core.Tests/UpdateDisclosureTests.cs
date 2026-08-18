@@ -144,4 +144,141 @@ public class UpdateDisclosureTests
 
         Assert.False(plan.ConnectChanges);
     }
+
+    // ---- the mod versions, which are not in the manifest at all ----
+
+    private static PackLock Locked(params (string Id, string Version)[] mods) => new()
+    {
+        GameVersion = "1.22.5",
+        Mods = [.. mods.Select(m => new LockedMod { ModId = m.Id, Version = m.Version })],
+    };
+
+    private static PackUpdatePlan Between(
+        PackManifest mine, PackManifest theirs, PackLock? myLock, PackLock? theirLock) =>
+        PackUpdatePlan.Between(mine, theirs, mine, 1, 2, null, myLock, theirLock);
+
+    /// <summary>
+    /// The same defect a fourth time, and the widest of them: it is not one field that was
+    /// left out, it is the entire mod list.
+    ///
+    /// A manifest entry may be nothing but a modid, and most are — pinning is the exception
+    /// — so the version an author ships lives only in their lockfile. An author who takes
+    /// five mod updates and changes nothing else therefore publishes a revision whose pack
+    /// object is byte-identical to its predecessor, and a plan built from manifests alone
+    /// saw no difference: every follower reported itself current, and cairn-server update
+    /// said "already on the author's newest revision" and exited 0, revision after
+    /// revision, with no way to tell that anything was wrong.
+    /// </summary>
+    [Fact]
+    public void A_revision_that_only_moves_a_mod_version_in_the_lock_is_a_change()
+    {
+        var plan = Between(
+            Pack(), Pack(),
+            Locked(("glassview", "1.1.1")),
+            Locked(("glassview", "1.2.1")));
+
+        Assert.True(plan.AnyChange);
+
+        var change = Assert.Single(plan.TheirChanges);
+        Assert.Equal(ModChangeKind.Relocked, change.Kind);
+        Assert.Equal("glassview", change.ModId);
+        Assert.Equal("1.1.1", change.Mine);
+        Assert.Equal("1.2.1", change.Theirs);
+    }
+
+    [Fact]
+    public void And_the_summary_counts_it_as_an_update_rather_than_a_repin()
+    {
+        var plan = Between(
+            Pack(), Pack(),
+            Locked(("glassview", "1.1.1")),
+            Locked(("glassview", "1.2.1")));
+
+        Assert.Contains("1 updated", plan.Summary());
+        Assert.DoesNotContain("repinned", plan.Summary());
+    }
+
+    /// <summary>
+    /// Nobody pinned anything, so taking the update must not start. A version written into
+    /// the manifest here would be an instruction to stay put — Cairn never offers a pinned
+    /// mod an update — so this copy would be frozen at the author's version of the day it
+    /// last updated, which is the opposite of following them.
+    /// </summary>
+    [Fact]
+    public void Taking_it_leaves_the_mod_unpinned()
+    {
+        var merged = Between(
+            Pack(), Pack(),
+            Locked(("glassview", "1.1.1")),
+            Locked(("glassview", "1.2.1"))).Merge();
+
+        Assert.Null(Assert.Single(merged.Mods).Version);
+    }
+
+    [Fact]
+    public void The_same_locked_version_is_not_a_change()
+    {
+        var plan = Between(
+            Pack(), Pack(),
+            Locked(("glassview", "1.2.1")),
+            Locked(("glassview", "1.2.1")));
+
+        Assert.False(plan.AnyChange);
+        Assert.Empty(plan.Changes);
+    }
+
+    /// <summary>
+    /// A pin outranks either lock at install time — PackSyncer stops believing a lock entry
+    /// the moment it disagrees with the version asked for — so two manifests pinning the
+    /// same version are settled however their locks read. Raising it would be a change that
+    /// applying could not make.
+    /// </summary>
+    [Fact]
+    public void A_pin_both_sides_share_settles_it_whatever_the_locks_say()
+    {
+        var mine = Pack();
+        var theirs = Pack();
+        mine.Mods[0].Version = "1.1.1";
+        theirs.Mods[0].Version = "1.1.1";
+
+        var plan = Between(mine, theirs, Locked(("glassview", "1.1.1")), Locked(("glassview", "1.2.1")));
+
+        Assert.False(plan.AnyChange);
+    }
+
+    /// <summary>
+    /// A mod this copy has never installed still counts: it resolves newest-compatible
+    /// today and reproduces the author's build afterwards, which is a difference in what
+    /// the next sync puts on disk. Shown as "newest", because that is what it is.
+    /// </summary>
+    [Fact]
+    public void No_lock_entry_of_your_own_is_still_a_change()
+    {
+        var plan = Between(Pack(), Pack(), myLock: null, theirLock: Locked(("glassview", "1.2.1")));
+
+        Assert.True(plan.AnyChange);
+        Assert.Null(Assert.Single(plan.TheirChanges).Mine);
+    }
+
+    /// <summary>
+    /// And the other way round is nothing to take. An author whose lock says nothing about
+    /// a mod has published no version of it to reproduce.
+    /// </summary>
+    [Fact]
+    public void An_author_with_no_lock_entry_offers_nothing_to_take()
+    {
+        var plan = Between(Pack(), Pack(), Locked(("glassview", "1.1.1")), theirLock: null);
+
+        Assert.False(plan.AnyChange);
+    }
+
+    /// <summary>
+    /// A plan with no locks to hand is the comparison that existed before, and must still
+    /// be quiet about a pack nothing else distinguishes.
+    /// </summary>
+    [Fact]
+    public void Comparing_without_locks_reports_what_it_always_did()
+    {
+        Assert.False(Between(Pack(), Pack()).AnyChange);
+    }
 }

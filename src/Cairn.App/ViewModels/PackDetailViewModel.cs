@@ -807,7 +807,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             var plan = PackUpdatePlan.Between(
                 Manifest, bundle.Pack!, _store.LoadUpstream(Id),
-                link?.Revision ?? 0, bundle.Revision ?? 0, _store.LoadLocalState(Id));
+                link?.Revision ?? 0, bundle.Revision ?? 0, _store.LoadLocalState(Id),
+                _store.LoadLock(Id), bundle.Lock);
 
             // Nothing of theirs to take and nothing of yours that differs. Opening an empty
             // dialog to say so would be worse than saying so.

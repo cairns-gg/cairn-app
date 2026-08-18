@@ -1066,7 +1066,8 @@ internal static class Program
 
         var plan = PackUpdatePlan.Between(
             mine, bundle.Pack!, store.LoadUpstream(id),
-            link!.Revision, latest, store.LoadLocalState(id));
+            link!.Revision, latest, store.LoadLocalState(id),
+            store.LoadLock(id), bundle.Lock);
 
         // Reset discards this copy's changes rather than reconciling them, so it is set
         // before anything is printed: the list below has to describe what would happen.

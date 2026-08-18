@@ -54,6 +54,7 @@ public sealed partial class ModChangeViewModel(ModChange change) : ObservableObj
         ModChangeKind.Added => Lang.Get("packupdate-adds"),
         ModChangeKind.Removed => Lang.Get("packupdate-removes"),
         ModChangeKind.Repinned => Lang.Get("packupdate-moves"),
+        ModChangeKind.Relocked => Lang.Get("packupdate-updates"),
         ModChangeKind.DroppedByYou => Lang.Get("packupdate-you-removed"),
         ModChangeKind.PinConflict => Lang.Get("packupdate-you-pinned"),
         ModChangeKind.Yours => Lang.Get("packupdate-yours"),
@@ -206,7 +207,8 @@ public sealed partial class PackUpdateViewModel(
                 ModChangeKind.Added => 2,
                 ModChangeKind.Removed => 3,
                 ModChangeKind.Repinned => 4,
-                _ => 5,
+                ModChangeKind.Relocked => 5,
+                _ => 6,
             })
             .ThenBy(c => c.ModId, StringComparer.OrdinalIgnoreCase)
             .Select(c => new ModChangeViewModel(c))];

@@ -1,7 +1,38 @@
-# What's new in Cairn 0.9.2
+# What's new in Cairn 0.9.3
 
 Everything that changed since the 0.8 series, in one place. Nothing here needs any action
 from you unless it says so.
+
+## Updates notice a revision that only updates mods
+
+**0.9.3.** The commonest revision an author publishes is the one where they have taken the
+month's mod updates and changed nothing else. Cairn could not see it. Every follower said
+**"already on the author's newest revision"**, `cairn-server update` said it and exited 0,
+and the pack stayed on the versions it had — five mod updates waiting at the author's URL
+that nothing would ever pull.
+
+A pack lists the mods it wants; it does not usually name a version for any of them, because
+not naming one is what lets you take updates. The versions the author actually shipped live
+in the pack's lockfile, which is the file that makes their pack reproduce exactly on your
+machine. Cairn decided whether an update did anything by comparing the two mod *lists* — and
+those lists were identical, revision after revision, while everything that mattered moved
+underneath them.
+
+It now compares the versions as well. A revision that moves them says so, mod by mod, in the
+update window and in `cairn-server update`:
+
+```
+Revision 18: 5 updated.
+  scribe                   1.1.1 → 1.2.1
+```
+
+**Nothing gets pinned by taking one.** A mod nobody named a version for stays that way, so
+the pack goes on following the author rather than freezing at whatever it caught up to.
+
+**If a pack of yours has been stuck**, there is nothing to undo — check for an update and it
+will be there. On a server, `cairn-server update <pack>` followed by a restart. The revisions
+you missed are not applied one at a time: the author's newest is the one you get, which is
+the same set of mods anyone importing the pack fresh would receive.
 
 ## A mod your mods need is no longer refused for want of a tag
 

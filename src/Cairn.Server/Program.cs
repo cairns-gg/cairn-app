@@ -305,7 +305,8 @@ public static class Program
 
         var plan = PackUpdatePlan.Between(
             packs.Load(id), bundle.Pack, packs.LoadUpstream(id),
-            link!.Revision, bundle.Revision ?? 0, packs.LoadLocalState(id));
+            link!.Revision, bundle.Revision ?? 0, packs.LoadLocalState(id),
+            packs.LoadLock(id), bundle.Lock);
 
         if (!plan.AnyChange)
         {
@@ -314,6 +315,14 @@ public static class Program
         }
 
         Console.WriteLine(plan.Summary());
+
+        // Itemised as well as counted. This runs under journald on a machine nobody is
+        // watching, and the record of which mod moved to which version is the first thing
+        // asked for when a world stops loading afterwards — a tally of five cannot answer
+        // it, and by then the previous lockfile has been overwritten.
+        foreach (var change in plan.TheirChanges)
+            Console.WriteLine($"  {change.ModId,-24} {change.Describe()}");
+
         packs.ApplyUpdate(id, plan, bundle);
 
         Console.WriteLine();

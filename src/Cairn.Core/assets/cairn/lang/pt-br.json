@@ -179,6 +179,7 @@
 
   "packupdate-title": "Atualizar este pacote", "packupdate-nothing": "Ainda não mudou nada.",
   "packupdate-adds": "adiciona", "packupdate-removes": "remove", "packupdate-moves": "move",
+  "packupdate-updates": "atualiza",
   "packupdate-yours": "os seus", "packupdate-newest": "o mais recente",
   "packupdate-apply-update": "Atualizar para a revisão {0}",
   "packupdate-apply-reset": "Voltar para a revisão {0}",
@@ -338,6 +339,7 @@
   "packupdate-n-added": "{0} adicionados",
   "packupdate-n-removed": "{0} removidos",
   "packupdate-n-repinned": "{0} refixados",
+  "packupdate-n-updated": "{0} atualizados",
   "packupdate-stops-joining": "deixa de entrar em um servidor",
   "packupdate-joins": "entra em {0}",
   "packupdate-changes-keybinds": "muda os atalhos",

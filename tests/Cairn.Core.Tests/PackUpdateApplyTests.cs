@@ -390,4 +390,68 @@ public class PackUpdateApplyTests : IDisposable
         Assert.DoesNotContain("heavyweight", after);
         Assert.Contains("newthing", after);
     }
+
+    /// <summary>
+    /// The whole of a mod-update revision, end to end: nothing an author pinned changed,
+    /// because they pinned nothing, and the only difference between revision 1 and
+    /// revision 2 is which versions their lockfile names.
+    ///
+    /// This is what most published revisions are, and it was invisible — the plan compared
+    /// manifests, the manifests were identical, and every follower reported itself already
+    /// current while five mod updates sat unread at the author's URL. The three things this
+    /// asserts are the three that were wrong: the plan sees it, the lock takes the author's
+    /// versions, and the revision moves so the pack stops being told an update is waiting.
+    /// </summary>
+    [Fact]
+    public void A_revision_that_only_updates_mods_is_taken()
+    {
+        var theirs = Pack("1.22.5", Mod("aculinaryartillery"), Mod("scribe"));
+
+        Follow(theirs, Lock("1.22.5", ("aculinaryartillery", "1.1.5"), ("scribe", "1.1.1")));
+
+        var next = Lock("1.22.5", ("aculinaryartillery", "1.2.0"), ("scribe", "1.2.1"));
+        var bundle = Bundle(Pack("1.22.5", Mod("aculinaryartillery"), Mod("scribe")), next, revision: 2);
+
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), bundle.Pack!, _store.LoadUpstream("anego"),
+            1, 2, _store.LoadLocalState("anego"), _store.LoadLock("anego"), bundle.Lock);
+
+        Assert.True(plan.AnyChange);
+        Assert.Equal(2, plan.TheirChanges.Count());
+
+        _store.ApplyUpdate("anego", plan, bundle);
+
+        var locked = _store.LoadLock("anego")!.Mods.ToDictionary(m => m.ModId, m => m.Version);
+        Assert.Equal("1.2.0", locked["aculinaryartillery"]);
+        Assert.Equal("1.2.1", locked["scribe"]);
+
+        // Still nobody's pin. Writing one here would freeze the pack at these versions.
+        Assert.All(_store.Load("anego").Mods, m => Assert.Null(m.Version));
+
+        Assert.Equal(2, _store.LoadLink("anego")!.Revision);
+    }
+
+    /// <summary>And having taken it, the same revision is not offered again.</summary>
+    [Fact]
+    public void And_is_not_offered_a_second_time()
+    {
+        var theirs = Pack("1.22.5", Mod("aculinaryartillery"));
+
+        Follow(theirs, Lock("1.22.5", ("aculinaryartillery", "1.1.5")));
+
+        var next = Lock("1.22.5", ("aculinaryartillery", "1.2.0"));
+        var bundle = Bundle(Pack("1.22.5", Mod("aculinaryartillery")), next, revision: 2);
+
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), bundle.Pack!, _store.LoadUpstream("anego"),
+            1, 2, _store.LoadLocalState("anego"), _store.LoadLock("anego"), bundle.Lock);
+
+        _store.ApplyUpdate("anego", plan, bundle);
+
+        var again = PackUpdatePlan.Between(
+            _store.Load("anego"), bundle.Pack!, _store.LoadUpstream("anego"),
+            2, 2, _store.LoadLocalState("anego"), _store.LoadLock("anego"), bundle.Lock);
+
+        Assert.False(again.AnyChange);
+    }
 }

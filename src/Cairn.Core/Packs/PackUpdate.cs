@@ -15,6 +15,16 @@ public enum ModChangeKind
     Repinned,
 
     /// <summary>
+    /// The author is shipping a different version of a mod neither of you pins.
+    ///
+    /// Not a pin moving: nobody named a version anywhere in either manifest. Most authors
+    /// pin nothing, so for most packs this is what a mod update *is* — the version lives in
+    /// the lockfile, which is the document that makes a published pack reproduce, and the
+    /// manifests on both ends stay byte-identical while five mods move under them.
+    /// </summary>
+    Relocked,
+
+    /// <summary>
     /// You removed a mod the author still ships. Nothing is wrong, but an update silently
     /// putting it back would undo a deliberate decision, so it is asked about rather than
     /// assumed either way.
@@ -69,7 +79,8 @@ public sealed record ModChange(
                 ? Lang.Get("packupdate-desc-added")
                 : Lang.Get("packupdate-desc-added-pinned", Theirs),
             ModChangeKind.Removed => Lang.Get("packupdate-desc-removed"),
-            ModChangeKind.Repinned => $"{Mine ?? Lang.Get("packupdate-newest")} → {Theirs ?? Lang.Get("packupdate-newest")}",
+            ModChangeKind.Repinned or ModChangeKind.Relocked =>
+                $"{Mine ?? Lang.Get("packupdate-newest")} → {Theirs ?? Lang.Get("packupdate-newest")}",
             ModChangeKind.DroppedByYou => Lang.Get("packupdate-desc-dropped"),
             ModChangeKind.PinConflict => Lang.Get("packupdate-desc-pin-conflict",
                 Mine ?? Lang.Get("packupdate-newest"), Theirs ?? Lang.Get("packupdate-newest")),
@@ -188,7 +199,7 @@ public sealed class PackUpdatePlan
 
     public IEnumerable<ModChange> TheirChanges =>
         Changes.Where(c => c.Kind is ModChangeKind.Added or ModChangeKind.Removed
-                               or ModChangeKind.Repinned);
+                               or ModChangeKind.Repinned or ModChangeKind.Relocked);
 
     /// <summary>
     /// Whether the author's server address changes, and what to.
@@ -260,6 +271,11 @@ public sealed class PackUpdatePlan
     /// unconditionally — there is no question to answer about them, which is why they are
     /// not in <see cref="Choices"/> — but "nothing to do" has to mean nothing, or the
     /// dialog that says so is how a change gets made.
+    ///
+    /// The mod versions are in here through <see cref="TheirChanges"/>, and only because
+    /// <see cref="Between"/> is given both lockfiles. A manifest need not name a version at
+    /// all — see <see cref="ModChangeKind.Relocked"/> — so comparing manifests answered no
+    /// for the commonest revision anybody publishes.
     /// </summary>
     public bool AnyChange =>
         GameVersionChanges || TheirChanges.Any() || Choices.Any()
@@ -270,11 +286,17 @@ public sealed class PackUpdatePlan
         var added = Changes.Count(c => c.Kind == ModChangeKind.Added);
         var removed = Changes.Count(c => c.Kind == ModChangeKind.Removed);
         var repinned = Changes.Count(c => c.Kind == ModChangeKind.Repinned);
+        var relocked = Changes.Count(c => c.Kind == ModChangeKind.Relocked);
 
         var parts = new List<string>();
         if (added > 0) parts.Add(Lang.Get("packupdate-n-added", added));
         if (removed > 0) parts.Add(Lang.Get("packupdate-n-removed", removed));
         if (repinned > 0) parts.Add(Lang.Get("packupdate-n-repinned", repinned));
+
+        // Counted apart from repinned, because they are different news. "Repinned" is the
+        // author changing their mind about a version they had named; this is the ordinary
+        // one — they took the mod updates — and it is what nearly every revision is.
+        if (relocked > 0) parts.Add(Lang.Get("packupdate-n-updated", relocked));
 
         // Named rather than counted, and after the mods so it is the last thing read. This
         // is the one line somebody sees before agreeing, and where the pack points is not a
@@ -309,13 +331,31 @@ public sealed class PackUpdatePlan
     /// rather than raised again — the difference is still real, but it has been answered,
     /// and asking once per revision for ever is the thing the answer was given to stop.
     /// </param>
+    /// <param name="myLock">This copy's lockfile. See <paramref name="theirLock"/>.</param>
+    /// <param name="theirLock">
+    /// The author's lockfile at the newer revision, as served beside their manifest.
+    ///
+    /// Without the pair of them a plan cannot see a mod update at all. A manifest entry is
+    /// allowed to be nothing but <c>{"modid": "x"}</c>, and most are: pinning is the
+    /// exception, and the version an author actually ships lives in their lock — which is
+    /// the whole reason a published pack carries one. So an author who updates five mods
+    /// and changes nothing else publishes a revision whose manifest is byte-identical to
+    /// its predecessor, and a plan built from manifests alone reported no change: the
+    /// launcher said the pack matched, and <c>cairn-server update</c> said "already on the
+    /// author's newest revision" and exited 0, revision after revision.
+    ///
+    /// Null for a comparison that has no lock to hand, which loses nothing that was there
+    /// before.
+    /// </param>
     public static PackUpdatePlan Between(
         PackManifest mine,
         PackManifest theirs,
         PackManifest? @base,
         int fromRevision = 0,
         int toRevision = 0,
-        PackLocalState? state = null)
+        PackLocalState? state = null,
+        PackLock? myLock = null,
+        PackLock? theirLock = null)
     {
         // No base is not the same as an empty base: an empty one would call every mod they
         // have an addition and every mod you have yours, which is accidentally the right
@@ -330,6 +370,19 @@ public sealed class PackUpdatePlan
 
         var author = theirs.Mods.ToDictionary(
             m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
+
+        // Indexed rather than ToDictionary: a lockfile is generated, but it is also a file
+        // on somebody else's disk that arrived over the network, and a duplicate modid in
+        // one is not a reason for a plan to throw.
+        static Dictionary<string, string> Locked(PackLock? file)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mod in file?.Mods ?? []) map[mod.ModId] = mod.Version;
+            return map;
+        }
+
+        var myVersions = Locked(myLock);
+        var theirVersions = Locked(theirLock);
 
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var id in basis.Keys.Concat(local.Keys).Concat(author.Keys)) ids.Add(id);
@@ -375,8 +428,33 @@ public sealed class PackUpdatePlan
                     continue;
             }
 
-            // Both have it; only the pin can differ.
-            if (string.Equals(myPin, theirPin, StringComparison.OrdinalIgnoreCase)) continue;
+            // Both have it, and the pins agree — which includes both of them naming
+            // nothing, the ordinary case. Agreeing on no pin is not agreeing on a mod:
+            // sync installs what the lock says whenever the manifest asks for no
+            // particular version, so the author's lock is the whole of what a mod update
+            // to their pack consists of.
+            if (string.Equals(myPin, theirPin, StringComparison.OrdinalIgnoreCase))
+            {
+                // A pin outranks either lock at install time — PackSyncer stops believing
+                // a lock entry the moment it disagrees with the version asked for — so two
+                // matching pins are settled however the locks read.
+                if (myPin is not null) continue;
+
+                if (!theirVersions.TryGetValue(id, out var theirVersion)
+                    || string.IsNullOrWhiteSpace(theirVersion)) continue;
+
+                // No entry of your own is still a change: it means this copy resolves
+                // newest-compatible today and would reproduce the author's build after.
+                var known = myVersions.TryGetValue(id, out var myVersion)
+                            && !string.IsNullOrWhiteSpace(myVersion);
+
+                if (known && string.Equals(myVersion, theirVersion, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                changes.Add(new ModChange(
+                    id, ModChangeKind.Relocked, known ? myVersion : null, theirVersion) { Take = true });
+                continue;
+            }
 
             // You never touched it, so this is simply their change.
             if (inBase && string.Equals(myPin, wasPin, StringComparison.OrdinalIgnoreCase))

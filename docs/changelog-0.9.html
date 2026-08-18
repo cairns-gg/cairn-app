@@ -1,6 +1,21 @@
-<h1>What's new in Cairn 0.9.2</h1>
+<h1>What's new in Cairn 0.9.3</h1>
 
 <p>Everything that changed since the 0.8 series, in one place. Nothing here needs any action from you unless it says so.</p>
+
+<h2>Updates notice a revision that only updates mods</h2>
+
+<p><strong>0.9.3.</strong> The commonest revision an author publishes is the one where they have taken the month's mod updates and changed nothing else. Cairn could not see it. Every follower said <strong>"already on the author's newest revision"</strong>, <code>cairn-server update</code> said it and exited 0, and the pack stayed on the versions it had &mdash; five mod updates waiting at the author's URL that nothing would ever pull.</p>
+
+<p>A pack lists the mods it wants; it does not usually name a version for any of them, because not naming one is what lets you take updates. The versions the author actually shipped live in the pack's lockfile, which is the file that makes their pack reproduce exactly on your machine. Cairn decided whether an update did anything by comparing the two mod <em>lists</em> &mdash; and those lists were identical, revision after revision, while everything that mattered moved underneath them.</p>
+
+<p>It now compares the versions as well. A revision that moves them says so, mod by mod, in the update window and in <code>cairn-server update</code>:</p>
+
+<pre><code>Revision 18: 5 updated.
+  scribe                   1.1.1 &rarr; 1.2.1</code></pre>
+
+<p><strong>Nothing gets pinned by taking one.</strong> A mod nobody named a version for stays that way, so the pack goes on following the author rather than freezing at whatever it caught up to.</p>
+
+<p><strong>If a pack of yours has been stuck</strong>, there is nothing to undo &mdash; check for an update and it will be there. On a server, <code>cairn-server update &lt;pack&gt;</code> followed by a restart. The revisions you missed are not applied one at a time: the author's newest is the one you get, which is the same set of mods anyone importing the pack fresh would receive.</p>
 
 <h2>A mod your mods need is no longer refused for want of a tag</h2>
 
