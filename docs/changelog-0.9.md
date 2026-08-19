@@ -220,6 +220,11 @@ small `home` file, which is what points Cairn at the new drive.
   cannot be reached says so, rather than letting that pass for nothing having changed. And
   coming back from a session re-checks, so tuning a mod in game and quitting turns the button
   into **Publish changes** without having to click away from the pack and back.
+- **A published pack stops carrying a field that was never part of it.** **0.9.3.** Every
+  document Cairn published contained a stray `"IsPublished": false`, which is bookkeeping
+  rather than anything about the pack. Dropping it changes how the document is written, so a
+  pack you published with an earlier Cairn may say **Publish changes** once — open Share and
+  it will check what the site is serving, find your pack unchanged, and settle by itself.
 - **Escape closes any of Cairn's dialogs.** **0.9.3.** Preferences, Share, the pack update and
   game version windows did not, and Preferences could only be dismissed from the title bar.
 - **Preferences no longer runs off the bottom of the screen.** **0.9.3.** At larger interface

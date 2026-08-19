@@ -2205,8 +2205,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // The same treatment of the server address on both sides, taken from what the
             // last publish chose: a pack published with it stripped must not read as having
             // gained one because this copy still has it.
-            var pending = PackBundle.Parse(
-                _store.PublishedDocument(Id, link.Published.Connect == "stripped"));
+            var stripped = link.Published.Connect == "stripped";
+            var document = _store.PublishedDocument(Id, stripped);
+            var pending = PackBundle.Parse(document);
+
+            ReanchorIfUnchanged(link, published, pending, document);
 
             return (PublishDelta.Between(published, pending), true);
         }
@@ -2215,6 +2218,37 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         {
             return (null, false);
         }
+    }
+
+    /// <summary>
+    /// Puts the publish record back in step when the site is serving this very pack and only
+    /// the record disagrees.
+    ///
+    /// The record keeps a hash of the bytes that were sent, so anything that changes how a
+    /// document is written changes it — a field that stopped being serialised, a key order
+    /// that moved — and the pack then reports having something to publish over a change
+    /// nobody made. Publishing to settle it is the worst answer available: it issues a
+    /// revision identical to its predecessor, which tells every follower there is an update
+    /// and then has none for them.
+    ///
+    /// Safe because the comparison is the whole document rather than the summary beside it:
+    /// what gets re-anchored is a pack the site is already serving, byte for byte in every
+    /// field either side carries. A difference anywhere in the manifest or the lock leaves
+    /// the record alone and the pack goes on saying it has something to publish, which it
+    /// does.
+    /// </summary>
+    private void ReanchorIfUnchanged(
+        PackLink link, PackBundle published, PackBundle pending, string document)
+    {
+        if (link.Published is not { } record) return;
+        if (!published.SameContentAs(pending)) return;
+
+        var fingerprint = PackLink.Fingerprint(document);
+        if (string.Equals(record.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)) return;
+
+        record.Fingerprint = fingerprint;
+        _store.SaveLink(Id, link);
+        ReloadShare();
     }
 
     /// <summary>

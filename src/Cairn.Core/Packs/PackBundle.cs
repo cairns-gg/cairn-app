@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Cairn.Core.Packs;
@@ -44,6 +45,7 @@ public sealed class PackBundle
     /// pack or simply gives you a copy: a document with a canonical URL has an owner, and
     /// somewhere to check back with.
     /// </summary>
+    [JsonIgnore]
     public bool IsPublished => !string.IsNullOrWhiteSpace(CanonicalUrl);
 
     private static readonly JsonSerializerOptions Options = new()
@@ -51,6 +53,21 @@ public sealed class PackBundle
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    /// <summary>
+    /// Whether two bundles describe the same pack: the same manifest and the same lock,
+    /// whatever else they carry.
+    ///
+    /// The envelope is excluded because it is the server's to write — publishedBy, the
+    /// canonical URL, the revision — and comparing it would report every fetched document as
+    /// different from every local one. Compared structurally rather than as text, so a key
+    /// order that differs between two writers of the same JSON is not a difference: it is
+    /// the same pack, said in a different order, and treating that as a change is how a
+    /// revision gets published that has nothing in it for anybody.
+    /// </summary>
+    public bool SameContentAs(PackBundle other) => JsonNode.DeepEquals(
+        JsonNode.Parse(Serialize(Pack ?? new PackManifest(), Lock)),
+        JsonNode.Parse(Serialize(other.Pack ?? new PackManifest(), other.Lock)));
 
     public static string Serialize(PackManifest manifest, PackLock? locked = null) =>
         JsonSerializer.Serialize(

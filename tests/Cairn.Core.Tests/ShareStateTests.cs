@@ -450,4 +450,98 @@ public class ShareStateTests : IDisposable
             """{"first":1,"second":99,"third":3}""",
             _store.Load("anego").ModConfig!["terrainslabs.json"].ToJsonString());
     }
+
+    // ---- a record left behind by a change to how documents are written ----
+
+    /// <summary>
+    /// The publish record keeps a hash of the bytes that were sent, so anything changing how
+    /// a document is written moves it: a field that stopped being serialised, a key order
+    /// that shifted. The pack then reports having something to publish over a change nobody
+    /// made — and publishing to settle it issues a revision identical to its predecessor,
+    /// which tells every follower there is an update and then has none for them.
+    ///
+    /// Told apart from a real change by comparing the whole document, not the summary: a
+    /// pack the site is already serving in every field either side carries.
+    /// </summary>
+    [Fact]
+    public void The_same_pack_written_differently_is_not_a_change()
+    {
+        var mine = PackBundle.Parse(_store.PublishedDocument("anego", stripConnect: true));
+
+        // What the site serves: the same document, plus the envelope it adds. Stripped the
+        // same way, since that is what was published.
+        var served = (JsonNode.Parse(
+            _store.PublishedDocument("anego", stripConnect: true)) as JsonObject)!;
+
+        served["publishedBy"] = "dizzyd";
+        served["canonicalUrl"] = "https://cairns.gg/dizzyd/anego";
+        served["revision"] = 4;
+
+        Assert.True(PackBundle.Parse(served.ToJsonString()).SameContentAs(mine));
+    }
+
+    /// <summary>And a pack that really differs is not mistaken for one that does not.</summary>
+    [Fact]
+    public void A_pack_that_really_differs_is_still_a_change()
+    {
+        var mine = PackBundle.Parse(_store.PublishedDocument("anego", stripConnect: true));
+
+        var manifest = _store.Load("anego");
+        manifest.Mods.Add(new PackMod { ModId = "carryon" });
+
+        var theirs = PackBundle.Parse(PackBundle.Serialize(manifest));
+
+        Assert.False(theirs.SameContentAs(mine));
+    }
+
+    /// <summary>
+    /// The same values in a different key order are the same pack. Compared as text this
+    /// read as a difference, which is exactly how a document-format change turns into a
+    /// revision with nothing in it.
+    /// </summary>
+    [Fact]
+    public void A_key_order_that_moved_is_not_a_change()
+    {
+        var a = PackBundle.Parse("""
+            {"formatVersion":1,"pack":{"id":"anego","gameVersion":"1.22.5","mods":[],
+             "modConfig":{"f.json":{"first":1,"second":2}}}}
+            """);
+
+        var b = PackBundle.Parse("""
+            {"formatVersion":1,"pack":{"gameVersion":"1.22.5","id":"anego","mods":[],
+             "modConfig":{"f.json":{"second":2,"first":1}}}}
+            """);
+
+        Assert.True(a.SameContentAs(b));
+    }
+
+    /// <summary>
+    /// A document published by an older Cairn carried a stray "IsPublished", written because
+    /// a computed property had no JsonIgnore on it. Dropping it changes the bytes of every
+    /// document and so the fingerprint of every published pack — which would have every one
+    /// of them reporting "Publish changes" over a field nobody knew existed.
+    ///
+    /// The content is what settles it: the same pack, said without a field that was never
+    /// part of the pack.
+    /// </summary>
+    [Fact]
+    public void A_document_carrying_the_old_stray_field_is_the_same_pack()
+    {
+        var mine = PackBundle.Parse(_store.PublishedDocument("anego", stripConnect: true));
+
+        var older = (JsonNode.Parse(
+            _store.PublishedDocument("anego", stripConnect: true)) as JsonObject)!;
+
+        older["IsPublished"] = false;
+
+        Assert.True(PackBundle.Parse(older.ToJsonString()).SameContentAs(mine));
+    }
+
+    /// <summary>And it is not written any more.</summary>
+    [Fact]
+    public void The_stray_field_is_no_longer_serialised()
+    {
+        Assert.DoesNotContain("IsPublished", _store.PublishedDocument("anego", stripConnect: true));
+        Assert.DoesNotContain("IsPublished", _store.Export("anego"));
+    }
 }
