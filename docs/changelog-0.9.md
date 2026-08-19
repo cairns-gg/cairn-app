@@ -34,6 +34,55 @@ will be there. On a server, `cairn-server update <pack>` followed by a restart. 
 you missed are not applied one at a time: the author's newest is the one you get, which is
 the same set of mods anyone importing the pack fresh would receive.
 
+## Cairn finds your Vintage Story in more places, and you can point it at one
+
+**0.9.3.** Cairn looks for your own install to work out which game version you are playing,
+and it looked in three or four places per platform. If yours was somewhere else — a second
+drive, `/opt`, your home directory, the 32-bit Program Files — it found nothing and said so,
+and that was the end of the conversation.
+
+**It also cost more than the message admitted.** The version an import targets comes from
+that install, and so does something subtler: when a mod is not marked for your game version,
+Cairn will take it anyway on the grounds that you are visibly running it. That allowance is
+testimony about a particular version — so with no install to read, there was no version, and
+the allowance quietly switched off. Mods you have been happily playing came back as *nothing
+for this game version* and were left out, and nothing on screen connected that to the line
+about no install being found.
+
+More places are searched now. On Windows that includes `Program Files (x86)` and the
+conventional game folders on your other drives; on Linux, `/opt/vintagestory`, a
+`vintagestory` folder in your home directory, and whatever `XDG_DATA_HOME` points at.
+
+**And if it still cannot find yours, tell it — on the import screen itself**, which now says
+where it is reading from in two lines you can correct:
+
+```
+Game   1.22.6    /Applications/Vintagestory.app                    Change…
+Mods   /Users/you/…/VintagestoryData/Mods                          Change…
+```
+
+**Game** is the folder holding `VintagestoryAPI.dll`. It is checked as you choose it, so a
+folder that is not an install is refused on the spot rather than stored and quietly ignored,
+and the mod list is read again against the version it turns out to be. On macOS pick the
+folder containing `Vintagestory.app` — a folder picker will not go inside the app itself.
+
+**Mods** is new too, and it is there because the game keeps these in two entirely separate
+places: your install can be anywhere, and your mods, worlds and settings live wherever the
+game's `dataPath` points. If you have moved that, point Cairn at your Mods folder and the
+worlds offered underneath follow it. Pick either that folder or the one holding it; both
+work. Most people never need this — the usual way to move it on Windows is a junction, which
+leaves everything resolving as it always did.
+
+Both are remembered, so these are once-only corrections. Correcting the install is worth it
+even if you never import again: a pack whose game version matches now launches from your copy
+instead of Cairn downloading a second one.
+
+## Smaller things in 0.9.3
+
+**Escape closes any of Cairn's dialogs.** Most already did; Preferences, Share, the pack
+update and the game version windows did not, and Preferences could only be dismissed from
+the title bar.
+
 ## A mod your mods need is no longer refused for want of a tag
 
 **0.9.2.** Mods can require other mods, and Cairn fetches those for you. If ModDB carried no

@@ -92,7 +92,8 @@
                 <Button Name="PublishButton" Content="{Binding PublishLabel}"
                         Classes="accent" Padding="16,5" Click="OnPublish"
                         IsEnabled="{Binding CanPublish}" />
-                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5" Click="OnCancel" />
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
+                        Click="OnCancel" IsCancel="True" />
             </StackPanel>
         </StackPanel>
 

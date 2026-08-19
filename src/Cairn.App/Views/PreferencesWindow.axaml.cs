@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using Cairn.Core;
 using Cairn.App.ViewModels;
@@ -14,6 +15,27 @@ public partial class PreferencesWindow : Window
     {
         InitializeComponent();
         UiScale.Attach(this);
+    }
+
+    /// <summary>
+    /// Escape closes this, as it closes every other dialog Cairn opens.
+    ///
+    /// Handled here rather than with <c>IsCancel</c> on a button, which is how the rest of
+    /// them do it, because this window has no button to put it on: it is dismissed from the
+    /// title bar and nothing else. A window that is opened modally and cannot be dismissed
+    /// by the key every other modal answers to is the one that gets reported as stuck.
+    ///
+    /// Not handled when something else has already taken the key — a combo box with its list
+    /// down closes the list on Escape, and swallowing that would shut the window instead.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Handled || e.Key != Key.Escape) return;
+
+        e.Handled = true;
+        Close();
     }
 
     /// <summary>

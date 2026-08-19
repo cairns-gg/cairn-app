@@ -59,7 +59,8 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Name="ApplyButton" Content="{Binding ApplyLabel}"
                         Classes="accent" Padding="16,5" Click="OnApply" />
-                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5" Click="OnCancel" />
+                <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
+                        Click="OnCancel" IsCancel="True" />
             </StackPanel>
         </StackPanel>
 
