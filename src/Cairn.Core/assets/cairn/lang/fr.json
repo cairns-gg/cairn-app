@@ -533,6 +533,7 @@
   "publish-delta-hotkeys-other": "{0} raccourcis modifiés",
   "publish-delta-connect": "l'adresse du serveur",
   "publish-delta-details": "le nom ou la description du pack",
+  "publish-delta-downloads": "ce que le fichier de verrouillage note sur les téléchargements",
   "publish-delta-something": "Quelque chose a changé depuis la révision {0}.",
   "publish-delta-game": "jeu {0} → {1}",
   "publish-delta-since": "Depuis la révision {0} : {1}.",

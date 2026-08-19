@@ -405,6 +405,7 @@
   "publish-delta-hotkeys-other": "{0} atalhos alterados",
   "publish-delta-connect": "o endereço do servidor",
   "publish-delta-details": "o nome ou a descrição do pack",
+  "publish-delta-downloads": "o que o lockfile regista sobre os downloads",
   "publish-delta-something": "Alguma coisa mudou desde a revisão {0}.",
   "publish-delta-game": "jogo {0} → {1}",
   "publish-delta-since": "Desde a revisão {0}: {1}.",

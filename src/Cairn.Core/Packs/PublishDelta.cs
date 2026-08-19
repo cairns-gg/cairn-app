@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Cairn.Core.Packs;
@@ -31,14 +32,15 @@ public sealed record PublishDelta(
     bool ConnectChanged,
     string? GameVersionFrom,
     string? GameVersionTo,
-    bool DetailsChanged = false)
+    bool DetailsChanged = false,
+    bool DownloadsChanged = false)
 {
     public bool GameVersionChanged => GameVersionFrom is not null;
 
     public bool Anything =>
         ModsAdded > 0 || ModsRemoved > 0 || ModsMoved > 0
         || SettingsChanged > 0 || HotkeysChanged > 0
-        || ConnectChanged || GameVersionChanged || DetailsChanged;
+        || ConnectChanged || GameVersionChanged || DetailsChanged || DownloadsChanged;
 
     /// <summary>
     /// The line somebody reads before publishing. Counts rather than names: this sits above
@@ -68,6 +70,13 @@ public sealed record PublishDelta(
         // not. Named at all because leaving it out made a revision that changed only this
         // report itself as nothing having changed, on a screen whose button said otherwise.
         if (DetailsChanged) parts.Add(Lang.Get("publish-delta-details"));
+
+        // What the lockfile records about a mod besides its version: which release it is on
+        // ModDB, which file, which side it runs on. Nobody chooses these — a sync fills them
+        // in — but they are part of the document, so a revision published before Cairn
+        // recorded them differs from one published after, and saying "something has changed"
+        // about a real difference is the answer that helps least.
+        if (DownloadsChanged) parts.Add(Lang.Get("publish-delta-downloads"));
 
         return parts.Count == 0 ? "" : string.Join(", ", parts);
     }
@@ -112,7 +121,43 @@ public sealed record PublishDelta(
             GameVersionTo: now.GameVersion,
             DetailsChanged:
                 !string.Equals(was.Name ?? "", now.Name ?? "", StringComparison.Ordinal)
-                || !string.Equals(was.Description ?? "", now.Description ?? "", StringComparison.Ordinal));
+                || !string.Equals(was.Description ?? "", now.Description ?? "", StringComparison.Ordinal),
+            DownloadsChanged: LockDetailsDiffer(published.Lock, pending.Lock));
+    }
+
+    /// <summary>
+    /// Whether the lockfile records something different about a mod both sides have, beyond
+    /// the version — which is counted already and is the part anybody chose.
+    ///
+    /// Mods only one side has are left out: those are the added and removed counts, and
+    /// naming them twice would read as two separate things having happened.
+    /// </summary>
+    private static bool LockDetailsDiffer(PackLock? was, PackLock? now)
+    {
+        var before = Entries(was);
+        var after = Entries(now);
+
+        foreach (var (id, entry) in before)
+        {
+            if (!after.TryGetValue(id, out var other)) continue;
+            if (!JsonNode.DeepEquals(WithoutVersion(entry), WithoutVersion(other))) return true;
+        }
+
+        return false;
+
+        static Dictionary<string, LockedMod> Entries(PackLock? file)
+        {
+            var map = new Dictionary<string, LockedMod>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mod in file?.Mods ?? []) map[mod.ModId] = mod;
+            return map;
+        }
+
+        static JsonNode? WithoutVersion(LockedMod mod)
+        {
+            var node = JsonSerializer.SerializeToNode(mod, PackManifest.JsonOptions);
+            if (node is JsonObject o) o.Remove("version");
+            return node;
+        }
     }
 
     /// <summary>

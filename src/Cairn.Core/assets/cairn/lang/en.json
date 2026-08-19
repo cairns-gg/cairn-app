@@ -647,6 +647,7 @@
   "publish-delta-hotkeys-other": "{0} hotkeys changed",
   "publish-delta-connect": "the server address",
   "publish-delta-details": "the pack's name or description",
+  "publish-delta-downloads": "what the lockfile records about the downloads",
   "publish-delta-something": "Something has changed since revision {0}.",
   "publish-delta-game": "game {0} → {1}",
   "publish-delta-since": "Since revision {0}: {1}.",

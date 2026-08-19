@@ -174,4 +174,78 @@ public class PublishDeltaTests
 
         Assert.True(Between(Bundle(was), Bundle(now)).DetailsChanged);
     }
+
+    /// <summary>
+    /// What the lockfile records about a mod besides its version — which release it is on
+    /// ModDB, which file, which side it runs on. Nobody chooses these; a sync fills them in.
+    ///
+    /// Named because a revision published before Cairn recorded them differs from one
+    /// published after, which is a real difference on a real pack — and "something has
+    /// changed" is the answer that helps least.
+    /// </summary>
+    [Fact]
+    public void What_the_lockfile_records_about_a_download_is_named()
+    {
+        var was = new PackBundle
+        {
+            Pack = Pack("scribe"),
+            Lock = new PackLock
+            {
+                GameVersion = "1.22.5",
+                Mods = [new LockedMod { ModId = "scribe", Version = "1.2.1" }],
+            },
+        };
+
+        var now = new PackBundle
+        {
+            Pack = Pack("scribe"),
+            Lock = new PackLock
+            {
+                GameVersion = "1.22.5",
+                Mods =
+                [
+                    new LockedMod
+                    {
+                        ModId = "scribe", Version = "1.2.1",
+                        ReleaseId = 50887, FileId = 110599, Side = "both",
+                    },
+                ],
+            },
+        };
+
+        var delta = Between(was, now);
+
+        Assert.True(delta.DownloadsChanged);
+        Assert.Equal(0, delta.ModsMoved);
+        Assert.Contains("lockfile records", delta.Describe());
+    }
+
+    /// <summary>
+    /// A version that moved is not counted twice. It is already the mods-moved count, and
+    /// naming it again would read as two separate things having happened.
+    /// </summary>
+    [Fact]
+    public void A_version_that_moved_is_not_also_reported_as_a_download_change()
+    {
+        var was = Bundle(Pack("scribe"), ("scribe", "1.1.1"));
+        var now = Bundle(Pack("scribe"), ("scribe", "1.2.1"));
+
+        var delta = Between(was, now);
+
+        Assert.Equal(1, delta.ModsMoved);
+        Assert.False(delta.DownloadsChanged);
+    }
+
+    /// <summary>And a mod only one side has is the added or removed count, not this.</summary>
+    [Fact]
+    public void A_mod_only_one_side_has_is_not_a_download_change()
+    {
+        var was = Bundle(Pack("scribe"), ("scribe", "1.2.1"));
+        var now = Bundle(Pack("scribe", "carryon"), ("scribe", "1.2.1"), ("carryon", "1.0.0"));
+
+        var delta = Between(was, now);
+
+        Assert.Equal(1, delta.ModsAdded);
+        Assert.False(delta.DownloadsChanged);
+    }
 }

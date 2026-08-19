@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -150,8 +151,76 @@ public sealed class PackLink
     /// the same thing: a pack published with its server address stripped differs from its
     /// local manifest permanently, and comparing against the local copy would report
     /// unpublished changes forever.
+    ///
+    /// Hashed over the document's shape rather than its bytes — see <see cref="Canonical"/>.
+    /// A hash of the bytes answers "were these written the same way", and the question being
+    /// asked is "is this the same pack". The two came apart twice in one afternoon: a
+    /// property that stopped being serialised, and a dictionary rebuilt in a different key
+    /// order. Both moved every published pack to "Publish changes" over nothing, and
+    /// publishing to settle one issues a revision identical to its predecessor — an update
+    /// every follower is told about and none of them gets anything from.
     /// </summary>
     public static string Fingerprint(string publishedJson) =>
         "sha256:" + Convert.ToHexStringLower(
-            SHA256.HashData(Encoding.UTF8.GetBytes(publishedJson)));
+            SHA256.HashData(Encoding.UTF8.GetBytes(Canonical(publishedJson))));
+
+    /// <summary>
+    /// The same document, written one way: object keys in order, no whitespace.
+    ///
+    /// Arrays keep the order they came in, because there it is the author's — the mod list
+    /// is a list somebody arranged, and sorting it would call two different packs the same.
+    /// Only objects are reordered, where JSON gives the order no meaning and the writer
+    /// picks it: a Dictionary hands them back in insertion order, so where a value was
+    /// rebuilt rather than edited the keys move without anything about the pack changing.
+    ///
+    /// Anything that will not parse is hashed as it stands. This is only ever handed Cairn's
+    /// own serialisation, so that is unreachable — and a fingerprint is not the place to
+    /// discover it, since throwing here would take out the Share button rather than
+    /// reporting anything.
+    /// </summary>
+    private static string Canonical(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var buffer = new ArrayBufferWriter<byte>();
+
+            using (var writer = new Utf8JsonWriter(buffer)) Write(document.RootElement, writer);
+
+            return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+
+        static void Write(JsonElement element, Utf8JsonWriter writer)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    writer.WriteStartObject();
+
+                    foreach (var property in element.EnumerateObject()
+                                 .OrderBy(p => p.Name, StringComparer.Ordinal))
+                    {
+                        writer.WritePropertyName(property.Name);
+                        Write(property.Value, writer);
+                    }
+
+                    writer.WriteEndObject();
+                    break;
+
+                case JsonValueKind.Array:
+                    writer.WriteStartArray();
+                    foreach (var item in element.EnumerateArray()) Write(item, writer);
+                    writer.WriteEndArray();
+                    break;
+
+                default:
+                    element.WriteTo(writer);
+                    break;
+            }
+        }
+    }
 }
