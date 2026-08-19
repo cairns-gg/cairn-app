@@ -361,4 +361,77 @@ public class HomeMigrationTests : IDisposable
         Assert.Throws<MoveFailed>(() => Move(plan));
         Assert.False(Directory.Exists(To));
     }
+
+    // ---- choosing a location before there is anything at it ----
+
+    /// <summary>
+    /// A root that does not exist yet can still be pointed somewhere, and it was refused.
+    ///
+    /// Nothing creates the root until Cairn writes something — a setting changed, a pack
+    /// made, a ModDB page browsed — so a fresh install has none. That is exactly when
+    /// somebody who cares where their files go opens Preferences to say where, and they were
+    /// told there was nothing to move: choosing a location apparently required something to
+    /// have been put in the wrong place first.
+    /// </summary>
+    [Fact]
+    public void A_root_that_is_not_there_yet_can_still_be_pointed_somewhere()
+    {
+        var fresh = Path.Combine(_tmp, "never-used");
+        var plan = HomeMigration.Plan(fresh, To, null, PlentyOfRoom);
+
+        Assert.True(plan.CanMove);
+        Assert.Equal(0, plan.Files);
+        Assert.Equal(0, plan.Bytes);
+    }
+
+    /// <summary>
+    /// And doing it makes the directory and repoints, which is the whole of a move when
+    /// there is nothing to copy. Walk would throw on the missing source rather than yielding
+    /// nothing, and it is reached twice — once to copy and once to verify.
+    /// </summary>
+    [Fact]
+    public void Pointing_an_empty_root_somewhere_makes_it_and_repoints()
+    {
+        var fresh = Path.Combine(_tmp, "never-used");
+        var result = Move(HomeMigration.Plan(fresh, To, null, PlentyOfRoom));
+
+        Assert.Equal(0, result.Files);
+        Assert.Equal(To, _repointedTo);
+        Assert.True(Directory.Exists(To));
+    }
+
+    /// <summary>
+    /// An existing but empty root is the same case, and was already allowed — worth holding
+    /// alongside the missing one so the two cannot drift apart.
+    /// </summary>
+    [Fact]
+    public void An_empty_root_is_the_same_as_a_missing_one()
+    {
+        var empty = Path.Combine(_tmp, "empty");
+        Directory.CreateDirectory(empty);
+
+        var plan = HomeMigration.Plan(empty, To, null, PlentyOfRoom);
+
+        Assert.True(plan.CanMove);
+        Assert.Equal(0, plan.Files);
+    }
+
+    /// <summary>
+    /// The refusals that still apply. Being allowed to point an empty root somewhere is not
+    /// permission to point it at an occupied folder, at itself, or past CAIRN_HOME.
+    /// </summary>
+    [Fact]
+    public void An_empty_root_is_still_refused_everything_a_full_one_is()
+    {
+        var fresh = Path.Combine(_tmp, "never-used");
+
+        Assert.False(HomeMigration.Plan(fresh, fresh, null, PlentyOfRoom).CanMove);
+        Assert.False(HomeMigration.Plan(fresh, To, "/somewhere", PlentyOfRoom).CanMove);
+
+        var occupied = Path.Combine(_tmp, "occupied");
+        Directory.CreateDirectory(occupied);
+        File.WriteAllText(Path.Combine(occupied, "someone-elses.txt"), "hello");
+
+        Assert.False(HomeMigration.Plan(fresh, occupied, null, PlentyOfRoom).CanMove);
+    }
 }

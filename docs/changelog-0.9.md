@@ -121,6 +121,14 @@ waiting for: they come in, named and ticked, saying what they are.
 
 ## Smaller things in 0.9.3
 
+**You can say where Cairn keeps its files before it has any.** Nothing creates that folder
+until Cairn first writes something, so on a fresh install there was nothing there — and
+Preferences answered *"there is nothing at ~/.cairn to move"*, as though choosing a location
+needed something to have been put in the wrong place first. The button now reads **Choose…**
+when there is nothing to move and **Move…** when there is, and says which of the two it is
+about to do. One line of text still stays at the default location naming where everything
+went, because that is how Cairn finds it next time it starts.
+
 **Escape closes any of Cairn's dialogs.** Most already did; Preferences, Share, the pack
 update and the game version windows did not, and Preferences could only be dismissed from
 the title bar.

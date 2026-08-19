@@ -89,16 +89,25 @@ public class HomeMoveTests : IDisposable
         return window;
     }
 
+    private static Button Find(PreferencesWindow window, string name) =>
+        window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == name);
+
+    /// <summary>Something at the root, so the button is about moving it.</summary>
+    private void SomethingToMove()
+    {
+        Directory.CreateDirectory(CairnPaths.PacksRoot);
+        File.WriteAllText(Path.Combine(CairnPaths.PacksRoot, "something.json"), "{}");
+    }
+
     [AvaloniaFact]
     public void The_move_button_is_beside_the_home_path()
     {
         // Where the number that makes somebody want it already is.
+        SomethingToMove();
+
         var window = ShowOverview(Model());
 
-        var button = window.GetVisualDescendants().OfType<Button>()
-            .FirstOrDefault(b => (b.Content as string) == "Move…");
-
-        Assert.NotNull(button);
+        Assert.Equal("Move…", Find(window, "MoveHomeButton").Content);
     }
 
     [AvaloniaFact]
@@ -344,5 +353,73 @@ public class HomeMoveTests : IDisposable
         {
             try { Directory.Delete(target, recursive: true); } catch (IOException) { }
         }
+    }
+
+    // ---- saying where before there is anything to move ----
+
+    /// <summary>
+    /// The button says which of the two things it will do.
+    ///
+    /// Nothing creates the root until Cairn writes something, so a fresh install has none —
+    /// and "Move…" over a directory that is not there promises a copy that is not going to
+    /// happen, above a confirmation offering to copy 0 files and 0 bytes.
+    /// </summary>
+    [AvaloniaFact]
+    public void With_nothing_at_the_root_the_button_offers_to_choose_rather_than_move()
+    {
+        var window = ShowOverview(Model());
+
+        Assert.Equal("Choose…", Find(window, "MoveHomeButton").Content);
+    }
+
+    [AvaloniaFact]
+    public void And_says_move_once_there_is_something_to_move()
+    {
+        SomethingToMove();
+
+        var window = ShowOverview(Model());
+
+        Assert.Equal("Move…", Find(window, "MoveHomeButton").Content);
+    }
+
+    /// <summary>
+    /// The whole of it, on a machine that has never run Cairn: the folder is made, the root
+    /// moves there, and the default is left holding the one line that says so.
+    ///
+    /// That last part is the one worth pinning. DeleteOldRoot runs after the repoint, and
+    /// the repoint has just created the default directory in order to write the pointer into
+    /// it — so the tidy-up is walking a directory whose only occupant is the file that makes
+    /// the move findable. Taking it would send Cairn back to a default root that is now
+    /// empty: the move undone by its own housekeeping.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Choosing_a_home_on_a_fresh_install_leaves_the_pointer_behind()
+    {
+        var chosen = Path.Combine(_home, "..", "chosen-" + Guid.NewGuid().ToString("n")[..8]);
+        chosen = Path.GetFullPath(chosen);
+        Directory.CreateDirectory(Path.GetDirectoryName(chosen)!);
+
+        // Genuinely absent, which is what a fresh install looks like: this class makes the
+        // sandbox root in its constructor, and nothing else does — Cairn creates it only
+        // when it first writes something.
+        Directory.Delete(_home, recursive: true);
+        Assert.False(Directory.Exists(CairnPaths.Root));
+
+        var model = Model();
+        model.PickFolder = () => Task.FromResult<string?>(chosen);
+        model.Confirm = _ => Task.FromResult(true);
+
+        await model.MoveHomeCommand.ExecuteAsync(null);
+
+        Assert.Equal(chosen, CairnPaths.Root);
+
+        var pointer = Path.Combine(_home, CairnHome.PointerName);
+        Assert.True(File.Exists(pointer), "the default should hold the pointer");
+        Assert.Equal(chosen, File.ReadAllText(pointer).Trim());
+
+        // And nothing else: the directory exists to carry that one line.
+        Assert.Equal([pointer], Directory.EnumerateFileSystemEntries(_home));
+
+        Directory.Delete(chosen, recursive: true);
     }
 }

@@ -100,7 +100,14 @@ public static class HomeMigration
 
         to = Path.GetFullPath(to);
 
-        if (!Directory.Exists(from)) return No(Lang.Get("move-nothing-at", from));
+        // A root that is not there yet is an empty one, not a refusal.
+        //
+        // Nothing creates it until Cairn writes something — a setting changed, a pack made,
+        // a ModDB page browsed — so a fresh install has none. That is precisely the moment
+        // somebody who cares where their files go opens Preferences and says where, and they
+        // were told there was nothing to move, as though choosing required something to have
+        // been put in the wrong place first.
+        var exists = Directory.Exists(from);
 
         if (PathsEqual(from, to)) return No($"{to} is already where Cairn keeps its state");
 
@@ -132,7 +139,7 @@ public static class HomeMigration
         if (running.Count > 0)
             return No(Lang.Get("move-server-running", string.Join(", ", running)));
 
-        var (files, links, bytes) = Measure(from);
+        var (files, links, bytes) = exists ? Measure(from) : (0, 0, 0L);
 
         // The parent when the target does not exist yet: the volume is what matters and the
         // directory is about to be made on it.
@@ -167,7 +174,11 @@ public static class HomeMigration
         var links = 0;
         var bytes = 0L;
 
-        foreach (var entry in Walk(plan.From, ct))
+        // Nothing to copy and nothing to check, which is a whole move for a root that does
+        // not exist yet: what makes it take effect is the repoint below, and that is the
+        // same line either way. Walk would throw on the missing directory rather than
+        // yielding nothing, and it is reached twice — here and in Verify.
+        foreach (var entry in Directory.Exists(plan.From) ? Walk(plan.From, ct) : [])
         {
             var target = Path.Combine(plan.To, entry.Relative);
 
@@ -309,6 +320,8 @@ public static class HomeMigration
     /// </summary>
     private static void Verify(MovePlan plan, CancellationToken ct)
     {
+        if (!Directory.Exists(plan.From)) return;
+
         foreach (var entry in Walk(plan.From, ct))
         {
             var target = Path.Combine(plan.To, entry.Relative);

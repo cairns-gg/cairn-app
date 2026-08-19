@@ -256,6 +256,46 @@ public partial class PreferencesViewModel : ViewModelBase
     /// </summary>
     public bool CanMoveHome => NotCleaningUp && !HomeIsFromEnvironment;
 
+    /// <summary>
+    /// Whether there is anything at the root to move, which decides both what the button
+    /// says and what it then does.
+    ///
+    /// Nothing creates the root until Cairn writes something — a setting changed, a pack
+    /// made, a ModDB page browsed — so a fresh install has none. That is exactly when
+    /// somebody who cares where their files go comes here to say where, and "Move…" over an
+    /// empty directory promises a copy that is not going to happen.
+    /// </summary>
+    public bool HomeHasAnything
+    {
+        get
+        {
+            try
+            {
+                return Directory.Exists(CairnPaths.Root)
+                       && Directory.EnumerateFileSystemEntries(CairnPaths.Root).Any();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Unreadable is not empty. Offering the lighter of the two words about a
+                // directory that might hold forty gigabytes is the wrong way to be wrong.
+                return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Two words for two different actions. See <see cref="HomeHasAnything"/>.
+    ///
+    /// Each key written out rather than picked inside the call. The coverage test finds keys
+    /// by reading the source for a string literal immediately inside a Lang.Get, so one
+    /// chosen by a conditional is invisible to it — the key then reports as unused, and is a
+    /// candidate for deletion by whoever tidies the catalogue next. (Which is not theory: the
+    /// scanner reads comments too, and the first version of this sentence quoted the pattern
+    /// it describes, inventing a key called "literal" that nothing answered.)
+    /// </summary>
+    public string MoveHomeLabel =>
+        HomeHasAnything ? Lang.Get("prefs-move") : Lang.Get("prefs-choose-home");
+
     /// <summary>True while the tree is being copied. See <see cref="IsCleaningUp"/>.</summary>
     [ObservableProperty] public partial bool IsMovingHome { get; set; }
 
@@ -300,15 +340,30 @@ public partial class PreferencesViewModel : ViewModelBase
             return;
         }
 
-        var message = Lang.Get("prefs-move-to", plan.To) + "\n\n"
-                      + Lang.Get("prefs-move-size", plan.Files, HomeMigration.Describe(plan.Bytes))
-                      + (plan.Links > 0 ? Lang.Get("prefs-move-links", plan.Links) : "")
-                      + ".\n\n" + Lang.Get("prefs-move-how", plan.From)
-                      + "\n\n" + Lang.Get("prefs-move-warning");
+        // Two different things to agree to. With a tree to copy this is gigabytes crossing a
+        // disk and the original being deleted afterwards, and it says so. With nothing there
+        // it is one line of text being written, and describing that as copying 0 files reads
+        // as a bug — so it says the thing somebody in that position is actually surprised by
+        // instead: where the files will live, and that a pointer stays behind at the default
+        // so Cairn can find them.
+        var moving = plan.Files > 0 || plan.Links > 0;
+
+        var message = moving
+            ? Lang.Get("prefs-move-to", plan.To) + "\n\n"
+              + Lang.Get("prefs-move-size", plan.Files, HomeMigration.Describe(plan.Bytes))
+              + (plan.Links > 0 ? Lang.Get("prefs-move-links", plan.Links) : "")
+              + ".\n\n" + Lang.Get("prefs-move-how", plan.From)
+              + "\n\n" + Lang.Get("prefs-move-warning")
+            : Lang.Get("prefs-choose-home-to", plan.To) + "\n\n"
+              // Fully qualified: this class has a CairnHome property of its own, which
+              // shadows the type — the same trap HomeIsFromEnvironment records.
+              + Lang.Get("prefs-choose-home-pointer", Cairn.Core.CairnHome.PointerPath);
+
+        var title = moving ? Lang.Get("prefs-move-title") : Lang.Get("prefs-choose-home-title");
+        var button = moving ? Lang.Get("prefs-move-confirm") : Lang.Get("prefs-choose-home-confirm");
 
         if (Confirm is not null
-            && !await Confirm(new ConfirmViewModel(
-                Lang.Get("prefs-move-title"), message, Lang.Get("prefs-move-confirm"))))
+            && !await Confirm(new ConfirmViewModel(title, message, button)))
             return;
 
         IsMovingHome = true;
@@ -337,6 +392,10 @@ public partial class PreferencesViewModel : ViewModelBase
             // Before the aftermath is written, because everything from here on is a report
             // about a move that has already taken effect everywhere else.
             HomeMoved?.Invoke();
+
+            // The root now exists and holds things, so the button is about moving them.
+            OnPropertyChanged(nameof(HomeHasAnything));
+            OnPropertyChanged(nameof(MoveHomeLabel));
 
             MoveAftermath = result.RemovalProblem is { } stuck
                 // The move worked. Saying so first matters: somebody told only that a
