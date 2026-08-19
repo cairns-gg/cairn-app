@@ -24,6 +24,15 @@
                 any particular pack.
             -->
             <TabItem Header="{l:Tr prefs-tab-overview}">
+                <!--
+                    Scrolls, because this tab is a column of prose that grows in two
+                    directions nobody controls: the interface scale multiplies it, and a
+                    translation is routinely half as long again as the English. UiScale grows
+                    the window to match, but only until it runs out of screen — past that the
+                    bottom of the tab was simply unreachable, which is how the language picker
+                    disappeared at 125% on a laptop.
+                -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,14,0,0" Spacing="16">
                     <!-- First within the tab, because it is what somebody opens this
                          looking for when reporting that something is broken. -->
@@ -112,6 +121,7 @@
                         <TextBlock Classes="hint" Text="{l:Tr prefs-language-explain}" />
                     </StackPanel>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!--

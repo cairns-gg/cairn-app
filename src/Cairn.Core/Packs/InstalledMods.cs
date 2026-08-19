@@ -44,6 +44,54 @@ public static class InstalledMods
     /// <summary>Where the game itself puts mods installed from ModDB or dropped in by hand.</summary>
     public static string DefaultModsDir => System.IO.Path.Combine(GameInstall.DefaultDataPath, "Mods");
 
+    /// <summary>Where to read them from, allowing for a data path somebody has corrected.</summary>
+    public static string ChosenModsDir => System.IO.Path.Combine(GameInstall.ChosenDataPath, "Mods");
+
+    /// <summary>
+    /// A folder somebody picked, and the data path it implies.
+    /// </summary>
+    /// <param name="ModsDir">The folder to read mod zips from.</param>
+    /// <param name="DataPath">
+    /// The folder holding it, which is where the worlds are. Derived rather than asked for
+    /// separately: <c>Saves</c> sits beside <c>Mods</c>, and a person who fixed the mods
+    /// folder and then found the worlds list still reading somewhere else would have been
+    /// given half a repair.
+    /// </param>
+    public sealed record ModsFolder(string ModsDir, string DataPath);
+
+    /// <summary>
+    /// What a chosen folder means, allowing for either end of the same answer.
+    ///
+    /// "Mods" is the folder people can name — it is the one the game's own instructions send
+    /// them to, and the one their zips are sitting in. The data path is the concept Cairn
+    /// actually needs, since the worlds hang off it too, and it is jargon: nobody calls it
+    /// that unless they have set <c>--dataPath</c>. So this asks for the folder they know and
+    /// works out the one it needs.
+    ///
+    /// Both directions are accepted, because at the moment of picking, either is a reasonable
+    /// thing to have clicked: a folder containing <c>Mods</c> is a data path, and anything
+    /// else is taken as the mods folder itself with its parent as the data path.
+    ///
+    /// Never refuses a folder for being empty. A Mods folder with nothing in it is a real
+    /// state — somebody who has just moved their data path has one — and the dialog already
+    /// says when a scan found no zips, which is a better answer than a picker that rejects
+    /// the correct folder.
+    /// </summary>
+    /// <returns>Null only when the folder is not there at all.</returns>
+    public static ModsFolder? ChooseModsFolder(string picked)
+    {
+        if (string.IsNullOrWhiteSpace(picked) || !Directory.Exists(picked)) return null;
+
+        var full = System.IO.Path.GetFullPath(picked.TrimEnd(System.IO.Path.DirectorySeparatorChar));
+
+        var inside = System.IO.Path.Combine(full, "Mods");
+        if (Directory.Exists(inside)) return new ModsFolder(inside, full);
+
+        // The parent, when there is one. A folder at a volume root has none, and its own
+        // path is then the best answer available for where its worlds would be.
+        return new ModsFolder(full, System.IO.Path.GetDirectoryName(full) ?? full);
+    }
+
     /// <summary>
     /// Every mod zip in a folder, with what its own <c>modinfo.json</c> says about it.
     ///

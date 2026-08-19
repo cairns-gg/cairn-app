@@ -8,7 +8,9 @@ using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
+using Cairn.Core;
 using Cairn.Core.ModDb;
+using Cairn.Core.Runtime;
 using Cairn.Core.Packs;
 using Xunit;
 
@@ -32,9 +34,22 @@ public class ImportSourceWindowTests
             modsDir ?? Path.Combine(Path.GetTempPath(), "cairn-no-such-install", "Mods"),
             savesDir ?? Path.Combine(Path.GetTempPath(), "cairn-no-such-install", "Saves"),
             new HashSet<string>(),
-            playedOn,
+            playedOn is null ? null : Install(playedOn),
             gameVersion,
             suggestId: name => (name ?? "").ToLowerInvariant().Replace(' ', '-'));
+
+    /// <summary>
+    /// An install the dialog can read a version off. Not a real one on disk — nothing here
+    /// launches it, and what the dialog wants from an install is the version it reports.
+    /// </summary>
+    private static GameInstall Install(string version) => new()
+    {
+        Directory = Path.Combine(Path.GetTempPath(), "cairn-no-such-install"),
+        Executable = Path.Combine(Path.GetTempPath(), "cairn-no-such-install", "Vintagestory"),
+        Version = version,
+        Architecture = ExecutableArch.X64,
+        RequiredFramework = new Version(10, 0, 0),
+    };
 
     private static (ImportSourceWindow Window, ImportSourceViewModel Vm) Show(
         ImportSourceViewModel? vm = null)
@@ -187,7 +202,7 @@ public class ImportSourceWindowTests
         var (window, vm) = Show(Choice(playedOn: "1.21.4", gameVersion: "1.22.6"));
 
         Assert.Equal("1.21.4", vm.GameVersion);
-        Assert.Contains("install is 1.21.4", vm.InstallNote);
+        Assert.Equal("1.21.4", vm.GameLine);
 
         // Nothing to pick, and nothing to press.
         Assert.Empty(window.GetVisualDescendants().OfType<ComboBox>());
@@ -196,13 +211,24 @@ public class ImportSourceWindowTests
             b => b.Name == "ScanButton");
     }
 
+    /// <summary>
+    /// And says what that costs, in the row itself.
+    ///
+    /// Not merely that nothing was found: with no install there is no version to measure
+    /// against, so a mod marked for nothing like the pack's target is left out rather than
+    /// taken on the strength of somebody running it. That consequence used to be invisible,
+    /// which is how three perfectly good mods went missing from an import with only a line
+    /// about an install to explain it.
+    /// </summary>
     [AvaloniaFact]
-    public void With_no_install_to_ask_it_says_so_rather_than_naming_one()
+    public void With_no_install_to_ask_the_row_says_so_and_what_it_costs()
     {
         var (_, vm) = Show(Choice(playedOn: null, gameVersion: "1.22.6"));
 
         Assert.Equal("1.22.6", vm.GameVersion);
-        Assert.Contains("No Vintage Story install found", vm.InstallNote);
+        Assert.Equal("not found", vm.GameLine);
+        Assert.Contains("1.22.6", vm.GameDetail);
+        Assert.Contains("unmarked", vm.GameDetail);
     }
 
     [AvaloniaFact]
@@ -307,5 +333,152 @@ public class ImportSourceWindowTests
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Contains("No mod zips", vm.Summary);
+    }
+
+    // ---- pointing Cairn at the install it could not find ----
+
+    /// <summary>
+    /// A directory real enough for GameInstall.TryAt, made under a fresh temp root so the
+    /// tests below cannot see each other's.
+    /// </summary>
+    private static string RealInstall(string name = "Vintagestory")
+    {
+        var dir = Path.Combine(
+            Path.GetTempPath(), "cairn-vs-" + Guid.NewGuid().ToString("n")[..8], name);
+
+        Directory.CreateDirectory(dir);
+        File.WriteAllBytes(
+            Path.Combine(dir, OperatingSystem.IsWindows() ? "Vintagestory.exe" : "Vintagestory"),
+            new byte[64]);
+        File.WriteAllText(Path.Combine(dir, "VintagestoryAPI.dll"), "");
+        return dir;
+    }
+
+    /// <summary>
+    /// Why this control lives here rather than in Preferences, where it was first built.
+    ///
+    /// An install decides the version a pack targets and whether a mod marked for nothing
+    /// like it may be taken on the strength of somebody running it. Both of those are only
+    /// ever visible on this list — so a setting two windows away silently changed what a scan
+    /// concluded, and nothing connected the two.
+    /// </summary>
+    /// <summary>
+    /// An install whose VintagestoryAPI.dll carries no readable version is refused, and says
+    /// why.
+    ///
+    /// It is no use for either thing the answer decides: the pack takes its version from
+    /// here, and a pack launches from an install only when the two versions match. Accepted
+    /// in silence it produced the worst possible screen — a folder chosen, no complaint
+    /// anywhere, and the same "no Vintage Story install found" line still underneath it.
+    /// </summary>
+    [AvaloniaFact]
+    public void An_install_with_no_readable_version_is_refused_and_says_why()
+    {
+        CairnSettings.Update(s => s.GameInstallPath = null);
+
+        var (_, vm) = Show(Choice(playedOn: null, gameVersion: "1.22.5"));
+
+        var dir = RealInstall();
+        vm.PickFolder = () => Task.FromResult<string?>(dir);
+        vm.ChooseInstallCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(CairnSettings.Load().GameInstallPath);
+        Assert.Null(vm.PlayedOn);
+        Assert.Contains(dir, vm.InstallProblem);
+        Assert.Contains("version", vm.InstallProblem);
+    }
+
+    /// <summary>
+    /// The mods folder, asked for as the folder people can name rather than as the data path
+    /// Cairn needs. Both ends of the same answer are accepted, and the worlds beside it
+    /// follow — fixing the mods and leaving the world list reading somewhere else would be
+    /// half a repair.
+    /// </summary>
+    [AvaloniaFact]
+    public void Choosing_a_mods_folder_moves_what_gets_scanned()
+    {
+        CairnSettings.Update(s => s.GameDataPath = null);
+
+        var data = Path.Combine(Path.GetTempPath(), "cairn-data-" + Guid.NewGuid().ToString("n")[..8]);
+        var mods = Path.Combine(data, "Mods");
+        Directory.CreateDirectory(mods);
+
+        var (_, vm) = Show(Choice(playedOn: null));
+
+        // The Mods folder itself, which is what somebody has in front of them.
+        vm.PickFolder = () => Task.FromResult<string?>(mods);
+        vm.ChooseModsCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(mods, vm.ModsDir);
+        Assert.Equal(data, CairnSettings.Load().GameDataPath);
+        Assert.True(vm.ModsAreChosen);
+
+        // And the folder holding it, which is what a picker lands on just as often.
+        vm.PickFolder = () => Task.FromResult<string?>(data);
+        vm.ChooseModsCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(mods, vm.ModsDir);
+        Assert.Equal(data, CairnSettings.Load().GameDataPath);
+
+        CairnSettings.Update(s => s.GameDataPath = null);
+        Directory.Delete(data, recursive: true);
+    }
+
+    /// <summary>
+    /// Refused where it is picked rather than stored. A path that is not an install would
+    /// otherwise sit in settings.json being skipped by the search — which looks exactly like
+    /// the bug this control exists to fix, and would be blamed on the same thing.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_folder_that_is_not_an_install_is_refused_and_says_so()
+    {
+        CairnSettings.Update(s => s.GameInstallPath = null);
+
+        var (window, vm) = Show(Choice(playedOn: null));
+
+        var empty = Path.Combine(Path.GetTempPath(), "cairn-empty-" + Guid.NewGuid().ToString("n")[..8]);
+        Directory.CreateDirectory(empty);
+
+        vm.PickFolder = () => Task.FromResult<string?>(empty);
+        vm.ChooseInstallCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(CairnSettings.Load().GameInstallPath);
+        Assert.Null(vm.PlayedOn);
+        Assert.Contains(empty, vm.InstallProblem);
+
+        // On screen, not only on the view model: the binding is what a person reads.
+        Assert.Contains(vm.InstallProblem, VisibleText(window));
+
+        Directory.Delete(empty);
+    }
+
+    /// <summary>
+    /// The folder holding the install, which on macOS is the only thing a picker can select
+    /// — it will not enter Vintagestory.app. What gets recorded is the install, not what was
+    /// picked, or every later start-up would search for it again.
+    /// </summary>
+    /// <summary>
+    /// The folder holding the install is reached, which on macOS is the only thing a picker
+    /// can select — it will not enter Vintagestory.app. Told apart from a folder with nothing
+    /// in it by which refusal comes back: this one got as far as reading the install.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_folder_above_an_install_is_looked_into()
+    {
+        CairnSettings.Update(s => s.GameInstallPath = null);
+
+        var dir = RealInstall("Vintagestory.app");
+        var (_, vm) = Show(Choice(playedOn: null));
+
+        vm.PickFolder = () => Task.FromResult<string?>(Path.GetDirectoryName(dir)!);
+        vm.ChooseInstallCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Named in the refusal, so what was found is the install rather than what was picked.
+        Assert.Contains(dir, vm.InstallProblem);
     }
 }

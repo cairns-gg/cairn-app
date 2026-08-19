@@ -38,6 +38,45 @@ public sealed class CairnSettings
     public string? Language { get; set; }
 
     /// <summary>
+    /// Where Vintage Story is installed, when Cairn's own search does not find it, or finds
+    /// the wrong one on a machine with two.
+    ///
+    /// Null means "look for it", which is right for nearly everybody. Stored rather than
+    /// left to <c>VINTAGE_STORY</c> for exactly the reason <see cref="CairnHome"/> gives
+    /// about <c>CAIRN_HOME</c>: an environment variable set in a shell does not reach a
+    /// Start-menu launch, a desktop entry or an .app bundle, which is how the launcher is
+    /// actually started. The variable still wins where it is set — see
+    /// <see cref="Cairn.Core.GameInstall.CandidateDirectories()"/> — because it is what a systemd unit
+    /// and a CI job use, and this is the setting a person clicks.
+    ///
+    /// The directory, not the executable: <see cref="Cairn.Core.GameInstall.TryAt"/> decides what
+    /// is in it, and a path that is not an install is refused where it is chosen rather than
+    /// stored and quietly skipped.
+    ///
+    /// Named for the path rather than the thing, because a property called GameInstall would
+    /// shadow the type of the same name for every line inside this class.
+    /// </summary>
+    public string? GameInstallPath { get; set; }
+
+    /// <summary>
+    /// Where Vintage Story keeps this player's mods, worlds and settings, when it is not the
+    /// place the game picks on its own.
+    ///
+    /// Separate from <see cref="GameInstallPath"/> because the two are separate in the game
+    /// and move independently: <c>GamePaths</c> derives the data path from the platform's
+    /// application-data folder and never from where the binaries are, so knowing one says
+    /// nothing about the other. The only way to move it is the game's own <c>--dataPath</c>
+    /// argument, which lives in whatever shortcut or script launches it and is written down
+    /// nowhere another program can read — so if it has been moved, the only way Cairn can
+    /// know is to be told.
+    ///
+    /// Null means the game's own answer, which is right for nearly everybody: the popular
+    /// way to move this on Windows is a junction, and that leaves the default path resolving
+    /// perfectly.
+    /// </summary>
+    public string? GameDataPath { get; set; }
+
+    /// <summary>
     /// Anything in the file this build does not know about, kept so it survives a write.
     ///
     /// The same failure this type was created to fix, one version along: somebody runs a

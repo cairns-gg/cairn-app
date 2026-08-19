@@ -69,9 +69,6 @@
                 <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
                         Click="OnCancel" IsCancel="True" />
             </StackPanel>
-
-            <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                       Text="{l:Tr importsrc-nothing-yet}" />
         </StackPanel>
 
         <!-- One body per source, only one of them ever visible. -->
@@ -89,10 +86,70 @@
                     <TextBlock FontSize="12" TextWrapping="Wrap" Opacity="0.8"
                                Text="{l:Tr importsrc-install-explain}" />
 
-                    <TextBlock Text="{Binding InstallNote}" FontSize="12" TextWrapping="Wrap" />
+                    <!--
+                        Where this reads from, as two labelled rows rather than a paragraph
+                        and two loose paths.
 
-                    <TextBlock Text="{Binding ModsDir}" FontSize="11" Opacity="0.55"
-                               FontFamily="monospace" TextWrapping="Wrap" />
+                        It used to be a sentence about the version, a grey path, and then a
+                        second grey path once the install became changeable — five lines of
+                        prose above the list, with nothing saying which path was which. They
+                        are two different folders that move independently: the game, and the
+                        place it keeps your mods. A grid says so in two rows and leaves room
+                        for the change each of them needs.
+
+                        Both are asked for in the terms somebody can answer. "Mods" is the
+                        folder the game's own instructions send people to; the data path it
+                        implies is worked out from it — see InstalledMods.ChooseModsFolder —
+                        because "data path" is a phrase nobody uses unless they have already
+                        passed the game a dataPath argument.
+                    -->
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" RowDefinitions="Auto,Auto"
+                          Margin="0,2,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Tr importsrc-row-game}"
+                                   FontSize="12" Opacity="0.7" Margin="0,0,12,3"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Row="0" Grid.Column="1" Name="GameVersionText"
+                                   Text="{Binding GameLine}"
+                                   FontSize="12" Margin="0,0,12,3" VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Row="0" Grid.Column="2" Name="InstallDirectoryText"
+                                   Text="{Binding GameDetail}"
+                                   FontSize="11" Opacity="0.55"
+                                   VerticalAlignment="Center" Margin="0,0,12,3"
+                                   TextWrapping="Wrap"
+                                   ToolTip.Tip="{Binding InstallDirectory}" />
+
+                        <Button Grid.Row="0" Grid.Column="3" Name="ChooseInstallButton"
+                                Padding="10,2" FontSize="12" Margin="0,0,0,3"
+                                Content="{l:Tr importsrc-change}"
+                                Command="{Binding ChooseInstallCommand}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Tr importsrc-row-mods}"
+                                   FontSize="12" Opacity="0.7" Margin="0,0,12,0"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="2" Name="ModsDirText"
+                                   Text="{Binding ModsDir}"
+                                   FontSize="11" Opacity="0.55" FontFamily="monospace"
+                                   VerticalAlignment="Center" Margin="0,0,12,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding ModsDir}" />
+
+                        <Button Grid.Row="1" Grid.Column="3" Name="ChooseModsButton"
+                                Padding="10,2" FontSize="12"
+                                Content="{l:Tr importsrc-change}"
+                                Command="{Binding ChooseModsCommand}" />
+                    </Grid>
+
+                    <!-- Prose only when something is wrong with what was picked. -->
+                    <TextBlock Name="InstallProblemText" Text="{Binding InstallProblem}"
+                               FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                               IsVisible="{Binding InstallProblem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                    <TextBlock Name="ModsProblemText" Text="{Binding ModsProblem}"
+                               FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                               IsVisible="{Binding ModsProblem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                     <!-- The summary says what is in the folder as soon as it has been read,
                          and what can go in a pack once the lookups are done. The count

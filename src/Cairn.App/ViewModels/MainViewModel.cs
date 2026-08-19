@@ -87,11 +87,19 @@ public partial class MainViewModel : ViewModelBase
     private readonly PackStore _store;
     private readonly PackData _packData;
     private readonly GameStore _gameStore;
-    private readonly GameLibrary _library;
     private readonly RuntimeStore _runtimes;
     private readonly GameProvisioner _provisioner;
     private CancellationTokenSource? _provisionCts;
-    private readonly GameInstall? _install;
+
+    /// <summary>
+    /// The player's own install, and the library built over it. Not readonly, because
+    /// Preferences can now point Cairn at a different one — and every pack pane, version
+    /// list and default game version downstream was built from the answer read at start-up.
+    /// See <see cref="OnInstallChanged"/>.
+    /// </summary>
+    private GameInstall? _install;
+
+    private GameLibrary _library;
 
     /// <summary>
     /// <paramref name="handler"/> exists so tests can run offline. Pack rows fetch their
@@ -134,7 +142,7 @@ public partial class MainViewModel : ViewModelBase
                 .Select(p => p.Display)
                 .ToList());
 
-        NewPackGameVersion = _install?.Version is { } v and not "unknown" ? v : "1.22.5";
+        NewPackGameVersion = DefaultPackGameVersion();
 
         // Populate at construction as well as on open: the ComboBox is part of the window
         // from the start, and binding it against an empty collection makes it coerce its
@@ -509,6 +517,60 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// The import dialog was pointed at a different Vintage Story, or told to look again.
+    ///
+    /// The install is read once at start-up because finding it scans directories and reads a
+    /// version out of an assembly — too much to do behind a property. That makes it exactly
+    /// the kind of captured value <see cref="CairnPaths"/> warns about, so the one thing that
+    /// can change it says so, and everything built from it is built again: the library a pack
+    /// pane launches through, the version list, and the version a new pack is offered.
+    ///
+    /// Which is why this is worth doing at all for a setting chosen during an import. What is
+    /// being corrected is not only which mods get scanned: a pack whose version matches the
+    /// install now launches from it rather than making Cairn fetch a second copy of a game
+    /// already on the disk.
+    /// </summary>
+    private void OnInstallChanged()
+    {
+        _install = GameInstall.TryLocate();
+        _library = new GameLibrary(_gameStore, _install);
+
+        Games.SystemInstallChanged(_install);
+
+        // Only while nobody has typed one. The New pack box is a text field somebody may be
+        // part-way through, and helpfully replacing what they wrote because a setting
+        // changed in another window is not a correction.
+        if (!IsCreating) NewPackGameVersion = DefaultPackGameVersion();
+
+        // Rebuilds the detail pane, which is holding the old library.
+        LoadPacks();
+        OnLibraryChanged();
+    }
+
+    /// <summary>
+    /// What a new or imported pack targets before anybody chooses: the version being played,
+    /// then the newest Cairn has installed, and only then a constant.
+    ///
+    /// The constant used to be the whole of it whenever there was no install, which made a
+    /// machine Cairn could not find the game on create packs for a version that ages out of
+    /// date with the release it was written beside. Reaching for what is actually on the
+    /// machine first costs nothing and is right far more often.
+    /// </summary>
+    private string DefaultPackGameVersion()
+    {
+        if (_install?.Version is { } v and not "unknown" && GameVersions.IsPlausibleVersion(v))
+            return v;
+
+        var newest = _gameStore.ListInstalled()
+            .Select(i => i.Version)
+            .Where(GameVersions.IsPlausibleVersion)
+            .OrderByDescending(x => x, GameVersionComparer.Ascending)
+            .FirstOrDefault();
+
+        return newest ?? "1.22.5";
+    }
+
+    /// <summary>
     /// A launch moved on. Only the pane for that pack has anything to redraw — the others
     /// are not showing it, and the one that is may not be the one that started it.
     /// </summary>
@@ -730,24 +792,30 @@ public partial class MainViewModel : ViewModelBase
     /// Everything the import dialog needs to read this machine's own install. The mods it
     /// lists are read, never touched: plain Vintage Story goes on working exactly as it did.
     /// </summary>
-    private ImportSourceViewModel NewImportChoice()
-    {
-        var playedOn = _install?.Version is { } v && GameVersions.IsPlausibleVersion(v) ? v : null;
-
-        return new ImportSourceViewModel(
+    private ImportSourceViewModel NewImportChoice() =>
+        new(
             new InstallImport(_moddb),
-            InstalledMods.DefaultModsDir,
-            InstalledWorlds.DefaultSavesDir,
-            InstalledMods.DisabledIn(GameInstall.DefaultDataPath),
-            playedOn,
+
+            // Chosen rather than default: somebody who corrected this during an earlier
+            // import should not have to correct it again, and the three of these have to
+            // agree — mods, worlds and the switched-off list all hang off one data path.
+            InstalledMods.ChosenModsDir,
+            InstalledWorlds.SavesIn(GameInstall.ChosenDataPath),
+            InstalledMods.DisabledIn(GameInstall.ChosenDataPath),
+            _install,
 
             // Only reached when there is no install to take a version from. A pack made from
             // the mods you are running is a pack for the game you are running them on, so
             // the dialog asks nothing about it; moving a pack to another game version is its
             // own step in Settings, with a preview of what it would do to every mod.
             gameVersion: NewPackGameVersion,
-            suggestId: _store.SuggestId);
-    }
+            suggestId: _store.SuggestId)
+        {
+            // Pointing Cairn at an install is done in there, because that is the one screen
+            // where the answer changes something on view. It still belongs to the launcher:
+            // see OnInstallChanged.
+            InstallChanged = OnInstallChanged,
+        };
 
     private async Task ImportFromInstallAsync(ImportSourceViewModel choice)
     {

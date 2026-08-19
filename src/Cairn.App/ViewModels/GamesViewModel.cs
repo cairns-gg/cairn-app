@@ -80,7 +80,12 @@ public partial class GamesViewModel : ViewModelBase
     private readonly GameCatalog _catalog;
     private readonly Action<string> _log;
     private readonly Action _onLibraryChanged;
-    private readonly GameInstall? _system;
+    /// <summary>
+    /// The install Cairn found rather than installed. Not readonly: Preferences can point
+    /// Cairn at a different one, and a list still holding the old answer goes on offering an
+    /// install that is no longer being used. See <see cref="SystemInstallChanged"/>.
+    /// </summary>
+    private GameInstall? _system;
     private readonly Func<string, IReadOnlyList<string>> _packsUsing;
 
     public GamesViewModel(
@@ -192,6 +197,16 @@ public partial class GamesViewModel : ViewModelBase
     }
 
     private bool CanInstallRuntime => !IsBusy && SelectedInstalled is { RuntimeMissing: true };
+
+    /// <summary>
+    /// Preferences pointed Cairn at a different install, or at none. Refreshes here rather
+    /// than leaving the caller to remember, because the list is what the change is visible in.
+    /// </summary>
+    public void SystemInstallChanged(GameInstall? system)
+    {
+        _system = system;
+        RefreshInstalled();
+    }
 
     public void RefreshInstalled()
     {

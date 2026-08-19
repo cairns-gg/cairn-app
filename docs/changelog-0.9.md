@@ -83,6 +83,10 @@ instead of Cairn downloading a second one.
 update and the game version windows did not, and Preferences could only be dismissed from
 the title bar.
 
+**Preferences no longer runs off the bottom of the screen.** At larger interface sizes — and
+in the languages whose text runs longer than the English — the Overview tab could put the
+language picker somewhere unreachable. It scrolls now.
+
 ## A mod your mods need is no longer refused for want of a tag
 
 **0.9.2.** Mods can require other mods, and Cairn fetches those for you. If ModDB carried no

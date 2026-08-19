@@ -108,8 +108,22 @@ public sealed partial class ImportRowViewModel(InstalledMod mod) : ViewModelBase
 public sealed partial class ImportSourceViewModel : ViewModelBase
 {
     private readonly InstallImport _importer;
+
+    /// <summary>
+    /// The install being read for a version, which a person may correct. Not readonly for
+    /// that reason, and everything derived from it — the version, the note, and every mod's
+    /// verdict — is recomputed when it moves.
+    /// </summary>
+    private GameInstall? _install;
+
+    /// <summary>What the pack targets when there is no install at all to take it from.</summary>
+    private readonly string _fallbackVersion;
     private readonly Func<string?, string> _suggestId;
-    private readonly IReadOnlySet<string> _disabled;
+    /// <summary>
+    /// Mod ids and filenames switched off in the game's settings, which live in the data path
+    /// — so this moves with the mods folder rather than being read once.
+    /// </summary>
+    private IReadOnlySet<string> _disabled;
 
     /// <summary>Cancels a scan somebody has walked away from.</summary>
     private CancellationTokenSource? _scan;
@@ -117,13 +131,18 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// <param name="modsDir">
     /// The folder to read. The player's own, by default — Cairn only ever reads it.
     /// </param>
-    /// <param name="playedOn">
-    /// The version of the Vintage Story install this folder belongs to, when there is one.
+    /// <param name="install">
+    /// The Vintage Story install this folder belongs to, when there is one.
     ///
     /// It is where the pack's own game version comes from — importing the mods you are
     /// running into a pack for some other version is a thing to ask for, not a default. It
     /// also decides whether an unmarked mod may be imported on the strength of somebody
-    /// running it; see <see cref="InstallImport.PlanAsync"/>.
+    /// running it; see <see cref="InstallImport.PlanAsync"/>, and note that having no
+    /// install is therefore not merely cosmetic: it silently withdraws that allowance.
+    ///
+    /// Null when Cairn could not find one, which is what <see cref="ChooseInstall"/> exists
+    /// to fix. The choice is made here rather than in Preferences because this is the only
+    /// screen where the answer changes anything a person is looking at.
     /// </param>
     /// <param name="gameVersion">
     /// What the pack will target when there is no install to take it from. Never offered as
@@ -139,7 +158,7 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         string modsDir,
         string savesDir,
         IReadOnlySet<string> disabled,
-        string? playedOn,
+        GameInstall? install,
         string gameVersion,
         Func<string?, string> suggestId)
     {
@@ -148,7 +167,8 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         _importer = importer;
         _suggestId = suggestId;
         _disabled = disabled;
-        PlayedOn = playedOn;
+        _install = install;
+        _fallbackVersion = gameVersion;
 
         // The list frame is drawn only when it has rows. Empty, a bordered scroll area is
         // indistinguishable from a disabled multi-line text box, and the dialog opens in
@@ -157,7 +177,6 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRows));
 
         ModsDir = modsDir;
-        GameVersion = playedOn ?? gameVersion;
 
         PackName = Lang.Get("importsrc-default-name");
     }
@@ -226,13 +245,106 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
     // ---- an install ----
 
-    public string ModsDir { get; }
+    public string ModsDir { get; private set; }
+
+    /// <summary>Whether the mods folder is one somebody named, rather than the game's own.</summary>
+    public bool ModsAreChosen => !string.IsNullOrWhiteSpace(CairnSettings.Load().GameDataPath);
+
+    /// <summary>
+    /// Reads a different folder for mods, and the worlds beside it.
+    ///
+    /// Asked for as the Mods folder rather than the data path holding it. That is the folder
+    /// people can name — the game's own instructions send them to it and their zips are in
+    /// it — while "data path" is a phrase nobody uses unless they have set <c>--dataPath</c>.
+    /// <see cref="InstalledMods.ChooseModsFolder"/> takes either end and works out the rest.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseMods()
+    {
+        if (PickFolder is null) return;
+
+        if (await PickFolder() is not { } picked) return;
+
+        if (InstalledMods.ChooseModsFolder(picked) is not { } folder)
+        {
+            ModsProblem = Lang.Get("importsrc-mods-invalid", picked);
+            return;
+        }
+
+        ModsProblem = "";
+        CairnSettings.Update(s => s.GameDataPath = folder.DataPath);
+
+        Retarget(folder);
+    }
+
+    /// <summary>
+    /// Why a chosen mods folder was refused, or empty. See <see cref="InstallProblem"/> for
+    /// why this stays on screen rather than passing by.
+    /// </summary>
+    [ObservableProperty] public partial string ModsProblem { get; set; } = "";
+
+    private void Retarget(InstalledMods.ModsFolder folder)
+    {
+        ModsDir = folder.ModsDir;
+        _disabled = InstalledMods.DisabledIn(folder.DataPath);
+
+        Worlds = new WorldPickerViewModel(InstalledWorlds.SavesIn(folder.DataPath));
+
+        OnPropertyChanged(nameof(ModsDir));
+        OnPropertyChanged(nameof(ModsAreChosen));
+        OnPropertyChanged(nameof(Worlds));
+
+        // The version the pack targets is in that line whenever no install names one.
+        OnPropertyChanged(nameof(GameDetail));
+
+        if (Source == ImportSource.Install) _ = ScanAsync();
+    }
+
+    /// <summary>
+    /// There is deliberately no way back to "look for them again".
+    ///
+    /// Change… is how a wrong answer is corrected, and the case a reset would exist for
+    /// mends itself: a stored directory that has stopped being an install is skipped by
+    /// GameInstall.CandidateDirectories and the search runs on past it. A button for it was
+    /// another control on the dialog that least needs them, and it undid both corrections
+    /// in order to fix either one.
+    /// </summary>
+    public bool InstallIsChosen => !string.IsNullOrWhiteSpace(CairnSettings.Load().GameInstallPath);
 
     /// <summary>
     /// The version of the install the folder belongs to, or null when there is no install
     /// to ask — a folder left behind by a game that has since been moved or removed.
+    ///
+    /// Implausible versions are refused rather than passed on: "unknown" comes back from an
+    /// install whose assembly could not be read, and testimony about a version nobody can
+    /// name is not testimony.
     /// </summary>
-    public string? PlayedOn { get; }
+    public string? PlayedOn =>
+        _install?.Version is { } v && GameVersions.IsPlausibleVersion(v) ? v : null;
+
+    /// <summary>Where that install is, for the line that offers to change it.</summary>
+    public string? InstallDirectory => _install?.Directory;
+
+    /// <summary>
+    /// The version for the Game row, or the word for not having found one.
+    ///
+    /// A property rather than a TargetNullValue on the binding, which cannot take a
+    /// translated string: a markup extension there is evaluated as the fallback *value* and
+    /// the row rendered the words "Avalonia.Data.Binding".
+    /// </summary>
+    public string GameLine => PlayedOn ?? Lang.Get("importsrc-no-game");
+
+    /// <summary>
+    /// The rest of the Game row: where the install is, or — when there is none — what that
+    /// costs, which is the half nobody would work out for themselves.
+    ///
+    /// One line doing both jobs rather than a paragraph underneath doing the second. The
+    /// column is empty in exactly the case the sentence is needed, and a warning read where
+    /// the thing it is about is already being read beats one stacked below the block.
+    /// </summary>
+    public string GameDetail => InstallDirectory ?? Lang.Get("importsrc-no-install", GameVersion);
+
+    public bool HasInstall => PlayedOn is not null;
 
     /// <summary>
     /// The version the pack will target: the one the mods are being run on.
@@ -244,18 +356,108 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// other version is a different job, and the pack's Settings tab already does it
     /// properly, with a preview of what each mod would do.
     /// </summary>
-    public string GameVersion { get; }
+    public string GameVersion => PlayedOn ?? _fallbackVersion;
 
     /// <summary>
     /// The worlds in the same install, to bring across with the mods. Copied, never moved:
     /// see <see cref="InstalledWorlds"/>.
+    ///
+    /// Rebuilt rather than fixed, because the folder it reads follows the mods folder: they
+    /// are <c>Saves</c> and <c>Mods</c> beside each other under one data path, and somebody
+    /// who corrected one and found the other still listing worlds from the old place would
+    /// have been given half a repair.
     /// </summary>
-    public WorldPickerViewModel Worlds { get; }
+    public WorldPickerViewModel Worlds { get; private set; }
 
-    /// <summary>Where the mods are coming from and what they will be built for.</summary>
-    public string InstallNote => PlayedOn is null
-        ? Lang.Get("importsrc-no-install", GameVersion)
-        : Lang.Get("importsrc-install-is", PlayedOn);
+    /// <summary>
+    /// Asks for a directory, returning null if the user thought better of it. Set by the
+    /// view, because picking a folder is the platform's job and this is a view model —
+    /// which also lets a test answer it without a dialog.
+    /// </summary>
+    public Func<Task<string?>>? PickFolder { get; set; }
+
+    /// <summary>
+    /// Why a chosen directory was refused, or empty. Left on screen: somebody who picked the
+    /// wrong folder is about to pick another one and needs to be able to read what was wrong
+    /// with the first while the picker is open.
+    /// </summary>
+    [ObservableProperty] public partial string InstallProblem { get; set; } = "";
+
+    /// <summary>
+    /// Points Cairn at the install it could not find, or at the other one on a machine with
+    /// two.
+    ///
+    /// Remembered in settings rather than held for this dialog alone. It is the same answer
+    /// next time, and it is the answer <see cref="GameProvisioner"/> uses to launch a pack
+    /// from a copy of the game somebody already has instead of downloading a second one —
+    /// so an import is where this gets settled, and everything afterwards is the better for
+    /// it having been.
+    ///
+    /// Checked before it is stored, and forgiving about one level down — see
+    /// <see cref="GameInstall.Choose"/>, which is what lets a macOS folder picker that
+    /// cannot enter Vintagestory.app still be used to select it.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseInstall()
+    {
+        if (PickFolder is null) return;
+
+        if (await PickFolder() is not { } chosen) return;
+
+        if (GameInstall.Choose(chosen) is not { } found)
+        {
+            InstallProblem = Lang.Get("importsrc-install-invalid", chosen);
+            return;
+        }
+
+        // An install whose version cannot be read is no use for either thing this answers:
+        // the pack takes its version from here, and a pack launches from an install only
+        // when the two versions match. Taken without this check it was accepted in silence
+        // and then reported as no install at all — a folder chosen, no complaint, and the
+        // same "no Vintage Story install found" line still sitting underneath it.
+        if (!GameVersions.IsPlausibleVersion(found.Version))
+        {
+            InstallProblem = Lang.Get("importsrc-install-no-version", found.Directory);
+            return;
+        }
+
+        InstallProblem = "";
+        CairnSettings.Update(s => s.GameInstallPath = found.Directory);
+
+        Adopt(found);
+    }
+
+    /// <summary>
+    /// Takes a different install and rebuilds everything that rested on the old one.
+    ///
+    /// The rescan is the point rather than a refresh. The game version decides every single
+    /// verdict on the list — which releases ModDB will serve, and whether a mod marked for
+    /// nothing like it may be taken on the strength of somebody running it — so a list left
+    /// standing after the version moved is a list of answers to a question nobody asked any
+    /// more, with an Import button under it.
+    /// </summary>
+    private void Adopt(GameInstall? install)
+    {
+        _install = install;
+
+        OnPropertyChanged(nameof(PlayedOn));
+        OnPropertyChanged(nameof(GameLine));
+        OnPropertyChanged(nameof(InstallDirectory));
+        OnPropertyChanged(nameof(HasInstall));
+        OnPropertyChanged(nameof(GameVersion));
+        OnPropertyChanged(nameof(GameDetail));
+        OnPropertyChanged(nameof(InstallIsChosen));
+
+        InstallChanged?.Invoke();
+
+        if (Source == ImportSource.Install) _ = ScanAsync();
+    }
+
+    /// <summary>
+    /// Told to whoever opened this dialog, because the install is not this window's to keep:
+    /// the launcher behind it built a game library and a version list out of the old answer.
+    /// </summary>
+    public Action? InstallChanged { get; set; }
 
     [ObservableProperty] public partial string PackName { get; set; }
 
@@ -324,7 +526,9 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
             if (scan.Mods.Count == 0)
             {
-                Summary = Lang.Get("importsrc-no-zips", ModsDir);
+                // The folder is named in the row above rather than here as well: it was
+                // said twice on a screen whose problem is how much it says.
+                Summary = Lang.Get("importsrc-no-zips");
                 return;
             }
 

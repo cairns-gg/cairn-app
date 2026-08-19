@@ -94,6 +94,20 @@ public sealed class GameInstall
             Environment.SpecialFolderOption.DoNotVerify),
         "VintagestoryData");
 
+    /// <summary>
+    /// The data path Cairn should read: the one somebody chose, else the one the game would
+    /// pick on its own.
+    ///
+    /// Read through on every access rather than cached, like <see cref="CairnPaths.Root"/>
+    /// and for the same reason — it changes while the launcher is running, from the import
+    /// dialog, and a value captured at start-up would go on naming the folder somebody just
+    /// corrected.
+    /// </summary>
+    public static string ChosenDataPath =>
+        CairnSettings.Load().GameDataPath is { } chosen && !string.IsNullOrWhiteSpace(chosen)
+            ? chosen.Trim()
+            : DefaultDataPath;
+
     private static string ExecutableName =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "Vintagestory.exe" : "Vintagestory";
 
@@ -149,11 +163,33 @@ public sealed class GameInstall
         };
     }
 
-    /// <summary>Candidate install directories, best guess first. VINTAGE_STORY always wins.</summary>
-    public static IEnumerable<string> CandidateDirectories()
+    /// <summary>
+    /// Candidate install directories, best guess first. VINTAGE_STORY always wins, then
+    /// whatever Preferences was pointed at, then the places the game installs itself.
+    /// </summary>
+    public static IEnumerable<string> CandidateDirectories() =>
+        CandidateDirectories(
+            Environment.GetEnvironmentVariable("VINTAGE_STORY"),
+            CairnSettings.Load().GameInstallPath);
+
+    /// <summary>
+    /// The rules, with the two configured answers passed in — the same shape as
+    /// <see cref="CairnHome.Resolve(string?, string, Func{string, string?})"/>, and for the
+    /// same reason: the order these come in is the thing worth testing, and it cannot be
+    /// tested through a machine's real environment and settings file.
+    /// </summary>
+    /// <param name="environment">VINTAGE_STORY's value, or null when unset.</param>
+    /// <param name="configured">
+    /// The directory chosen in Preferences, or null. Below the variable because a systemd
+    /// unit and a CI job set the variable and must not be overridden by a file; above the
+    /// search because somebody who has pointed at a directory has answered the question the
+    /// search exists to guess at.
+    /// </param>
+    public static IEnumerable<string> CandidateDirectories(string? environment, string? configured)
     {
-        var env = Environment.GetEnvironmentVariable("VINTAGE_STORY");
-        if (!string.IsNullOrWhiteSpace(env)) yield return env;
+        if (!string.IsNullOrWhiteSpace(environment)) yield return environment;
+
+        if (!string.IsNullOrWhiteSpace(configured)) yield return configured;
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -175,21 +211,101 @@ public sealed class GameInstall
                 Environment.SpecialFolderOption.DoNotVerify);
             yield return Path.Combine(appdata, "Vintagestory");
             yield return @"C:\Program Files\Vintagestory";
+
+            // The 32-bit tree, which is where an installer run on an older machine put it
+            // and where plenty of people's still is. Cheap to look at and invisible when
+            // absent, which is the standing on which every entry in this list earns a line.
+            yield return @"C:\Program Files (x86)\Vintagestory";
+
+            // Somebody who installs games to another drive has one of these and none of the
+            // above. Only the conventional names — a full drive scan is not something to do
+            // behind a window somebody is trying to open.
+            foreach (var drive in FixedDrives())
+            {
+                yield return Path.Combine(drive, "Games", "Vintagestory");
+                yield return Path.Combine(drive, "Vintagestory");
+            }
         }
         else
         {
             yield return "/usr/share/vintagestory";
             yield return "/usr/lib/vintagestory";
+
+            // Where the tarball's own instructions land it, and the two places people put
+            // it when they would rather not need a password to update the game.
+            yield return "/opt/vintagestory";
+            yield return Path.Combine(home, "vintagestory");
             yield return Path.Combine(home, ".local", "share", "vintagestory");
+
+            // XDG_DATA_HOME is what ~/.local/share is a default for, and a machine that has
+            // moved it is one where the line above looks in the wrong place.
+            if (Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { } xdg
+                && !string.IsNullOrWhiteSpace(xdg))
+                yield return Path.Combine(xdg, "vintagestory");
 
             foreach (var dir in ScanFor(Path.Combine(home, ".local", "share"), "vintagestory"))
                 yield return dir;
+
+            foreach (var dir in ScanFor(home, "vintagestory")) yield return dir;
 
             // Last, so an unpacked tarball still wins on a machine with both. Neither is
             // more of an accident than the other, but the tarball is the one somebody chose
             // a directory for, and the first match here is taken without asking.
             foreach (var dir in FlatpakGame.GameDirectories()) yield return dir;
         }
+    }
+
+    /// <summary>
+    /// Fixed drives other than the system one, for the conventional game folders on them.
+    ///
+    /// Ready ones only: a DVD drive with no disc in it and a card reader with no card both
+    /// throw on being asked anything, and an unmapped network drive can block for seconds
+    /// while it decides it is not there.
+    /// </summary>
+    private static IEnumerable<string> FixedDrives()
+    {
+        DriveInfo[] drives;
+        try
+        {
+            drives = DriveInfo.GetDrives();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+
+        return drives
+            .Where(d =>
+            {
+                try { return d.DriveType == DriveType.Fixed && d.IsReady; }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+            })
+            .Select(d => d.RootDirectory.FullName);
+    }
+
+    /// <summary>
+    /// The install in a directory somebody chose, looking one level down when the directory
+    /// itself is not one.
+    ///
+    /// The forgiving half exists for two real cases. On macOS the install *is*
+    /// <c>Vintagestory.app</c>, and a folder picker there will not let you into a bundle —
+    /// so the only thing that can be chosen is the folder holding it. And on any platform,
+    /// picking the parent of the install by mistake is the commonest way to get this wrong,
+    /// which is a thing to recover from rather than to refuse.
+    ///
+    /// Null when there is no install either way, which is what the caller turns into a
+    /// refusal at the picker. Never stored unchecked: a path that is not an install would
+    /// otherwise sit in settings.json being silently skipped, which looks exactly like the
+    /// bug this setting exists to fix.
+    /// </summary>
+    public static GameInstall? Choose(string directory)
+    {
+        if (TryAt(directory) is { } here) return here;
+
+        foreach (var child in ScanFor(directory, "vintagestory"))
+            if (TryAt(child) is { } below) return below;
+
+        return null;
     }
 
     /// <summary>Subdirectories of <paramref name="parent"/> whose name starts with the prefix.</summary>
