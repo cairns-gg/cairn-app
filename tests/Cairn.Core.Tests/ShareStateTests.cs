@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+using Cairn.Core.Launch;
 using Cairn.Core.Packs;
 using Xunit;
 
@@ -288,5 +290,164 @@ public class ShareStateTests : IDisposable
         // nothing to show for it in the document, and refusing it would strand somebody
         // whose only remaining edit is the one this field controls.
         Assert.True(Sent("{\"pack\":1}").WouldChange("{\"pack\":1}", @public, strip));
+    }
+
+    // ---- a carried setting that moves after it was published ----
+
+    private void WriteConfig(string json)
+    {
+        var path = Path.Combine(
+            ModConfigFiles.DirectoryIn(_store.DataDir("anego")), "terrainslabs.json");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, json);
+    }
+
+    /// <summary>The pack carries one setting, at whatever the file currently says.</summary>
+    private void Carry(string value)
+    {
+        WriteConfig($$"""{ "compatibleMods": {{value}} }""");
+
+        var manifest = _store.Load("anego");
+        manifest.ModConfig = new Dictionary<string, JsonObject>
+        {
+            ["terrainslabs.json"] =
+                (JsonNode.Parse($$"""{"compatibleMods":{{value}}}""") as JsonObject)!,
+        };
+        _store.Save(manifest);
+    }
+
+    /// <summary>
+    /// A published pack notices that a carried setting has moved.
+    ///
+    /// The document is what ShareState compares, and it was built from the manifest alone —
+    /// so a value changed after being ticked left the pack reporting itself as published and
+    /// up to date, with the old number still in it. There was nothing on screen to disagree
+    /// with, which is what made it hard to see.
+    /// </summary>
+    [Fact]
+    public void Changing_a_carried_setting_gives_the_pack_something_to_publish()
+    {
+        Carry("""["footprints"]""");
+        Publish();
+
+        Assert.Equal(ShareStatus.Shared, _store.ShareStateFor("anego").Status);
+
+        // In game, afterwards. The tick already said this value travels with the pack.
+        WriteConfig("""{ "compatibleMods": ["footprints", "carryon"] }""");
+
+        Assert.Equal(ShareStatus.Pending, _store.ShareStateFor("anego").Status);
+    }
+
+    [Fact]
+    public void And_the_document_carries_the_value_the_file_has_now()
+    {
+        Carry("""["footprints"]""");
+        WriteConfig("""{ "compatibleMods": ["footprints", "carryon"] }""");
+
+        Assert.Contains("carryon", _store.PublishedDocument("anego", stripConnect: true));
+    }
+
+    /// <summary>
+    /// And the pack on disk catches up, so the pack somebody opens and the pack somebody
+    /// publishes are not two different documents.
+    /// </summary>
+    [Fact]
+    public void Refreshing_writes_the_value_into_the_pack_as_well()
+    {
+        Carry("""["footprints"]""");
+        WriteConfig("""{ "compatibleMods": ["footprints", "carryon"] }""");
+
+        Assert.True(_store.RefreshModConfig("anego"));
+        Assert.Contains("carryon",
+            _store.Load("anego").ModConfig!["terrainslabs.json"].ToJsonString());
+
+        // And says so only when something moved, or every look at a pack would rewrite it.
+        Assert.False(_store.RefreshModConfig("anego"));
+    }
+
+    /// <summary>
+    /// A key whose file has stopped having it keeps the value the pack declares. Dropping it
+    /// would quietly remove it from a shared document over a file somebody may be part-way
+    /// through editing; the Mod config tab shows it as an orphan, and unticking is the
+    /// decision.
+    /// </summary>
+    [Fact]
+    public void A_setting_whose_file_no_longer_has_it_keeps_what_the_pack_declares()
+    {
+        Carry("""["footprints"]""");
+        WriteConfig("""{ "somethingElse": 1 }""");
+
+        Assert.False(_store.RefreshModConfig("anego"));
+        Assert.Contains("footprints", _store.PublishedDocument("anego", stripConnect: true));
+    }
+
+    /// <summary>And a pack carrying nothing is not given a section by being looked at.</summary>
+    [Fact]
+    public void A_pack_that_carries_no_settings_is_left_alone()
+    {
+        Assert.False(_store.RefreshModConfig("anego"));
+        Assert.Null(_store.Load("anego").ModConfig);
+    }
+
+    /// <summary>
+    /// Refreshing a pack whose files already agree changes nothing at all — not the values,
+    /// and not the bytes.
+    ///
+    /// The manifest is serialised in key order and the document is fingerprinted whole, so a
+    /// refresh that produced the same values in a different order moved the fingerprint. That
+    /// made every published pack carrying settings report "Publish changes" over a value
+    /// nobody had touched, with a summary beside it that could name no difference because
+    /// there was none — the pack was right and the button was wrong.
+    /// </summary>
+    [Fact]
+    public void Refreshing_a_pack_that_agrees_with_its_files_changes_not_one_byte()
+    {
+        // Keys deliberately in a different order in the file from the manifest, which is the
+        // ordinary case: the manifest records them as they were ticked.
+        WriteConfig("""{ "second": 2, "first": 1, "third": 3 }""");
+
+        var manifest = _store.Load("anego");
+        manifest.ModConfig = new Dictionary<string, JsonObject>
+        {
+            ["terrainslabs.json"] = (JsonNode.Parse(
+                """{"first":1,"second":2,"third":3}""") as JsonObject)!,
+        };
+        _store.Save(manifest);
+
+        var before = _store.PublishedDocument("anego", stripConnect: true);
+
+        Assert.False(_store.RefreshModConfig("anego"));
+        Assert.Equal(before, _store.PublishedDocument("anego", stripConnect: true));
+
+        // And the pack agrees it has nothing to publish.
+        Publish();
+        Assert.Equal(ShareStatus.Shared, _store.ShareStateFor("anego").Status);
+    }
+
+    /// <summary>
+    /// A value that really did move is replaced where it sits, so the rest of the document is
+    /// undisturbed and the difference is the one thing that differs.
+    /// </summary>
+    [Fact]
+    public void A_value_that_moved_is_replaced_in_the_place_it_was_declared()
+    {
+        WriteConfig("""{ "second": 2, "first": 1, "third": 3 }""");
+
+        var manifest = _store.Load("anego");
+        manifest.ModConfig = new Dictionary<string, JsonObject>
+        {
+            ["terrainslabs.json"] = (JsonNode.Parse(
+                """{"first":1,"second":2,"third":3}""") as JsonObject)!,
+        };
+        _store.Save(manifest);
+
+        WriteConfig("""{ "second": 99, "first": 1, "third": 3 }""");
+
+        Assert.True(_store.RefreshModConfig("anego"));
+
+        Assert.Equal(
+            """{"first":1,"second":99,"third":3}""",
+            _store.Load("anego").ModConfig!["terrainslabs.json"].ToJsonString());
     }
 }

@@ -515,6 +515,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         ForceQuitCommand.NotifyCanExecuteChanged();
 
         if (_runs.TakeExitNotice(Id) is { } notice) Error = notice;
+
+        // A session that has just ended is the commonest way a pack's mod settings move:
+        // somebody plays, changes a value in game or in ConfigLib's screen, and quits. The
+        // Share button is the only thing that says a pack has something to publish, and it
+        // is worked out when the pack is selected or edited — neither of which happens on
+        // the way back from a game — so it would go on reading "Shared" over a pack that
+        // had changed under it.
+        if (!_runs.IsRunning(Id) && !IsLaunching) ReloadShare();
     }
 
     [ObservableProperty] public partial string? Error { get; set; }
@@ -904,6 +912,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     private void ReloadShare()
     {
+        // The pack on disk catches up with its own config files here, which is the moment
+        // somebody is looking at whether it has anything to publish. The document that gets
+        // published refreshes itself either way — see PackStore.PublishedDocument — but
+        // leaving pack.json behind would mean the pack you open and the pack you publish
+        // are two different documents.
+        _store.RefreshModConfig(Id);
+
         Share = _store.ShareStateFor(Id);
 
         // Whether this pack is somebody else's is what decides the lock, and it is only
@@ -2115,9 +2130,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // by design, and this is the one moment the server's answer changes anything.
             await ReconcileWithdrawalAsync(session);
 
+            var link = _store.LoadLink(Id);
+            var (delta, deltaKnown) = await CompareWithPublishedAsync(link);
+
             Publish = ShareViewModel.From(
-                plan, Title, session.Username, _store.LoadLink(Id),
-                strip => _store.PublishedDocument(Id, strip));
+                plan, Title, session.Username, link,
+                strip => _store.PublishedDocument(Id, strip),
+                delta, deltaKnown);
 
             if (ConfirmPublish is null || !await ConfirmPublish(Publish)) return;
 
@@ -2155,6 +2174,46 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         {
             PublishStage = "";
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Asks the site what it is serving, and works out what publishing would change about it.
+    ///
+    /// The revision is a document at a URL — the same one a follower reads to find out what
+    /// an author changed — so the comparison is against what is actually published rather
+    /// than against anything recorded here. Nothing local could answer it: the publish record
+    /// keeps a fingerprint of the document and not the document, which is enough to know that
+    /// something moved and no help at all in saying what.
+    ///
+    /// Never throws and never blocks publishing. Being unable to ask is reported as not
+    /// known, which the window says in as many words — "nothing has changed" is the one thing
+    /// it must not be mistaken for.
+    /// </summary>
+    /// <returns>The delta, and whether the site answered at all.</returns>
+    private async Task<(PublishDelta? Delta, bool Known)> CompareWithPublishedAsync(PackLink? link)
+    {
+        if (link is not { Published: not null, Url.Length: > 0 }) return (null, false);
+
+        PublishStage = Lang.Get("share-comparing");
+
+        try
+        {
+            var json = await _http.GetStringAsync(PackUpdateCheck.DocumentUrl(link.Url));
+            var published = PackBundle.Parse(json);
+
+            // The same treatment of the server address on both sides, taken from what the
+            // last publish chose: a pack published with it stripped must not read as having
+            // gained one because this copy still has it.
+            var pending = PackBundle.Parse(
+                _store.PublishedDocument(Id, link.Published.Connect == "stripped"));
+
+            return (PublishDelta.Between(published, pending), true);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException
+                                      or InvalidDataException or IOException)
+        {
+            return (null, false);
         }
     }
 

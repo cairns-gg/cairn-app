@@ -510,4 +510,54 @@ public class ModConfigTabTests : IDisposable
             "fromtheauthor",
             detail.Manifest.ModConfig!["terrainslabs.json"]["compatibleMods"]!.ToJsonString());
     }
+
+    /// <summary>
+    /// The Share button is the only place a pack says it has something to publish, and a
+    /// session that has just ended is the commonest way one comes to.
+    ///
+    /// Somebody plays, changes a value in game or in ConfigLib's screen, and quits. The share
+    /// state is worked out when a pack is selected or edited, and neither happens on the way
+    /// back from a game — so the button went on reading "Shared" over a pack that had moved
+    /// underneath it, which is the same silence the stale value itself had.
+    /// </summary>
+    [AvaloniaFact]
+    public void Coming_back_from_a_game_notices_a_setting_that_moved()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        Assert.Single(detail.ModConfigSettings).Carried = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Published exactly as it stands, so there is nothing outstanding.
+        new PackStore().SaveLink("anego", new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/dizzyd/anego",
+            Revision = 1,
+            Published = new PublishRecord
+            {
+                Visibility = "unlisted",
+                Connect = "stripped",
+                Fingerprint = PackLink.Fingerprint(
+                    new PackStore().PublishedDocument("anego", stripConnect: true)),
+            },
+        });
+
+        // The pane last worked out its share state before that link existed.
+        detail.RefreshLaunchState();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Equal(ShareStatus.Shared, detail.Share.Status);
+
+        // In game, and then quitting: the pane is told the run state moved.
+        WriteConfig("terrainslabs.json",
+            """{ "enableSlabs": true, "compatibleMods": ["footprints", "carryon"] }""");
+
+        detail.RefreshLaunchState();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(ShareStatus.Pending, detail.Share.Status);
+        Assert.Equal("Publish changes", detail.ShareLabel);
+        Assert.True(detail.ShareIsUrgent);
+    }
 }

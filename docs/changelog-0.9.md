@@ -211,7 +211,15 @@ small `home` file, which is what points Cairn at the new drive.
   tick was being read as "carry this value, as it stood when you ticked it": change the
   setting afterwards and every row on screen followed, while the pack went on declaring the
   old one and publishing it. Unticking and reticking was the only way out, and nothing said
-  so.
+  so. Publishing and exporting now read the files again, so this holds whether or not you
+  opened the Mod config tab first — and the pack says it has something to publish.
+- **Share says what publishing would change.** **0.9.3.** *Since revision 4: 1 mod added, 5 at
+  different versions, 3 mod settings changed.* Read against what the site is actually serving,
+  because a pack you have been playing for a month has moved in ways nobody remembers. A first
+  publish has nothing to compare against and says what the pack contains instead; a site that
+  cannot be reached says so, rather than letting that pass for nothing having changed. And
+  coming back from a session re-checks, so tuning a mod in game and quitting turns the button
+  into **Publish changes** without having to click away from the pack and back.
 - **Escape closes any of Cairn's dialogs.** **0.9.3.** Preferences, Share, the pack update and
   game version windows did not, and Preferences could only be dismissed from the title bar.
 - **Preferences no longer runs off the bottom of the screen.** **0.9.3.** At larger interface

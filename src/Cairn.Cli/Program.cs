@@ -1483,6 +1483,11 @@ internal static class Program
         if (CairnsSession.Load() is not { } session)
             return Fail("not signed in — run: cairn-cli login");
 
+        // The pack catches up with its own config files first: a setting changed after being
+        // ticked is carried at the value the file has now, and the manifest read below is
+        // the one that says so.
+        store.RefreshModConfig(id);
+
         // The same plan the launcher's Share window shows, so both front-ends refuse the
         // same packs for the same reasons.
         var manifest = store.Load(id);

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Cairn.Core.Packs;
 using Xunit;
 
@@ -184,5 +185,53 @@ public class PublishPlanTests
         // "We did not look" must not render as "recipients cannot install this" — a dialog
         // that blames mods because the network was down is worse than one that says less.
         Assert.False(plan.AnythingUnresolvable);
+    }
+
+    // ---- what a pack carries besides its mods ----
+
+    /// <summary>
+    /// The mod list is on screen and the rest of what a pack is is not, so the share window
+    /// says it before any of it is sent. Counted by value rather than by file: one file
+    /// commonly carries several settings, and a count of files would read as a count of mods.
+    /// </summary>
+    [Fact]
+    public async Task The_plan_says_what_travels_besides_the_mods()
+    {
+        var pack = Pack(null, "glassview");
+
+        pack.ModConfig = new Dictionary<string, JsonObject>
+        {
+            ["terrainslabs.json"] = (JsonNode.Parse(
+                """{"compatibleMods":["footprints"],"enableSlabs":true}""") as JsonObject)!,
+            ["BedSpawn.json"] = (JsonNode.Parse(
+                """{"Rooms":{"Enabled":true}}""") as JsonObject)!,
+        };
+
+        pack.Keybinds = new Dictionary<string, string> { ["walk"] = "W", ["jump"] = "SPACE" };
+
+        var plan = await PublishPlan.PrepareAsync(pack, Lock("1.22.5", "glassview"));
+
+        // Three values across two files, one of them a level down.
+        Assert.Equal(3, plan.ModConfigValues);
+        Assert.Equal(2, plan.Keybinds);
+        Assert.True(plan.CarriesAnything);
+
+        var carries = plan.Carries();
+        Assert.Contains("3 mod settings", carries);
+        Assert.Contains("2 hotkeys", carries);
+    }
+
+    /// <summary>
+    /// And says nothing at all for a pack that is only mods, which is most of them. A line
+    /// reading "and no settings, and no hotkeys" is noise on the screen where it matters
+    /// most.
+    /// </summary>
+    [Fact]
+    public async Task A_pack_that_is_only_mods_says_nothing_about_the_rest()
+    {
+        var plan = await PublishPlan.PrepareAsync(Pack(null, "glassview"), Lock("1.22.5", "glassview"));
+
+        Assert.False(plan.CarriesAnything);
+        Assert.Equal("", plan.Carries());
     }
 }

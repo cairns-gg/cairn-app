@@ -130,6 +130,8 @@ public sealed partial class ShareViewModel : ViewModelBase
         OnPropertyChanged(nameof(NothingToPublish));
         OnPropertyChanged(nameof(UnchangedNote));
         OnPropertyChanged(nameof(CanPublish));
+        OnPropertyChanged(nameof(DeltaLine));
+        OnPropertyChanged(nameof(ShowDelta));
     }
 
     /// <summary>
@@ -176,6 +178,63 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     public string Summary => Plan.Summary();
 
+    /// <summary>
+    /// The rest of what the pack carries — see <see cref="PublishPlan.Carries"/>. The mod
+    /// list is on screen; the settings and hotkeys are not, and this is the last screen
+    /// before they are sent.
+    /// </summary>
+    public string Carries => Plan.Carries();
+
+    /// <summary>
+    /// Shown on a first publish and not after. Once there is a revision to compare against,
+    /// what changed is the more useful of the two and the two together repeat each other —
+    /// "it carries 3 mod settings" above "3 mod settings changed" is one fact twice.
+    /// </summary>
+    public bool CarriesAnything => Plan.CarriesAnything && !AlreadyPublished;
+
+    /// <summary>
+    /// What this publish would change about the revision already at the pack's address, or
+    /// null on a first publish — where there is nothing to compare against and the list of
+    /// what the pack contains is the whole answer.
+    ///
+    /// Set by the caller, which is the half that can reach the network. Null also covers not
+    /// having been able to ask, which <see cref="DeltaLine"/> says rather than passing off as
+    /// nothing having changed.
+    /// </summary>
+    public PublishDelta? Delta { get; init; }
+
+    /// <summary>Whether the site answered at all. See <see cref="DeltaLine"/>.</summary>
+    public bool DeltaKnown { get; init; }
+
+    public bool ShowDelta => AlreadyPublished && DeltaLine.Length > 0;
+
+    /// <summary>
+    /// The line above the mod list, on a pack that has been published before.
+    ///
+    /// Three states, and the third is why this is not just a summary of the delta: a site
+    /// that could not be reached has to say so, because "nothing has changed" is the one
+    /// thing it must not be mistaken for on the screen where somebody decides whether to
+    /// press Publish.
+    /// </summary>
+    public string DeltaLine
+    {
+        get
+        {
+            if (!DeltaKnown) return Lang.Get("publish-delta-unknown", Revision);
+
+            if (Delta is { Anything: true } delta)
+                return Lang.Get("publish-delta-since", Revision, delta.Describe());
+
+            // Not "nothing has changed", which this is in no position to say: the document
+            // is what decides that, it knows about the publish options as well, and
+            // UnchangedNote says it from there. This line names what it can see, and a
+            // difference it cannot name — a lockfile re-resolved to the same versions, say —
+            // is still a difference. Claiming otherwise put "nothing has changed" on the
+            // same screen as an enabled Publish button.
+            return NothingToPublish ? "" : Lang.Get("publish-delta-something", Revision);
+        }
+    }
+
     public string PublishLabel => AlreadyPublished ? Lang.Get("share-publish-changes") : Lang.Get("share-publish");
 
     public bool HasConnect => Plan.HasConnect;
@@ -197,11 +256,20 @@ public sealed partial class ShareViewModel : ViewModelBase
     /// </summary>
     public bool CanPublish => Plan.CanPublish && !NothingToPublish;
 
+    /// <param name="delta">
+    /// What this publish would change about the revision on the site, or null when there is
+    /// none to compare against or the site could not be asked — <paramref name="deltaKnown"/>
+    /// is what tells those apart.
+    /// </param>
     public static ShareViewModel From(
         PublishPlan plan, string packName, string? username, PackLink? link,
-        Func<bool, string>? documentFor = null) =>
+        Func<bool, string>? documentFor = null,
+        PublishDelta? delta = null, bool deltaKnown = false) =>
         new(plan, packName, username, link, documentFor)
         {
+            Delta = delta,
+            DeltaKnown = deltaKnown,
+
             // Worst first, the same habit as the version-change dialog: the reason to say
             // no should not need scrolling to.
             Mods = [.. plan.Mods

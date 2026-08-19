@@ -29,11 +29,25 @@ public class ShareWindowTests
         return new PublishPlan("anego", list, connect, lockProblem is null, lockProblem);
     }
 
+    /// <summary>A pack already published, so there is a revision to compare against.</summary>
+    private static PackLink Published() => new()
+    {
+        Role = PackRole.Author,
+        Url = "https://cairns.gg/dizzyd/anego",
+        Revision = 4,
+        Published = new PublishRecord
+        {
+            Visibility = "public", Connect = "stripped", Fingerprint = "whatever",
+        },
+    };
+
     private static (ShareWindow Window, ShareViewModel Vm) Show(
         PublishPlan plan, PackLink? link = null, string? username = "dizzyd",
-        Func<bool, string>? documentFor = null)
+        Func<bool, string>? documentFor = null,
+        PublishDelta? delta = null, bool deltaKnown = false)
     {
-        var vm = ShareViewModel.From(plan, "Anego Server", username, link, documentFor);
+        var vm = ShareViewModel.From(
+            plan, "Anego Server", username, link, documentFor, delta, deltaKnown);
         var window = new ShareWindow { DataContext = vm };
         window.Show();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -277,5 +291,138 @@ public class ShareWindowTests
 
         Assert.False(vm.NothingToPublish);
         Assert.True(vm.CanPublish);
+    }
+
+    /// <summary>
+    /// What a pack carries besides its mods is on the last screen before it is sent.
+    ///
+    /// The mod list is right there; the settings and hotkeys are not visible anywhere else in
+    /// the flow, and a pack's mod settings are exactly the thing an author is least sure has
+    /// travelled — which is how a stale one went out unnoticed in the first place.
+    /// </summary>
+    /// <summary>
+    /// On a first publish, where what the pack contains is the whole answer — after that the
+    /// delta line says what moved, and the two together would repeat each other.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_window_says_what_travels_besides_the_mods()
+    {
+        var plan = Plan() with { ModConfigValues = 3, Keybinds = 2 };
+
+        var (window, _) = Show(plan);
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "CarriesText");
+
+        Assert.True(text.IsEffectivelyVisible);
+        Assert.Contains("3 mod settings", text.Text);
+        Assert.Contains("2 hotkeys", text.Text);
+    }
+
+    [AvaloniaFact]
+    public void And_says_nothing_for_a_pack_that_is_only_mods()
+    {
+        var (window, _) = Show(Plan());
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "CarriesText");
+
+        Assert.False(text.IsEffectivelyVisible);
+    }
+
+    /// <summary>
+    /// A pack with a revision already at its address says what publishing would change about
+    /// it, which is the question after the first publish — a pack its author has played for a
+    /// month has moved in ways they will not remember.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_window_says_what_this_publish_would_change()
+    {
+        var delta = new PublishDelta(
+            ModsAdded: 1, ModsRemoved: 0, ModsMoved: 5,
+            SettingsChanged: 3, HotkeysChanged: 0,
+            ConnectChanged: false, GameVersionFrom: null, GameVersionTo: "1.22.5");
+
+        var (window, _) = Show(Plan(), Published(), delta: delta, deltaKnown: true);
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "DeltaText");
+
+        Assert.True(text.IsEffectivelyVisible);
+        Assert.Contains("Since revision 4", text.Text);
+        Assert.Contains("3 mod settings changed", text.Text);
+    }
+
+    /// <summary>
+    /// A site that could not be asked says so. "Nothing has changed" is the one thing it must
+    /// not be mistaken for on the screen where somebody decides whether to press Publish.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_site_that_could_not_be_reached_says_that_rather_than_nothing_changed()
+    {
+        var (window, _) = Show(Plan(), Published(), delta: null, deltaKnown: false);
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "DeltaText");
+
+        Assert.Contains("Could not reach", text.Text);
+    }
+
+    /// <summary>And a first publish has nothing to compare against, so it says nothing.</summary>
+    [AvaloniaFact]
+    public void A_first_publish_says_nothing_about_a_revision_that_does_not_exist()
+    {
+        var (window, _) = Show(Plan());
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "DeltaText");
+
+        Assert.False(text.IsEffectivelyVisible);
+    }
+
+    /// <summary>
+    /// The summary never claims nothing has changed, because it is in no position to: the
+    /// document decides that, it knows about the publish options too, and the unchanged note
+    /// says it from there. A difference this line cannot name — a lockfile re-resolved to the
+    /// same versions, say — is still a difference, and calling it nothing put that claim on
+    /// the same screen as an enabled Publish button.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_change_the_summary_cannot_name_is_still_reported_as_a_change()
+    {
+        // The document differs from what was published, and none of it is anything the delta
+        // itemises.
+        var (window, vm) = Show(
+            Plan(), Published(), documentFor: _ => "something else entirely",
+            delta: new PublishDelta(0, 0, 0, 0, 0, false, null, "1.22.5"), deltaKnown: true);
+
+        Assert.False(vm.NothingToPublish);
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "DeltaText");
+
+        Assert.Contains("Something has changed", text.Text);
+    }
+
+    /// <summary>
+    /// And says nothing at all when the pack really is unchanged, leaving that to the note
+    /// that already says so and disables the button.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_that_really_has_not_changed_leaves_it_to_the_unchanged_note()
+    {
+        const string document = "the published document";
+
+        var link = Published();
+        link.Published!.Fingerprint = PackLink.Fingerprint(document);
+
+        var (window, vm) = Show(
+            Plan(), link, documentFor: _ => document,
+            delta: new PublishDelta(0, 0, 0, 0, 0, false, null, "1.22.5"), deltaKnown: true);
+
+        Assert.True(vm.NothingToPublish);
+
+        Assert.False(window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "DeltaText").IsEffectivelyVisible);
     }
 }

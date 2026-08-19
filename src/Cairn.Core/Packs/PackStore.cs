@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Cairn.Core.Launch;
 
 namespace Cairn.Core.Packs;
 
@@ -256,7 +258,67 @@ public sealed class PackStore
         var manifest = Load(id);
         if (stripConnect) manifest.Connect = null;
 
+        // The carried mod settings, read again from the files rather than taken as the
+        // manifest last recorded them. A tick says the value travels with the pack; what
+        // travels therefore has to be what the file says now. Without this, a setting
+        // changed after being ticked was published at its old value — and because this is
+        // also what ShareState compares, the pack did not even report that it had anything
+        // to publish.
+        manifest.ModConfig = ModConfigSurvey.Refresh(DataDir(id), manifest.ModConfig);
+
         return PackBundle.Serialize(manifest, LoadLock(id));
+    }
+
+    /// <summary>
+    /// Brings the pack's own manifest into line with the files, for the settings it carries.
+    ///
+    /// <see cref="PublishedDocument"/> does this to the copy it serialises, which is enough
+    /// to publish the right thing and to notice there is something to publish. This is what
+    /// makes the file on disk agree, so the pack somebody opens and the pack somebody
+    /// publishes are not two different documents.
+    ///
+    /// Its own call rather than a side effect of asking what would be published, because a
+    /// question should not write to disk: this is called where a pack is being worked on.
+    /// </summary>
+    /// <returns>Whether anything moved.</returns>
+    public bool RefreshModConfig(string id)
+    {
+        PackManifest manifest;
+        try
+        {
+            manifest = Load(id);
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidDataException)
+        {
+            return false;
+        }
+
+        if (manifest.ModConfig is not { Count: > 0 }) return false;
+
+        var refreshed = ModConfigSurvey.Refresh(DataDir(id), manifest.ModConfig);
+        if (SameModConfig(refreshed, manifest.ModConfig)) return false;
+
+        manifest.ModConfig = refreshed;
+        Save(manifest);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether two mod config sections say the same thing. Per file with DeepEquals, since
+    /// the value is a sparse object and two of them differing anywhere is a difference — the
+    /// same comparison <see cref="PackUpdatePlan"/> makes, for the same reason.
+    /// </summary>
+    private static bool SameModConfig(
+        IReadOnlyDictionary<string, JsonObject>? a, IReadOnlyDictionary<string, JsonObject>? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        if (a.Count != b.Count) return false;
+
+        foreach (var (file, value) in a)
+            if (!b.TryGetValue(file, out var other) || !JsonNode.DeepEquals(value, other))
+                return false;
+
+        return true;
     }
 
     /// <summary>The Share button's state for this pack. See <see cref="ShareState"/>.</summary>
@@ -372,8 +434,17 @@ public sealed class PackStore
     }
 
     /// <summary>One-file representation of a pack, for sharing.</summary>
-    public string Export(string id, bool includeLock = true) =>
-        PackBundle.Serialize(Load(id), includeLock ? LoadLock(id) : null);
+    public string Export(string id, bool includeLock = true)
+    {
+        var manifest = Load(id);
+
+        // The same refresh publishing makes, for the same reason: this is the other way a
+        // pack leaves this machine, and a carried setting changed since it was ticked would
+        // otherwise go out at its old value here too.
+        manifest.ModConfig = ModConfigSurvey.Refresh(DataDir(id), manifest.ModConfig);
+
+        return PackBundle.Serialize(manifest, includeLock ? LoadLock(id) : null);
+    }
 
     /// <summary>
     /// Creates a pack from a shared bundle.

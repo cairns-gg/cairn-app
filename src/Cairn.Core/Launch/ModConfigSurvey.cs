@@ -194,6 +194,84 @@ public static class ModConfigSurvey
         return result.Count == 0 ? null : result;
     }
 
+    /// <summary>
+    /// The values a pack carries, read again from the files it names.
+    ///
+    /// A tick says "this value travels with the pack", so what travels has to be what the
+    /// file says now — not what it said when the box was ticked. Nothing was re-reading it:
+    /// the manifest was written by the tick and by nothing else, so a setting changed
+    /// afterwards was published at its old value, and the way to fix that was to untick the
+    /// row and tick it again.
+    ///
+    /// Reads only the files the pack names, not the folder. <see cref="Read"/> surveys
+    /// everything because the tab lists everything; this answers "what do the carried keys
+    /// say now", which on a real pack is three or four small files rather than a hundred —
+    /// and it is asked wherever the question "what would publishing send" is, which is often.
+    ///
+    /// A key whose file has gone, or has stopped having it, keeps the value the pack
+    /// declares. Losing it here would quietly drop it from a shared document over a file
+    /// somebody may be part-way through editing; the Mod config tab shows it as an orphan
+    /// and unticking it is the decision.
+    /// </summary>
+    /// <returns>The same shape as <paramref name="declared"/>, with current values.</returns>
+    public static Dictionary<string, JsonObject>? Refresh(
+        string dataPath, IReadOnlyDictionary<string, JsonObject>? declared)
+    {
+        if (declared is null || declared.Count == 0) return null;
+
+        var root = ModConfigFiles.DirectoryIn(dataPath);
+        var result = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (file, carried) in declared)
+        {
+            var (content, rewritable, _) = ReadConfig(System.IO.Path.Combine(root, Native(file)));
+
+            // Unreadable, or of a shape Apply could not write back: the pack keeps what it
+            // has. Each of these is a file that was readable when the value was ticked, so
+            // the honest reading is "cannot tell", not "the value is gone".
+            result[file] = content is null || !rewritable
+                ? carried
+                : Replace(carried, content);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The declared object with its leaves replaced by what the file says now.
+    ///
+    /// Walks what the pack declares rather than rebuilding from what the file holds, and the
+    /// difference is not cosmetic: the manifest is serialised in key order, so a rebuild that
+    /// produced the same values in a different order changed the document's bytes — and
+    /// therefore its fingerprint, and therefore whether the pack believes it has anything to
+    /// publish. Every published pack carrying settings reported "Publish changes" over a
+    /// value nobody had touched, and the summary beside it could name no difference because
+    /// there was none.
+    ///
+    /// A key the file no longer has keeps the declared value, for the reason given on
+    /// <see cref="Refresh"/>.
+    /// </summary>
+    private static JsonObject Replace(JsonObject declared, JsonObject current)
+    {
+        var result = new JsonObject();
+
+        foreach (var (key, value) in declared)
+        {
+            if (value is JsonObject section)
+            {
+                result[key] = current[key] is JsonObject below
+                    ? Replace(section, below)
+                    : section.DeepClone();
+
+                continue;
+            }
+
+            result[key] = current[key] is { } now ? now.DeepClone() : value?.DeepClone();
+        }
+
+        return result;
+    }
+
     private static IEnumerable<string> Files(string root)
     {
         if (!Directory.Exists(root)) yield break;

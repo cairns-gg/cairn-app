@@ -50,6 +50,22 @@
 
             <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold"
                        TextWrapping="Wrap" Margin="0,4,0,0" />
+
+            <!-- What a pack is besides its mods. The list below shows the mods; the settings
+                 and hotkeys travel with them, are not on screen anywhere else, and this is
+                 the last look anybody gets before they are sent. Hidden when there are none,
+                 which is most packs. -->
+            <TextBlock Name="CarriesText" Text="{Binding Carries}" FontSize="12"
+                       Opacity="0.75" TextWrapping="Wrap"
+                       IsVisible="{Binding CarriesAnything}" />
+
+            <!-- What this publish would change about the revision already at the address.
+                 Only on a pack that has one: before that, what the pack contains is the whole
+                 answer. Compared against what the site actually serves, because the publish
+                 record keeps a fingerprint of the document rather than the document. -->
+            <TextBlock Name="DeltaText" Text="{Binding DeltaLine}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,2,0,0"
+                       IsVisible="{Binding ShowDelta}" />
         </StackPanel>
 
         <!--

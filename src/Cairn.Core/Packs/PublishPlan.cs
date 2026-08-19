@@ -18,12 +18,18 @@ public sealed record PublishMod(string ModId, string? Version, bool Pinned, bool
 /// Deliberately parallel to <see cref="VersionChangePlan"/> — same shape, same worst-first
 /// habit — because they are the same kind of screen: a decision that is hard to take back.
 /// </summary>
+/// <param name="ModConfigValues">
+/// How many mod settings the pack carries, counted across every file it names.
+/// </param>
+/// <param name="Keybinds">How many hotkeys it carries.</param>
 public sealed record PublishPlan(
     string PackId,
     IReadOnlyList<PublishMod> Mods,
     string? Connect,
     bool LockCovers,
-    string? LockProblem)
+    string? LockProblem,
+    int ModConfigValues = 0,
+    int Keybinds = 0)
 {
     /// <summary>
     /// Mods with nothing on ModDB. They resolve on the author's machine and are a dead
@@ -47,6 +53,34 @@ public sealed record PublishPlan(
     public string Summary() => Mods.Count == 0
         ? Lang.Get("share-nothing-to-publish")
         : Lang.Plural("share-publishing-mods", Mods.Count, Mods.Count);
+
+    /// <summary>
+    /// The rest of what a pack is, named rather than counted up by whoever is about to press
+    /// Publish.
+    ///
+    /// The mod list is on screen and the other three things a pack carries are not, so this
+    /// is the only place they appear before they are sent. Not a diff against the last
+    /// revision — nothing keeps the old document to compare against, only a fingerprint of
+    /// it — so it says what is going, which is the question somebody has anyway the first
+    /// time they publish.
+    ///
+    /// Empty when there is nothing but mods, which is most packs: a line reading "and no
+    /// settings, and no hotkeys" is noise on the screen where it matters most.
+    /// </summary>
+    public string Carries()
+    {
+        var parts = new List<string>();
+
+        if (ModConfigValues > 0)
+            parts.Add(Lang.Plural("share-carries-settings", ModConfigValues, ModConfigValues));
+
+        if (Keybinds > 0)
+            parts.Add(Lang.Plural("share-carries-hotkeys", Keybinds, Keybinds));
+
+        return parts.Count == 0 ? "" : Lang.Get("share-carries", string.Join(", ", parts));
+    }
+
+    public bool CarriesAnything => ModConfigValues > 0 || Keybinds > 0;
 
     public string UnresolvableWarning()
     {
@@ -107,7 +141,30 @@ public sealed record PublishPlan(
 
         var (covers, problem) = CheckLock(manifest, locked, syncFailures);
 
-        return new PublishPlan(manifest.Id, mods, manifest.Connect, covers, problem);
+        return new PublishPlan(
+            manifest.Id, mods, manifest.Connect, covers, problem,
+            CountValues(manifest.ModConfig), manifest.Keybinds?.Count ?? 0);
+    }
+
+    /// <summary>
+    /// Every leaf across every file, since one file may carry several settings and a count of
+    /// files would read as a count of mods.
+    /// </summary>
+    private static int CountValues(IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonObject>? config)
+    {
+        if (config is null) return 0;
+
+        var total = 0;
+        foreach (var (_, file) in config) total += Leaves(file);
+        return total;
+
+        static int Leaves(System.Text.Json.Nodes.JsonObject node)
+        {
+            var n = 0;
+            foreach (var (_, value) in node)
+                n += value is System.Text.Json.Nodes.JsonObject section ? Leaves(section) : 1;
+            return n;
+        }
     }
 
     /// <summary>
