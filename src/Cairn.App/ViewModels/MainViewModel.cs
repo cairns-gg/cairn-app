@@ -831,6 +831,16 @@ public partial class MainViewModel : ViewModelBase
 
             // After the pack exists, because a world is copied into it — and because the
             // mods are the pack, while the worlds are what you had been playing in it.
+            // Before the worlds, which are gigabytes and slow: the settings are kilobytes,
+            // and a person watching a world copy has already been told the pack exists.
+            if (choice.ChosenModConfigFrom is { } settings)
+            {
+                _packData.EnsureDataPath(id);
+
+                var copied = InstalledModConfigs.CopyInto(settings, _packData.DataPathFor(id));
+                if (copied > 0) NoteFor(id, Lang.Plural("main-copied-modconfig", copied, copied));
+            }
+
             await CopyWorldsAsync(id, choice.ChosenWorlds);
         }
         catch (Exception e)

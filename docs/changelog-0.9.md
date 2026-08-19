@@ -104,6 +104,18 @@ it will cost and it is off by default, because a world is gigabytes and the pack
 one. Choosing between them one at a time is still there, and better placed — the pack's own
 Settings tab does it with the pack in front of you.
 
+**And your mod settings come with them.** An import brought your mods and your worlds and left
+behind everything that made them work together — plenty of mods only get along once a value
+has been changed, so a pack with the right mods and the mod authors' defaults is not the thing
+you had been playing, and there is no way to tell which of forty mods lost the setting that
+mattered. *Bring my mod settings across too* is ticked by default: they are kilobytes, and
+they are part of what you asked for.
+
+Copied, never moved — your own Vintage Story goes on working exactly as it was, and nothing
+already in the pack is written over. This puts the files in *your* copy of the pack; a pack
+that carries settings to other people declares them in the Mod config tab, a value at a time,
+which is unchanged. What this does is give that tab something to offer.
+
 **If you have been running mods the tags call out of date**, this is the change you were
 waiting for: they come in, named and ticked, saying what they are.
 

@@ -172,11 +172,22 @@
                      a real thing to want and the pack's own Settings tab already does it,
                      with the pack in front of you; here the list was the tallest thing on a
                      screen about mods and grew with somebody's save folder. -->
-                <CheckBox DockPanel.Dock="Bottom" Margin="0,10,0,0" FontSize="12"
-                          Name="BringWorldsCheck"
-                          IsChecked="{Binding BringWorlds}"
-                          IsVisible="{Binding HasWorlds}"
-                          Content="{Binding WorldsLabel}" />
+                <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,10,0,0">
+                    <!-- Ticked, unlike the worlds above it, and for what makes them
+                         different: these are kilobytes, and plenty of mods only get along
+                         once a value has been changed. A pack whose mods are right and whose
+                         settings are the authors' defaults is not the thing that was being
+                         played, which is what this source was asked for. -->
+                    <CheckBox Name="BringModConfigCheck" FontSize="12"
+                              IsChecked="{Binding BringModConfig}"
+                              IsVisible="{Binding HasModConfig}"
+                              Content="{Binding ModConfigLabel}" />
+
+                    <CheckBox Name="BringWorldsCheck" FontSize="12"
+                              IsChecked="{Binding BringWorlds}"
+                              IsVisible="{Binding HasWorlds}"
+                              Content="{Binding WorldsLabel}" />
+                </StackPanel>
 
                 <Panel>
                     <!-- Nothing to show yet. An empty bordered scroll area looks exactly

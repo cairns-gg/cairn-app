@@ -218,6 +218,12 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     {
         Worlds = new WorldPickerViewModel(savesDir);
 
+        // The folder holding the Mods folder, which is where the worlds and settings are.
+        // Taken from the saves directory rather than derived a second way, so the three of
+        // them cannot disagree about which install is being read.
+        _dataPath = Path.GetDirectoryName(savesDir) ?? savesDir;
+        _modConfig = InstalledModConfigs.Measure(_dataPath);
+
         _importer = importer;
         _suggestId = suggestId;
         _disabled = disabled;
@@ -301,6 +307,13 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
     public string ModsDir { get; private set; }
 
+    /// <summary>
+    /// The folder holding it, which is where the worlds and the mod settings are. Kept
+    /// because two of the three things this dialog offers hang off it rather than off the
+    /// Mods folder that was named.
+    /// </summary>
+    private string _dataPath;
+
     /// <summary>Whether the mods folder is one somebody named, rather than the game's own.</summary>
     public bool ModsAreChosen => !string.IsNullOrWhiteSpace(CairnSettings.Load().GameDataPath);
 
@@ -344,6 +357,9 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
         Worlds = new WorldPickerViewModel(InstalledWorlds.SavesIn(folder.DataPath));
 
+        _dataPath = folder.DataPath;
+        _modConfig = InstalledModConfigs.Measure(folder.DataPath);
+
         // A folder with no worlds should not leave the box ticked from the last one.
         BringWorlds = false;
 
@@ -352,6 +368,8 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
         OnPropertyChanged(nameof(Worlds));
         OnPropertyChanged(nameof(HasWorlds));
         OnPropertyChanged(nameof(WorldsLabel));
+        OnPropertyChanged(nameof(HasModConfig));
+        OnPropertyChanged(nameof(ModConfigLabel));
 
         // The version the pack targets is in that line whenever no install names one.
         OnPropertyChanged(nameof(GameDetail));
@@ -452,6 +470,36 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
     /// <summary>What the caller copies: all of them, or none.</summary>
     public IReadOnlyList<InstalledWorld> ChosenWorlds => BringWorlds ? Worlds.All : [];
+
+    // ---- the settings that made those mods work together ----
+
+    /// <summary>
+    /// Whether the mod settings in the same folder come across.
+    ///
+    /// On, unlike the worlds, and for the reasons that make them different things. These are
+    /// kilobytes rather than gigabytes; the pack does not merely work better with them, it is
+    /// not the thing that was being played without them — plenty of mods only get along once
+    /// a value has been changed, and a pack whose mods are right and whose settings are the
+    /// authors' defaults is a different pack. Somebody choosing this source asked for what
+    /// they are running.
+    ///
+    /// It copies files into this pack and nothing else. What a pack carries *to other people*
+    /// is declared in its manifest, one value at a time, in the Mod config tab — these files
+    /// are what that tab then has to offer.
+    /// </summary>
+    [ObservableProperty] public partial bool BringModConfig { get; set; } = true;
+
+    private InstalledModConfigs.Contents _modConfig = new(0, 0);
+
+    public bool HasModConfig => _modConfig.Any;
+
+    public string ModConfigLabel => Lang.Plural(
+        "importsrc-bring-modconfig", _modConfig.Files,
+        _modConfig.Files, Bytes.Human(_modConfig.Bytes));
+
+    /// <summary>Where they would be copied from, or null when the box is off or empty.</summary>
+    public string? ChosenModConfigFrom =>
+        BringModConfig && HasModConfig ? _dataPath : null;
 
     /// <summary>
     /// Asks for a directory, returning null if the user thought better of it. Set by the

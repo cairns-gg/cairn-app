@@ -335,6 +335,83 @@ public class ImportSourceWindowTests
         Assert.Contains("No mod zips", vm.Summary);
     }
 
+    // ---- the settings that made those mods work together ----
+
+    /// <summary>A data path with mod settings in it, and the saves folder beside them.</summary>
+    private static string DataWithSettings()
+    {
+        var data = Path.Combine(Path.GetTempPath(), "cairn-cfg-" + Guid.NewGuid().ToString("n")[..8]);
+
+        Directory.CreateDirectory(InstalledModConfigs.DirectoryIn(data));
+        File.WriteAllText(
+            Path.Combine(InstalledModConfigs.DirectoryIn(data), "terrainslabs.json"),
+            """{"compatibleMods":["footprints"]}""");
+
+        return data;
+    }
+
+    /// <summary>
+    /// Offered, and ticked — unlike the worlds beside it.
+    ///
+    /// These are kilobytes and plenty of mods only get along once a value has been changed,
+    /// so a pack with the right mods and the authors' defaults is not the thing that was
+    /// being played. A world is gigabytes and the pack works without one.
+    /// </summary>
+    [AvaloniaFact]
+    public void Mod_settings_are_offered_and_ticked_while_worlds_are_not()
+    {
+        var data = DataWithSettings();
+
+        try
+        {
+            var vm = Choice(savesDir: Path.Combine(data, "Saves"));
+
+            Assert.True(vm.HasModConfig);
+            Assert.True(vm.BringModConfig);
+            Assert.False(vm.BringWorlds);
+
+            Assert.Equal(data, vm.ChosenModConfigFrom);
+
+            vm.BringModConfig = false;
+            Assert.Null(vm.ChosenModConfigFrom);
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
+    /// <summary>An install with no settings makes no offer, rather than an empty one.</summary>
+    [AvaloniaFact]
+    public void An_install_with_no_settings_does_not_offer_them()
+    {
+        var vm = Choice();
+
+        Assert.False(vm.HasModConfig);
+        Assert.Null(vm.ChosenModConfigFrom);
+    }
+
+    [AvaloniaFact]
+    public void The_offer_is_drawn()
+    {
+        var data = DataWithSettings();
+
+        try
+        {
+            var (window, _) = Show(Choice(savesDir: Path.Combine(data, "Saves")));
+
+            var box = window.GetVisualDescendants().OfType<CheckBox>()
+                .Single(c => c.Name == "BringModConfigCheck");
+
+            Assert.True(box.IsEffectivelyVisible);
+            Assert.True(box.IsChecked);
+        }
+        finally
+        {
+            Directory.Delete(data, recursive: true);
+        }
+    }
+
     // ---- pointing Cairn at the install it could not find ----
 
     /// <summary>
