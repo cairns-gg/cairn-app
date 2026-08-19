@@ -582,7 +582,7 @@ internal static class Program
         // Printed as each one is settled rather than in a block at the end: a long import is
         // one ModDB lookup per mod, and a terminal that says nothing for a minute looks hung.
         var plan = await new InstallImport(moddb).PlanAsync(
-            scan, gameVersion, disabled, playedOn,
+            scan, gameVersion, disabled,
             new Progress<ImportCandidate>(c =>
                 Console.WriteLine($"  {(c.Included ? "+" : "-")} {c.Mod.Describe}: "
                                   + $"{c.Verdict.ToString().ToLowerInvariant()} — {c.Note}")));

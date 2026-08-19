@@ -831,7 +831,7 @@ public partial class MainViewModel : ViewModelBase
 
             // After the pack exists, because a world is copied into it — and because the
             // mods are the pack, while the worlds are what you had been playing in it.
-            await CopyWorldsAsync(id, choice.Worlds.Chosen);
+            await CopyWorldsAsync(id, choice.ChosenWorlds);
         }
         catch (Exception e)
         {

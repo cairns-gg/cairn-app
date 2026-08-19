@@ -59,6 +59,16 @@ public sealed partial class WorldPickerViewModel : ViewModelBase
 
     public bool Any => Worlds.Count > 0;
 
+    /// <summary>
+    /// Every world, and what they weigh. For a caller offering them all or none rather than
+    /// one at a time — the import dialog does, because a list of worlds there would be the
+    /// tallest thing on a screen whose subject is mods, and picking between them is already
+    /// what the pack's own "bring a world in" does properly.
+    /// </summary>
+    public IReadOnlyList<InstalledWorld> All => [.. Worlds.Select(w => w.World)];
+
+    public long TotalBytes => Worlds.Sum(w => w.World.Size);
+
     public IReadOnlyList<InstalledWorld> Chosen =>
         [.. Worlds.Where(w => w.Chosen).Select(w => w.World)];
 

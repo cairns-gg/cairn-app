@@ -254,6 +254,8 @@
   "importsrc-no-install": "o pack vai usar {0}; os mods não marcados ficam de fora",
   "importsrc-install-choose": "Encontrar a minha instalação…",
   "importsrc-install-invalid": "Não há VintagestoryAPI.dll em {0}, nem numa pasta Vintagestory lá dentro.",
+  "importsrc-bring-worlds-one": "Trazer também o meu mundo ({1})",
+  "importsrc-bring-worlds-other": "Trazer também os meus {0} mundos ({1})",
   "importsrc-row-game": "Jogo",
   "importsrc-row-mods": "Mods",
   "importsrc-change": "Alterar…",

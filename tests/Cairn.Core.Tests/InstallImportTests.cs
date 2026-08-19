@@ -126,20 +126,14 @@ public class InstallImportTests : IDisposable
             .GroupBy(r => r.Id)
             .ToDictionary(g => g.Key, g => g.Select(r => (r.Version, r.Tags)).ToArray()));
 
-    /// <param name="playedOn">
-    /// What the folder was being played on. Defaults to the version the pack targets, which
-    /// is the ordinary case: importing the install you have into a pack for the game you
-    /// have.
-    /// </param>
     private async Task<IReadOnlyList<ImportCandidate>> PlanAsync(
-        Moddb moddb, string gameVersion = "1.22.6", IReadOnlySet<string>? disabled = null,
-        string? playedOn = "same")
+        Moddb moddb, string gameVersion = "1.22.6", IReadOnlySet<string>? disabled = null)
     {
         var http = new HttpClient(moddb);
         var scan = InstalledMods.Scan(InstallMods);
 
         return await new InstallImport(new ModDbClient(http))
-            .PlanAsync(scan, gameVersion, disabled, playedOn == "same" ? gameVersion : playedOn);
+            .PlanAsync(scan, gameVersion, disabled);
     }
 
     // ---- reading the folder ----
@@ -197,17 +191,39 @@ public class InstallImportTests : IDisposable
         Assert.Equal("1.2.0", olla.Release!.ModVersion);
     }
 
+    /// <summary>
+    /// The version being run is kept, even when a newer one fits the pack's game better.
+    ///
+    /// An import is "give me a pack of what I am running", and quietly substituting a
+    /// different version of a mod is the one thing that phrase rules out. It used to swap:
+    /// the release was not marked for the pack's version, so a newer one went in instead and
+    /// the mod set arrived subtly different from the one that had been played. Updating is a
+    /// button one press away, and stays a decision rather than a side effect of importing.
+    /// </summary>
     [Fact]
-    public async Task A_version_this_game_cannot_have_moves_to_one_it_can()
+    public async Task A_version_this_game_is_not_marked_for_is_kept_rather_than_swapped()
     {
         WriteMod("olla_0.9.0.zip", "olla", "0.9.0");
 
-        // Played on 1.21.4 and imported into a pack for 1.22.6 — someone moving to a newer
-        // game. Running it there says nothing about running it here, so the pack takes the
-        // release the new game actually has.
         var plan = await PlanAsync(
-            Serving(("olla", "0.9.0", ["1.21.4"]), ("olla", "1.3.0", ["1.22.6"])),
-            playedOn: "1.21.4");
+            Serving(("olla", "0.9.0", ["1.21.4"]), ("olla", "1.3.0", ["1.22.6"])));
+
+        var olla = Assert.Single(plan);
+        Assert.Equal(ImportVerdict.Accepted, olla.Verdict);
+        Assert.Equal("0.9.0", olla.Release!.ModVersion);
+        Assert.True(olla.Included);
+    }
+
+    /// <summary>
+    /// And it moves only when there is nothing else it could do: the exact release has gone
+    /// from ModDB, so there is no way to reproduce what is in the folder.
+    /// </summary>
+    [Fact]
+    public async Task A_release_that_has_gone_from_ModDb_moves_to_one_that_has_not()
+    {
+        WriteMod("olla_0.9.0.zip", "olla", "0.9.0");
+
+        var plan = await PlanAsync(Serving(("olla", "1.3.0", ["1.22.6"])));
 
         var olla = Assert.Single(plan);
         Assert.Equal(ImportVerdict.Newest, olla.Verdict);
@@ -231,16 +247,44 @@ public class InstallImportTests : IDisposable
         Assert.Contains("because you are running it", mod.Note);
     }
 
+    /// <summary>
+    /// The acceptance no longer depends on Cairn having worked out what the folder was played
+    /// on, and it used to.
+    ///
+    /// That inference was withheld in exactly the cases it was most needed. A machine whose
+    /// install Cairn could not find had no version to infer from, so mods somebody had been
+    /// running for months came back as "nothing published for this game version" and were
+    /// dropped — with only a line about no install found to connect the two. The row is shown
+    /// and ticked instead, saying what it is, and unticking is how somebody declines it.
+    /// </summary>
     [Fact]
-    public async Task Nobody_testifies_for_a_game_they_were_not_playing()
+    public async Task An_unmarked_release_goes_in_without_Cairn_inferring_the_testimony()
     {
-        // The same mod and the same folder, imported without saying what it was played on.
-        // An acceptance is a sentence somebody said; it is not inferred from a zip.
         WriteMod("oldmod_1.0.0.zip", "oldmod", "1.0.0");
 
-        var plan = await PlanAsync(Serving(("oldmod", "1.0.0", ["1.21.4"])), playedOn: null);
+        var mod = Assert.Single(await PlanAsync(Serving(("oldmod", "1.0.0", ["1.21.4"]))));
 
-        Assert.Equal(ImportVerdict.Incompatible, Assert.Single(plan).Verdict);
+        Assert.Equal(ImportVerdict.Accepted, mod.Verdict);
+        Assert.True(mod.Included);
+    }
+
+    /// <summary>
+    /// And it can be declined, which is the whole of what the list is for: it opens holding
+    /// everything the folder has, and is read to take things out of.
+    /// </summary>
+    [Fact]
+    public async Task Anything_that_can_go_in_starts_going_in_and_can_be_taken_out()
+    {
+        WriteMod("oldmod_1.0.0.zip", "oldmod", "1.0.0");
+
+        var mod = Assert.Single(await PlanAsync(Serving(("oldmod", "1.0.0", ["1.21.4"]))));
+        Assert.True(mod.Include);
+
+        mod.Include = false;
+        Assert.False(mod.Included);
+
+        var store = new PackStore(Path.Combine(_root, "packs"));
+        Assert.Empty(InstallImport.CreatePack(store, "mine", "1.22.6", "My mods", [mod]).Mods);
     }
 
     [Fact]
@@ -333,7 +377,7 @@ public class InstallImportTests : IDisposable
             ("olla", "1.2.0", ["1.22.6"]), ("carryon", "2.1.4", ["1.22.6"])));
 
         var plan = await new InstallImport(new ModDbClient(http)).PlanAsync(
-            InstalledMods.Scan(InstallMods), "1.22.6", null, "1.22.6",
+            InstalledMods.Scan(InstallMods), "1.22.6", null,
             new Reports<ImportCandidate>(c => told.Add(c.Mod.FileName)));
 
         // Every one of them, once, and none left to the end.
@@ -435,5 +479,25 @@ public class InstallImportTests : IDisposable
         var updates = await syncer.CheckUpdatesAsync(manifest, store.LockPath("mine"));
 
         Assert.Equal("olla 1.2.0 -> 1.3.0", Assert.Single(updates).Describe());
+    }
+
+    /// <summary>
+    /// What still cannot go in, and why no tick is offered for it: Cairn installs from ModDB
+    /// and never copies the zip somebody has, because a pack whose mods come out of one
+    /// machine's folder cannot be shared, published or reproduced by anybody.
+    /// </summary>
+    [Fact]
+    public async Task A_mod_ModDb_has_never_heard_of_cannot_be_included_at_all()
+    {
+        WriteMod("mine_1.0.0.zip", "mine", "1.0.0");
+
+        var unknown = Assert.Single(await PlanAsync(Serving()));
+
+        Assert.Equal(ImportVerdict.Unknown, unknown.Verdict);
+        Assert.False(unknown.CanInclude);
+
+        // And saying so does not make it possible.
+        unknown.Include = true;
+        Assert.False(unknown.Included);
     }
 }

@@ -53,8 +53,31 @@ public sealed record ImportCandidate(
     /// <summary>The mod id this would be added under, which is what the zip called itself.</summary>
     public string ModId => Mod.ModId ?? "";
 
-    public bool Included => Verdict is ImportVerdict.Ready or ImportVerdict.Newest
+    /// <summary>
+    /// Whether this one could go in a pack at all, whatever anybody wants.
+    ///
+    /// The line is drawn at "is there something for Cairn to install". A mod ModDB has never
+    /// heard of, one whose zip declares no id, and one this machine could not reach ModDB
+    /// about have no release to fetch — and Cairn does not copy the zip in, because a pack
+    /// whose mods come out of one machine's folder cannot be shared, published or reproduced
+    /// by anybody, which is most of what a pack is for.
+    /// </summary>
+    public bool CanInclude => Verdict is ImportVerdict.Ready or ImportVerdict.Newest
         or ImportVerdict.Accepted;
+
+    /// <summary>
+    /// Whether it is going in. Settable, and true for everything that can — the folder is
+    /// the answer, and the list is there to take things out of rather than to assemble.
+    ///
+    /// Mutable on an otherwise immutable record for the same reason <c>ModChange.Take</c>
+    /// is: it is the one field that belongs to the person reading the list rather than to
+    /// the judgement, and keeping it here is what stops a front end holding a second opinion
+    /// about which mods are going in.
+    /// </summary>
+    public bool Include { get; set; } = true;
+
+    public bool Included => CanInclude && Include;
+
 }
 
 /// <summary>
@@ -85,16 +108,6 @@ public sealed class InstallImport(ModDbClient moddb)
     /// Mod ids and filenames switched off in the game's settings; see
     /// <see cref="InstalledMods.DisabledIn"/>. Null imports everything found.
     /// </param>
-    /// <param name="playedOn">
-    /// The game version this folder was actually being played on, which is not always the
-    /// one the pack targets — importing an install while moving to a newer game is an
-    /// ordinary thing to do.
-    ///
-    /// It decides whether an unmarked release may be imported as accepted. "You are running
-    /// it" is testimony about a game version: someone running a 1.21.4-only mod on 1.21.4
-    /// has said nothing whatever about 1.22.6, and inheriting the acceptance would put an
-    /// untested mod in a pack over a sentence nobody said. Null grants none.
-    /// </param>
     /// <param name="decided">
     /// Each mod as it is settled, so a caller can show the folder immediately and fill the
     /// verdicts in behind it. Reading the zips is instant; only the lookups take time, and
@@ -105,7 +118,6 @@ public sealed class InstallImport(ModDbClient moddb)
         InstalledModScan scan,
         string gameVersion,
         IReadOnlySet<string>? disabled = null,
-        string? playedOn = null,
         IProgress<ImportCandidate>? decided = null,
         CancellationToken ct = default)
     {
@@ -116,7 +128,7 @@ public sealed class InstallImport(ModDbClient moddb)
         {
             ct.ThrowIfCancellationRequested();
 
-            var candidate = await JudgeAsync(mod, gameVersion, disabled, playedOn, claimed, ct)
+            var candidate = await JudgeAsync(mod, gameVersion, disabled, claimed, ct)
                 .ConfigureAwait(false);
 
             candidates.Add(candidate);
@@ -127,7 +139,7 @@ public sealed class InstallImport(ModDbClient moddb)
     }
 
     private async Task<ImportCandidate> JudgeAsync(
-        InstalledMod mod, string gameVersion, IReadOnlySet<string>? disabled, string? playedOn,
+        InstalledMod mod, string gameVersion, IReadOnlySet<string>? disabled,
         HashSet<string> claimed, CancellationToken ct)
     {
         if (mod.Problem is not null || string.IsNullOrWhiteSpace(mod.ModId))
@@ -171,11 +183,19 @@ public sealed class InstallImport(ModDbClient moddb)
         if (mine is not null)
             return new ImportCandidate(mod, ImportVerdict.Ready, mine, mine.ModVersion);
 
-        // Not published for this game version, or not published at all any more. Before
-        // moving them to a different version, ask whether the release they have is simply
-        // unmarked — they are running it, which is the same testimony an acceptance records.
-        // Only when they were running it on a game like this pack's: see playedOn.
-        if (mod.Version is not null && Testifies(playedOn, gameVersion)
+        // Not published for this game version, or not published at all any more. The release
+        // they have comes first anyway, if ModDB will still serve it: an import is "give me a
+        // pack of what I am running", and quietly substituting a different version of a mod
+        // is the one thing that phrase rules out. It goes in as an acceptance, which is what
+        // an unmarked release in a pack is.
+        //
+        // This used to be granted only when the folder was being played on a game like the
+        // pack's — Cairn inferring the testimony rather than being told it. That withheld it
+        // in exactly the cases where it was most needed: a machine whose install could not be
+        // found had no version to infer from, so mods somebody had been running for months
+        // came back as "nothing published for this game version" and were dropped. The row is
+        // now shown, ticked, and says what it is; unticking is how somebody declines it.
+        if (mod.Version is not null
             && await AcceptedAsync(mod, gameVersion, ct).ConfigureAwait(false) is { } unmarked)
             return new ImportCandidate(mod, ImportVerdict.Accepted, unmarked,
                 Lang.Get("import-accepted", unmarked.ModVersion, gameVersion));
@@ -191,15 +211,6 @@ public sealed class InstallImport(ModDbClient moddb)
                 ? Lang.Get("import-will-install", newest.ModVersion)
                                 : Lang.Get("import-will-install-instead", mod.Version, gameVersion, newest.ModVersion));
     }
-
-    /// <summary>
-    /// Whether playing on one version says anything about running mods on another. The same
-    /// rule <see cref="PackMod.AcceptsUnmarkedFor"/> applies to an acceptance already in a
-    /// manifest — a patch bump is interchangeable for mods, a minor bump is not — because
-    /// this is the same claim, made a moment earlier.
-    /// </summary>
-    private static bool Testifies(string? playedOn, string gameVersion) =>
-        new PackMod { ModId = "", AcceptedFor = playedOn }.AcceptsUnmarkedFor(gameVersion);
 
     private async Task<ResolvedRelease?> AcceptedAsync(
         InstalledMod mod, string gameVersion, CancellationToken ct)

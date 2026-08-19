@@ -47,10 +47,56 @@ public sealed partial class ImportRowViewModel(InstalledMod mod) : ViewModelBase
         OnPropertyChanged(nameof(RowOpacity));
         OnPropertyChanged(nameof(Verdict));
         OnPropertyChanged(nameof(Note));
+        OnPropertyChanged(nameof(Candidate));
+        OnPropertyChanged(nameof(CanInclude));
+        OnPropertyChanged(nameof(Include));
     }
 
     /// <summary>Which zip this row is, for matching a verdict to it.</summary>
     public string FileName => mod.FileName;
+
+    /// <summary>The candidate behind this row, for a caller settling the whole plan.</summary>
+    public ImportCandidate? Candidate => candidate;
+
+    /// <summary>
+    /// Whether this one could go in at all — see <see cref="ImportCandidate.CanInclude"/>.
+    /// False leaves the tick on the row and disabled, rather than removing it: a row with no
+    /// control where every other row has one reads as an oversight, and the verdict beside it
+    /// is the explanation.
+    /// </summary>
+    public bool CanInclude => candidate?.CanInclude ?? false;
+
+    /// <summary>
+    /// Whether it is going in, written straight through to the candidate the plan is built
+    /// from — so what is ticked on screen and what CreatePack reads cannot drift apart.
+    ///
+    /// On for everything that can go in. The folder is the answer: somebody choosing this
+    /// source has said "a pack of what I am running", and a list that started empty would
+    /// ask them to say it again forty times.
+    /// </summary>
+    public bool Include
+    {
+        // The effective answer, not the stored wish. A candidate keeps Include set whatever
+        // its verdict, so a mod ModDB cannot serve would otherwise draw a ticked box that
+        // happened to be disabled — which reads as "going in" to everybody who does not
+        // notice it is greyed.
+        get => candidate?.Included ?? false;
+        set
+        {
+            if (candidate is not { } c || c.Include == value) return;
+
+            c.Include = value;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Included));
+            OnPropertyChanged(nameof(RowOpacity));
+
+            Settled?.Invoke();
+        }
+    }
+
+    /// <summary>Told when a tick moves, so the count above the list keeps up with it.</summary>
+    public Action? Settled { get; set; }
 
     public string Name => mod.Describe;
 
@@ -86,9 +132,17 @@ public sealed partial class ImportRowViewModel(InstalledMod mod) : ViewModelBase
     /// <summary>
     /// Blank for a mod that is simply going in: its note is the version, and the name above
     /// it already ends in that version. Every other verdict has something to say.
+    ///
+    /// Accepted is blank for the same reason once removed. Its note names the version and
+    /// says the release is unmarked — but the row's title is already the name and version,
+    /// and the verdict beside it already reads "not marked for this game". Three sayings of
+    /// one thing, wrapped over two lines, on what is now the common case rather than the
+    /// rare one. The CLI keeps the full sentence, having no column to put it in.
     /// </summary>
     public string Note =>
-        candidate is null || candidate.Verdict == ImportVerdict.Ready ? "" : candidate.Note;
+        candidate is null || candidate.Verdict is ImportVerdict.Ready or ImportVerdict.Accepted
+            ? ""
+            : candidate.Note;
 }
 
 /// <summary>
@@ -290,9 +344,14 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
         Worlds = new WorldPickerViewModel(InstalledWorlds.SavesIn(folder.DataPath));
 
+        // A folder with no worlds should not leave the box ticked from the last one.
+        BringWorlds = false;
+
         OnPropertyChanged(nameof(ModsDir));
         OnPropertyChanged(nameof(ModsAreChosen));
         OnPropertyChanged(nameof(Worlds));
+        OnPropertyChanged(nameof(HasWorlds));
+        OnPropertyChanged(nameof(WorldsLabel));
 
         // The version the pack targets is in that line whenever no install names one.
         OnPropertyChanged(nameof(GameDetail));
@@ -368,6 +427,31 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     /// have been given half a repair.
     /// </summary>
     public WorldPickerViewModel Worlds { get; private set; }
+
+    /// <summary>
+    /// Whether the worlds in the same folder come across too — all of them, or none.
+    ///
+    /// A checkbox rather than the list it used to be. Picking between worlds one at a time is
+    /// a real thing to want and the pack's own Settings tab already does it properly, with
+    /// the pack in front of you; here it was the tallest thing on a screen whose subject is
+    /// mods, and it grew with somebody's save folder rather than with anything this dialog
+    /// is about.
+    ///
+    /// Off, unlike the mods. A mod is a few hundred kilobytes and the point of the screen; a
+    /// world is gigabytes, is not needed for the pack to work, and copying one nobody asked
+    /// for is the kind of default that fills a disk.
+    /// </summary>
+    [ObservableProperty] public partial bool BringWorlds { get; set; }
+
+    public bool HasWorlds => Worlds.Any;
+
+    /// <summary>Names the cost, because that is what the answer turns on.</summary>
+    public string WorldsLabel => Lang.Plural(
+        "importsrc-bring-worlds", Worlds.Worlds.Count,
+        Worlds.Worlds.Count, Bytes.Human(Worlds.TotalBytes));
+
+    /// <summary>What the caller copies: all of them, or none.</summary>
+    public IReadOnlyList<InstalledWorld> ChosenWorlds => BringWorlds ? Worlds.All : [];
 
     /// <summary>
     /// Asks for a directory, returning null if the user thought better of it. Set by the
@@ -534,7 +618,8 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
             // The folder, immediately. Reading the zips is instant — it is the lookups that
             // take a moment, and each row says "checking…" until its own comes back.
-            foreach (var mod in scan.Mods) Mods.Add(new ImportRowViewModel(mod));
+            foreach (var mod in scan.Mods)
+                Mods.Add(new ImportRowViewModel(mod) { Settled = Resettle });
 
             var checking = Mods.ToDictionary(r => r.FileName, StringComparer.OrdinalIgnoreCase);
             var done = 0;
@@ -542,7 +627,7 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
             Summary = Lang.Get("importsrc-scanning", scan.Mods.Count);
 
             var plan = await _importer.PlanAsync(
-                scan, GameVersion, _disabled, PlayedOn,
+                scan, GameVersion, _disabled,
                 new System.Progress<ImportCandidate>(c =>
                 {
                     if (checking.TryGetValue(c.Mod.FileName, out var row)) row.Decide(c);
@@ -572,10 +657,13 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
             // Two sentences rather than one built by concatenation: the tail inflects a
             // noun and its verb together, and the head has to be able to precede it in
             // whatever order a language puts them.
-            Summary = Lang.Get("importsrc-scanned", taking, scan.Mods.Count, GameVersion)
-                      + (scan.Ignored.Count > 0
-                          ? Lang.Plural("importsrc-ignored", scan.Ignored.Count, scan.Ignored.Count)
-                          : "");
+            // Kept, because the summary is rebuilt whenever a row is settled again and the
+            // count of what the folder held besides mods does not change with it. Recomputed
+            // from the scan each time it was needed, ticking a box would quietly drop the
+            // sentence saying two things in the folder had been passed over.
+            _ignored = scan.Ignored.Count;
+
+            Summary = Describe(taking, scan.Mods.Count);
 
             Scanned = taking > 0;
         }
@@ -594,6 +682,29 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
             Progress = null;
         }
     }
+
+    /// <summary>
+    /// The plan and the summary, from what the rows now say. Called after a row changes its
+    /// mind rather than recomputing the scan, which would cost forty lookups to learn one
+    /// answer.
+    /// </summary>
+    private void Resettle()
+    {
+        var taking = Plan.Count(c => c.Included);
+
+        Summary = Describe(taking, Plan.Count);
+        Scanned = taking > 0;
+
+        OnPropertyChanged(nameof(CanImport));
+    }
+
+    /// <summary>What the folder came to, in the two sentences it takes to say it.</summary>
+    private string Describe(int taking, int found) =>
+        Lang.Get("importsrc-scanned", taking, found, GameVersion)
+        + (_ignored > 0 ? Lang.Plural("importsrc-ignored", _ignored, _ignored) : "");
+
+    /// <summary>Things in the folder that were not mod zips. See <see cref="Describe"/>.</summary>
+    private int _ignored;
 
     // ---- whether the button works ----
 

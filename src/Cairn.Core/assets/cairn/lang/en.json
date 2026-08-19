@@ -297,6 +297,8 @@
   "importsrc-no-install": "the pack targets {0}; unmarked mods are left out",
   "importsrc-install-choose": "Find my install…",
   "importsrc-install-invalid": "No VintagestoryAPI.dll in {0}, or in a Vintagestory folder inside it.",
+  "importsrc-bring-worlds-one": "Bring my world across too ({1})",
+  "importsrc-bring-worlds-other": "Bring my {0} worlds across too ({1})",
   "importsrc-row-game": "Game",
   "importsrc-row-mods": "Mods",
   "importsrc-change": "Change…",

@@ -77,6 +77,36 @@ Both are remembered, so these are once-only corrections. Correcting the install 
 even if you never import again: a pack whose game version matches now launches from your copy
 instead of Cairn downloading a second one.
 
+## An import brings what you are running, and you take out what you do not want
+
+**0.9.3.** Importing from your install used to hand you Cairn's decisions and no way to argue
+with them. A mod ModDB publishes nothing for on your game version was left out. A mod whose
+exact release it does not serve for you was quietly swapped for a newer one. Both were
+reported on the row and neither was something you could press.
+
+That is backwards for a screen whose whole job is "give me a pack of what I am running". So:
+
+**The version you have is the version that goes in**, wherever ModDB will still serve it —
+including when nothing is marked for your game. Updating is a button, one press away, and
+stays a decision rather than a side effect of importing.
+
+**Every mod that can go in starts ticked, and you untick what you do not want.** The list
+opens holding your folder and is read to take things out of, rather than assembled a mod at a
+time.
+
+**A mod Cairn cannot install keeps its box, unticked and greyed**, with the reason beside it.
+Cairn installs from ModDB and never copies the zip out of your folder — a pack whose mods come
+from one machine cannot be shared or reproduced by anybody — so a mod ModDB has never heard of
+cannot be brought in however much anyone would like it to be.
+
+**Worlds are one box now**, not a list: *Bring my 3 worlds across too (12.4 GB)*. It says what
+it will cost and it is off by default, because a world is gigabytes and the pack works without
+one. Choosing between them one at a time is still there, and better placed — the pack's own
+Settings tab does it with the pack in front of you.
+
+**If you have been running mods the tags call out of date**, this is the change you were
+waiting for: they come in, named and ticked, saying what they are.
+
 ## Smaller things in 0.9.3
 
 **Escape closes any of Cairn's dialogs.** Most already did; Preferences, Share, the pack

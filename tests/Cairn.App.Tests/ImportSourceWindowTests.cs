@@ -389,6 +389,81 @@ public class ImportSourceWindowTests
         Assert.Contains("version", vm.InstallProblem);
     }
 
+    // ---- what goes in, and taking things out ----
+
+    private static ImportCandidate Judged(
+        ImportVerdict verdict, string modId = "olla", string version = "1.2.0") =>
+        new(new InstalledMod($"/tmp/{modId}.zip", $"{modId}_{version}.zip", modId, modId, version, null),
+            verdict, null, "");
+
+    /// <summary>
+    /// The list opens holding everything the folder has, and is read to take things out of.
+    /// Somebody who chose this source has already said "a pack of what I am running"; a list
+    /// that started empty would ask them to say it again once per mod.
+    /// </summary>
+    [AvaloniaFact]
+    public void Everything_that_can_go_in_starts_ticked()
+    {
+        Assert.True(new ImportRowViewModel(Judged(ImportVerdict.Ready)).Include);
+        Assert.True(new ImportRowViewModel(Judged(ImportVerdict.Accepted)).Include);
+        Assert.True(new ImportRowViewModel(Judged(ImportVerdict.Newest)).Include);
+    }
+
+    /// <summary>
+    /// And what cannot go in keeps its box, unticked and disabled. Removing the control from
+    /// those rows would read as an oversight where every other row has one; leaving it
+    /// ticked-but-greyed would read as going in. The verdict beside it is the explanation.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_mod_ModDb_cannot_serve_is_neither_ticked_nor_tickable()
+    {
+        var row = new ImportRowViewModel(Judged(ImportVerdict.Unknown));
+
+        Assert.False(row.CanInclude);
+        Assert.False(row.Include);
+
+        row.Include = true;
+        Assert.False(row.Included);
+    }
+
+    /// <summary>
+    /// Unticking writes through to the candidate the pack is built from, so what is on
+    /// screen and what CreatePack reads cannot drift apart — and the count above the list
+    /// keeps up.
+    /// </summary>
+    [AvaloniaFact]
+    public void Unticking_a_row_takes_it_out_of_the_plan()
+    {
+        var row = new ImportRowViewModel(Judged(ImportVerdict.Accepted));
+
+        var settled = 0;
+        row.Settled = () => settled++;
+
+        row.Include = false;
+
+        Assert.False(row.Candidate!.Included);
+        Assert.Equal(1, settled);
+    }
+
+    /// <summary>
+    /// And it is drawn. The row template is where this has to appear, and a checkbox bound
+    /// to a property that does not exist renders nothing and fails no other test.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_tick_is_drawn_on_the_row()
+    {
+        var (window, vm) = Show(Choice(playedOn: "1.22.6"));
+
+        vm.Mods.Add(new ImportRowViewModel(Judged(ImportVerdict.Accepted)));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var ticks = window.GetVisualDescendants().OfType<CheckBox>()
+            .Where(c => c.IsEffectivelyVisible)
+            .ToList();
+
+        Assert.Contains(ticks, c => c.IsChecked == true);
+    }
+
     /// <summary>
     /// The mods folder, asked for as the folder people can name rather than as the data path
     /// Cairn needs. Both ends of the same answer are accepted, and the worlds beside it
