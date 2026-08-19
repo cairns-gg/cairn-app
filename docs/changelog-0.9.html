@@ -1,121 +1,53 @@
 <h1>What's new in Cairn 0.9.3</h1>
 
-<p>Everything that changed since the 0.8 series, in one place. Nothing here needs any action from you unless it says so.</p>
+<p>Everything since the 0.8 series. Nothing here needs anything from you unless it says so &mdash; see <strong>Upgrading</strong> at the end.</p>
 
-<h2>Updates notice a revision that only updates mods</h2>
+<h2>Updates notice what a revision actually changed</h2>
 
-<p><strong>0.9.3.</strong> The commonest revision an author publishes is the one where they have taken the month's mod updates and changed nothing else. Cairn could not see it. Every follower said <strong>"already on the author's newest revision"</strong>, <code>cairn-server update</code> said it and exited 0, and the pack stayed on the versions it had &mdash; five mod updates waiting at the author's URL that nothing would ever pull.</p>
+<p><strong>0.9.3.</strong> The commonest revision an author publishes takes the month's mod updates and changes nothing else. Cairn could not see it: followers reported <strong>"already on the author's newest revision"</strong>, <code>cairn-server update</code> said the same and exited 0, and the mods never moved.</p>
 
-<p>A pack lists the mods it wants; it does not usually name a version for any of them, because not naming one is what lets you take updates. The versions the author actually shipped live in the pack's lockfile, which is the file that makes their pack reproduce exactly on your machine. Cairn decided whether an update did anything by comparing the two mod <em>lists</em> &mdash; and those lists were identical, revision after revision, while everything that mattered moved underneath them.</p>
-
-<p>It now compares the versions as well. A revision that moves them says so, mod by mod, in the update window and in <code>cairn-server update</code>:</p>
+<p>A pack names the mods it wants, not usually their versions; those live in the lockfile. Cairn was comparing the mod <em>lists</em>, which stay identical while everything that matters moves underneath them. It compares versions now, and says which moved:</p>
 
 <pre><code>Revision 18: 5 updated.
   scribe                   1.1.1 &rarr; 1.2.1</code></pre>
 
-<p><strong>Nothing gets pinned by taking one.</strong> A mod nobody named a version for stays that way, so the pack goes on following the author rather than freezing at whatever it caught up to.</p>
+<p>Nothing gets pinned by taking one, so the pack goes on following the author. If a pack of yours has been stuck, check for an update &mdash; you get the author's newest, which is the same set of mods anyone importing it fresh would get. On a server, <code>cairn-server update &lt;pack&gt;</code> and restart.</p>
 
-<p><strong>If a pack of yours has been stuck</strong>, there is nothing to undo &mdash; check for an update and it will be there. On a server, <code>cairn-server update &lt;pack&gt;</code> followed by a restart. The revisions you missed are not applied one at a time: the author's newest is the one you get, which is the same set of mods anyone importing the pack fresh would receive.</p>
+<p><strong>0.9.1 fixed the same shape of thing for mod settings</strong>, which were also missing from the comparison, along with two ways an update could go wrong once it did land: the pack's mod settings were emptied on the way through, and the launcher went on showing the previous revision's keybinds and settings until your next edit saved them back over the new ones. Taking the author's next revision puts an affected pack right.</p>
 
-<h2>Cairn finds your Vintage Story in more places, and you can point it at one</h2>
+<h2>Importing your install brings what you are actually running</h2>
 
-<p><strong>0.9.3.</strong> Cairn looks for your own install to work out which game version you are playing, and it looked in three or four places per platform. If yours was somewhere else &mdash; a second drive, <code>/opt</code>, your home directory, the 32-bit Program Files &mdash; it found nothing and said so, and that was the end of the conversation.</p>
+<p><strong>0.9.3.</strong> Import used to hand you Cairn's decisions with nothing to press: a mod ModDB publishes nothing for on your game version was left out, and a mod whose exact release it does not serve was swapped for a newer one.</p>
 
-<p><strong>It also cost more than the message admitted.</strong> The version an import targets comes from that install, and so does something subtler: when a mod is not marked for your game version, Cairn will take it anyway on the grounds that you are visibly running it. That allowance is testimony about a particular version &mdash; so with no install to read, there was no version, and the allowance quietly switched off. Mods you have been happily playing came back as <em>nothing for this game version</em> and were left out, and nothing on screen connected that to the line about no install being found.</p>
+<p>Now the version you have is the version that goes in, wherever ModDB will still serve it &mdash; updating stays a button rather than a side effect of importing. <strong>Everything that can go in starts ticked</strong>, and you untick what you do not want. A mod Cairn genuinely cannot install &mdash; one ModDB has never heard of &mdash; keeps its box, unticked and greyed, with the reason beside it: Cairn installs from ModDB and never copies the zip out of your folder, because a pack whose mods come from one machine cannot be shared or reproduced by anybody.</p>
 
-<p>More places are searched now. On Windows that includes <code>Program Files (x86)</code> and the conventional game folders on your other drives; on Linux, <code>/opt/vintagestory</code>, a <code>vintagestory</code> folder in your home directory, and whatever <code>XDG_DATA_HOME</code> points at.</p>
+<p><strong>Your mod settings come across too</strong>, ticked by default: the right mods with the authors' defaults are not what you were playing. <strong>Your worlds are one box</strong> naming what they weigh, off by default because they are gigabytes. Both are copied, never moved.</p>
 
-<p><strong>And if it still cannot find yours, tell it &mdash; on the import screen itself</strong>, which now says where it is reading from in two lines you can correct:</p>
+<p><strong>Cairn is also better at finding your Vintage Story</strong>: Windows now includes <code>Program Files (x86)</code> and the usual game folders on your other drives, Linux <code>/opt/vintagestory</code>, <code>~/vintagestory</code> and <code>XDG_DATA_HOME</code>. If it still cannot see yours, the import screen says where it is reading from, in two lines you can correct:</p>
 
 <pre><code>Game   1.22.6    /Applications/Vintagestory.app                    Change&hellip;
 Mods   /Users/you/&hellip;/VintagestoryData/Mods                          Change&hellip;</code></pre>
 
-<p><strong>Game</strong> is the folder holding <code>VintagestoryAPI.dll</code>. It is checked as you choose it, so a folder that is not an install is refused on the spot rather than stored and quietly ignored, and the mod list is read again against the version it turns out to be. On macOS pick the folder containing <code>Vintagestory.app</code> &mdash; a folder picker will not go inside the app itself.</p>
+<p><strong>Game</strong> is the folder holding <code>VintagestoryAPI.dll</code>, checked as you choose it, so a folder that is not an install is refused. On macOS pick the folder <em>containing</em> <code>Vintagestory.app</code> &mdash; a picker will not go inside the app itself. <strong>Mods</strong> is asked for separately because the game keeps it separately, wherever its <code>dataPath</code> points; pick your Mods folder or the folder holding it, and the worlds follow. Most people never need this.</p>
 
-<p><strong>Mods</strong> is new too, and it is there because the game keeps these in two entirely separate places: your install can be anywhere, and your mods, worlds and settings live wherever the game's <code>dataPath</code> points. If you have moved that, point Cairn at your Mods folder and the worlds offered underneath follow it. Pick either that folder or the one holding it; both work. Most people never need this &mdash; the usual way to move it on Windows is a junction, which leaves everything resolving as it always did.</p>
-
-<p>Both are remembered, so these are once-only corrections. Correcting the install is worth it even if you never import again: a pack whose game version matches now launches from your copy instead of Cairn downloading a second one.</p>
-
-<h2>An import brings what you are running, and you take out what you do not want</h2>
-
-<p><strong>0.9.3.</strong> Importing from your install used to hand you Cairn's decisions and no way to argue with them. A mod ModDB publishes nothing for on your game version was left out. A mod whose exact release it does not serve for you was quietly swapped for a newer one. Both were reported on the row and neither was something you could press.</p>
-
-<p>That is backwards for a screen whose whole job is "give me a pack of what I am running". So:</p>
-
-<p><strong>The version you have is the version that goes in</strong>, wherever ModDB will still serve it &mdash; including when nothing is marked for your game. Updating is a button, one press away, and stays a decision rather than a side effect of importing.</p>
-
-<p><strong>Every mod that can go in starts ticked, and you untick what you do not want.</strong> The list opens holding your folder and is read to take things out of, rather than assembled a mod at a time.</p>
-
-<p><strong>A mod Cairn cannot install keeps its box, unticked and greyed</strong>, with the reason beside it. Cairn installs from ModDB and never copies the zip out of your folder &mdash; a pack whose mods come from one machine cannot be shared or reproduced by anybody &mdash; so a mod ModDB has never heard of cannot be brought in however much anyone would like it to be.</p>
-
-<p><strong>Worlds are one box now</strong>, not a list: <em>Bring my 3 worlds across too (12.4 GB)</em>. It says what it will cost and it is off by default, because a world is gigabytes and the pack works without one. Choosing between them one at a time is still there, and better placed &mdash; the pack's own Settings tab does it with the pack in front of you.</p>
-
-<p><strong>And your mod settings come with them.</strong> An import brought your mods and your worlds and left behind everything that made them work together &mdash; plenty of mods only get along once a value has been changed, so a pack with the right mods and the mod authors' defaults is not the thing you had been playing, and there is no way to tell which of forty mods lost the setting that mattered. <em>Bring my mod settings across too</em> is ticked by default: they are kilobytes, and they are part of what you asked for.</p>
-
-<p>Copied, never moved &mdash; your own Vintage Story goes on working exactly as it was, and nothing already in the pack is written over. This puts the files in <em>your</em> copy of the pack; a pack that carries settings to other people declares them in the Mod config tab, a value at a time, which is unchanged. What this does is give that tab something to offer.</p>
-
-<p><strong>If you have been running mods the tags call out of date</strong>, this is the change you were waiting for: they come in, named and ticked, saying what they are.</p>
-
-<h2>Smaller things in 0.9.3</h2>
-
-<p><strong>You can say where Cairn keeps its files before it has any.</strong> Nothing creates that folder until Cairn first writes something, so on a fresh install there was nothing there &mdash; and Preferences answered <em>"there is nothing at ~/.cairn to move"</em>, as though choosing a location needed something to have been put in the wrong place first. The button now reads <strong>Choose&hellip;</strong> when there is nothing to move and <strong>Move&hellip;</strong> when there is, and says which of the two it is about to do. One line of text still stays at the default location naming where everything went, because that is how Cairn finds it next time it starts.</p>
-
-<p><strong>Escape closes any of Cairn's dialogs.</strong> Most already did; Preferences, Share, the pack update and the game version windows did not, and Preferences could only be dismissed from the title bar.</p>
-
-<p><strong>Preferences no longer runs off the bottom of the screen.</strong> At larger interface sizes &mdash; and in the languages whose text runs longer than the English &mdash; the Overview tab could put the language picker somewhere unreachable. It scrolls now.</p>
+<p>Both are remembered, and correcting the install is worth doing even if you never import again: a pack whose game version matches now launches from your copy instead of Cairn downloading a second one.</p>
 
 <h2>A mod your mods need is no longer refused for want of a tag</h2>
 
-<p><strong>0.9.2.</strong> Mods can require other mods, and Cairn fetches those for you. If ModDB carried no release of one of them marked for the version your pack is on, Cairn refused it &mdash; installing the mod that wanted it, leaving out the thing it wanted, and putting the reason in the Log tab. The game then disabled the mod on startup over a dependency that never arrived, and there was nothing you could do about it from the pack: a mod that is only there because something else requires it has no row you can accept anything on.</p>
+<p><strong>0.9.2.</strong> Mods can require other mods, and Cairn fetches those for you. But if ModDB carried no release of one marked for your pack's game version, it was left out, and the game then disabled the mod that wanted it. There was nothing you could do from the pack: a mod that is only there because something else requires it has no row to accept anything on.</p>
 
-<p>Cairn now installs it, on the word of the mod that asked for it. That is the ordinary case for a bridge or a compatibility patch &mdash; Floral Zones' 1.22 bridge is built for 1.22 and requires seven region mods whose newest releases are marked for 1.21, which is the entire reason the bridge exists.</p>
-
-<p>It is not done quietly. The mod's row says <strong>marked for 1.21.5, 1.21.6</strong> beside its version, for as long as that is true, and the log says which of your mods asked for it on every launch rather than only the first:</p>
+<p>Cairn now installs it on the word of the mod that asked for it, which is the ordinary case for a bridge or compatibility patch. It is not done quietly &mdash; the row says <strong>marked for 1.21.5, 1.21.6</strong> beside the version for as long as that is true, and the log names which of your mods asked for it on every launch:</p>
 
 <pre><code>floralzonesmediterraneanregion 1.0.19 is marked for 1.21.5, 1.21.6, not 1.22.5
  &mdash; installed because floralzones122bridge requires it, and it may misbehave</code></pre>
 
-<p><strong>Mods you add yourself are unchanged.</strong> One with nothing marked for your game version still asks before it goes in, and still records that you were the one who said so. What is new for those is the row: a mod you accepted months ago now says what it is marked for whenever you open the pack, instead of only in the log of the launch that installed it.</p>
-
-<p><strong>And removing a mod now takes what it brought with it.</strong> Mods pulled in by another mod have never had a Remove button of their own &mdash; the mod that wants them would only bring them back &mdash; so removing the one that wanted them is how they go. That worked on the next Play and not before it, which left a pack sitting there with seven mods requiring nothing and no way to shift any of them. The launcher now settles the pack as soon as you remove something, the same way it already did when you add something.</p>
-
-<h2>ConfigLib settings a pack carries now actually arrive</h2>
-
-<p><strong>0.9.1.</strong> A pack can carry mod settings. For mods that keep theirs in a ConfigLib <code>.yaml</code>, 0.9.0 said the value would arrive on your second launch, because ConfigLib writes that file itself the first time the mod runs. It did not arrive on the second launch either. It never arrived.</p>
-
-<p>Cairn waited for the file, correctly &mdash; and then wrote down that it had already asked for those values. So when the file turned up, holding nothing but the mod's own defaults, it read as settings you had deliberately changed, and Cairn left them alone out of politeness. Every launch, for ever, reporting "left alone &mdash; it has been changed here" about a setting nobody had ever touched.</p>
-
-<p>It hit ConfigLib <code>.yaml</code> mods only; a pack's values for ordinary <code>.json</code> config files landed on the first launch as they always did. It hit <code>cairn-server</code> hardest, where a good half of those settings are the server-side rules the pack exists to set.</p>
-
-<p><strong>And they no longer wait at all.</strong> Rather than fixing the second launch, 0.9.1 writes those files before the first one, from the settings description the mod ships inside its own zip &mdash; so a pack's values are in place before anything reads them. That matters most for the settings that shape the world: how far apart ruins stand, how often a structure spawns. Those are read while terrain is being generated, and terrain is not built again when the number changes later. Under 0.9.0 a server's first world was generated against the mod's defaults no matter what the pack said, and the only fix was to delete the world and start again.</p>
-
-<p>Where a mod does not describe its settings well enough to write the file safely, Cairn waits for ConfigLib as before and says so. It never writes over a file that already exists.</p>
-
-<p><strong>If you ran 0.9.0 and a pack's ConfigLib settings never took</strong>, upgrading is not quite enough on its own &mdash; the note Cairn wrote to itself is still there, and it still says you own those values. Delete this file and the next launch sets things right:</p>
-
-<pre><code>&lt;your pack&gt;/data/cairn-modconfig.json</code></pre>
-
-<p>On a server that is <code>~/.cairn/packs/&lt;pack&gt;/data/cairn-modconfig.json</code>. It is safe to delete: it holds only Cairn's record of what the pack last asked for, and losing it means the next launch treats the pack's values as a first word again. Settings you genuinely changed yourself and want to keep, change back afterwards &mdash; or edit the file and remove just the entry for the mod that was stuck. Writing the file ahead of time does not help here, because by now it exists and Cairn will not write over one.</p>
-
-<p><strong>If one of those settings shapes the world</strong>, the terrain you already have was generated against the mod's default and stays as it is; the pack's value applies to ground generated from here on. Whether that is worth starting a world over is a judgement only you can make, and on an established server it usually is not.</p>
-
-<h2>Updates notice a revision that only changes mod settings</h2>
-
-<p><strong>0.9.1.</strong> Publishing a revision that changed nothing but a mod setting &mdash; a normal thing to publish, and the whole point of the feature below &mdash; produced a revision nobody could take. Every follower checking for it said <strong>"already on the author's newest revision"</strong> and stopped there. <code>cairn-server update</code> said it and exited 0, so a server sat on revision 10 while its author published 11, with nothing anywhere reporting a problem.</p>
-
-<p>Cairn works out whether an update does anything by comparing the two manifests field by field, and mod settings were not among the fields it compared. Neither were keybinds nor the server address, once; both were fixed when found, and this is the same omission a third time. It now compares mod settings too, and a revision that changes them says <strong>"changes mod settings"</strong> alongside the mods it adds and removes, rather than arriving unannounced.</p>
-
-<p><strong>A second problem in the same place, which cost more.</strong> When an update <em>did</em> go through &mdash; because a mod changed as well &mdash; the pack's mod settings were dropped on the way. Taking any revision at all emptied them, so a follower who updated lost every value the pack carried and got no word that it had happened. Both halves are fixed together; there is nothing to do about a pack this happened to beyond taking the author's next revision, which now brings the settings with it.</p>
-
-<p><strong>And in the launcher, an update could be undone by the next thing you did.</strong> Taking a revision wrote it to disk correctly, but the pack on screen went on holding the author's <em>previous</em> keybinds and mod settings &mdash; so the next ordinary edit, renaming the pack or changing its description, saved those old values back over the ones just taken. Nothing said so, and the pack looked right until the next launch applied the wrong settings. The window now takes the whole revision, and the Hotkeys and Mod config tabs refresh with it rather than showing answers that are one revision out of date.</p>
+<p>Mods you add yourself are unchanged: one with nothing marked for your version still asks first. <strong>And removing a mod now takes what it brought with it</strong> as soon as you remove it, rather than on the next Play.</p>
 
 <h2>A pack can carry the mod settings that make mods work together</h2>
 
-<p>Some mods only get along once you have edited one of their config files. Terrain Slabs needs Footprints named in a list before the two behave together; plenty of other pairs are the same. Until now the author of a pack worked that out once and then had to write "and go and edit this file" in the description &mdash; so everyone who installed the pack either did it by hand or, more often, did not, and ran a pack that was quietly worse than the author's copy of it.</p>
+<p><strong>0.9.0, completed in 0.9.1.</strong> Some mods only get along once you have edited a config file &mdash; Terrain Slabs needs Footprints named in a list before the two behave. Pack authors used to work that out once and then write "and go and edit this file" in the description, which everyone either did by hand or, more often, did not.</p>
 
-<p>A pack can now carry those values, and Cairn puts them in place when you press Play.</p>
-
-<p>In <code>pack.json</code>:</p>
+<p>A pack carries those values now, and Cairn puts them in place when you press Play. In <code>pack.json</code>:</p>
 
 <pre><code>"modConfig": {
   "terrainslabs.json": {
@@ -123,89 +55,82 @@ Mods   /Users/you/&hellip;/VintagestoryData/Mods                          Change
   }
 }</code></pre>
 
-<p>The path is relative to the pack's own <code>ModConfig</code> folder, so a mod that keeps its settings in a subfolder works too &mdash; <code>"XLeveling/mining.json"</code>.</p>
+<p>Paths are relative to the pack's own <code>ModConfig</code> folder, so <code>"XLeveling/mining.json"</code> works too.</p>
 
-<p><strong>It carries only the values it names.</strong> Not a copy of the whole file: the rest of that file stays whatever the mod says it should be, which means a pack does not go stale when the mod ships a new setting, and it means you can read a pack's <code>modConfig</code> before importing it and see exactly what it intends to change.</p>
-
-<p><strong>Anything you have changed yourself stays changed.</strong> The first time a pack asks for a value, it gets it. After that, if you change that setting &mdash; in game, or by editing the file &mdash; it is yours, and later versions of the pack will not take it back. Cairn says which values it set and which it left alone, every launch, rather than editing your files quietly:</p>
+<p><strong>It carries only the values it names</strong>, so a pack does not go stale when a mod ships a new setting, and you can read a pack's <code>modConfig</code> before importing to see exactly what it will change. <strong>Anything you have changed yourself stays changed</strong>: a pack gets a value the first time it asks, and never takes it back. Cairn says which it set and which it left alone, every launch:</p>
 
 <pre><code>terrainslabs.json: set compatibleMods
-statushud.json: left showClock alone — it has been changed here</code></pre>
+statushud.json: left showClock alone &mdash; it has been changed here</code></pre>
 
-<p>If a pack stops setting something, it says that too, and leaves the value as it is.</p>
+<p><strong><code>cairn-server</code> applies them too</strong>, which matters because a good half of these settings are server-side rules &mdash; who may recover a grave, how fast food spoils, what view distance a client may ask for.</p>
 
-<p><strong><code>cairn-server</code> applies them as well</strong>, and prints the same lines at startup. A good half of these settings are server-side rules &mdash; who may recover a grave, how fast food spoils, what view distance a client may ask for &mdash; so an admin following a pack gets the author's answers without editing anything by hand.</p>
+<p><strong>Mods that use ConfigLib are covered</strong>, including the ones that keep settings in a <code>.yaml</code> that does not exist until the mod has run once. 0.9.1 writes those ahead of time from the mod's own settings description, so the pack's values are in place for your first launch. That matters most for settings that shape the world &mdash; how far apart ruins stand, how often a structure spawns &mdash; because terrain is not generated twice. Where a mod does not describe itself well enough to write the file safely, Cairn waits and says so.</p>
 
-<p><strong>Mods that use ConfigLib are covered</strong>, both kinds &mdash; the ones where ConfigLib is just an in-game editor for the mod's own config file, and the ones where it keeps the settings itself in a <code>.yaml</code>. Anything you change through ConfigLib's screen afterwards stays yours, as always. Those <code>.yaml</code> files do not exist until the mod has run once, so <strong>0.9.1 writes them ahead of time</strong> from the mod's own settings description, and the pack's values are in place for your first launch. Where a mod does not describe itself well enough to do that safely, Cairn waits for it and says so, and the value arrives on the launch after.</p>
+<p>A few files cannot be carried, and Cairn says so: <code>.ini</code> files, files whose contents are a list rather than settings, and files with <code>//</code> comments, which several mods use to document themselves and which rewriting would delete.</p>
 
-<p>A few files still cannot be carried, and Cairn says so instead of pretending: <code>.ini</code> files, files whose contents are a list rather than a set of settings, and files containing <code>//</code> comments &mdash; several mods use those to document their own settings inside the file, and rewriting one would delete them. In a real 74-mod pack that leaves 110 of 114 config files usable.</p>
+<h3>The Mod config tab picks them out for you</h3>
 
-<h2>The Mod config tab picks them out for you</h2>
-
-<p>You do not have to work out which key you changed, or write any of the above by hand. A pack now has a <strong>Mod config</strong> tab, next to Hotkeys.</p>
-
-<p>It lists the settings you have changed from what each mod first wrote &mdash; with the old value beside the new one, so you can see at a glance whether a value is yours or the mod's. Tick one and it is carried in the pack, saved as you go. Untick it and it is not.</p>
+<p>You do not have to write any of that by hand. A pack has a <strong>Mod config</strong> tab, next to Hotkeys, listing the settings you have changed from what each mod first wrote, with the old value beside the new one:</p>
 
 <pre><code>Rooms.Enabled              BedSpawn.json               was false   true
 AllowOtherPlayersPickup    gravestones.json            was false   true
 StepHeight                 StepUpAdvancedConfig.json   was 1.2     1.6
 compatibleMods             terrainslabs.json           was []      [footprints]</code></pre>
 
-<p>Change a setting in game, alt-tab out, and it is in the list.</p>
+<p>Tick one and the pack carries it. Change a setting in game, alt-tab out, and it is in the list. <strong>Open config folder</strong> takes you to the pack's own <code>ModConfig</code> folder when you would rather edit a file yourself.</p>
 
-<p><strong>Open config folder</strong> is there too, for when you would rather edit a file yourself &mdash; it opens the pack's own <code>ModConfig</code> folder in Finder or Explorer, which is otherwise buried several levels down and different for every pack. <strong>The list keeps up on its own</strong>: save a file in an editor, or change a setting in ConfigLib's screen, and the row updates while you are looking at it.</p>
-
-<p>Cairn learns what a mod ships by remembering what it wrote the first time it ran, so <strong>for packs you already have, the list starts empty</strong> &mdash; play the pack once and it fills in. It says so rather than pretending nothing has changed. There is a <strong>Show all</strong> box for every setting Cairn can read, which is also the way to find a value you changed during a pack's very first session, before there was anything to compare it against.</p>
+<p>Cairn learns what a mod ships by remembering what it wrote on its first run, so <strong>for packs you already have the list starts empty</strong> until you play the pack once. <strong>Show all</strong> lists every setting Cairn can read, which is also how to find a value you changed during a pack's very first session.</p>
 
 <h2>Cairn speaks more than English</h2>
 
-<p>Every word the launcher says now comes from a translation file rather than being written into the program, and there is a <strong>Language</strong> setting in Preferences to pick one. It applies as you choose it &mdash; no restart, the window you are looking at changes under you.</p>
+<p><strong>0.9.0, finished in 0.9.2.</strong> There is a <strong>Language</strong> setting in Preferences, applied as you choose it &mdash; no restart. By default Cairn follows the language your Vintage Story is set to, then your system's, then English, so if you already play in Spanish it starts in Spanish without being told.</p>
 
-<p>By default Cairn works it out: it follows <strong>the language your Vintage Story is set to</strong>, then your system's, then English. If you already play in Spanish, Cairn starts in Spanish without being told. (On Windows the system step is skipped &mdash; Vintage Story's own setting is the better signal there in any case.)</p>
-
-<p><strong>The things that go wrong are translated too</strong>, not only the buttons. A mod that cannot be installed, a pack that will not import, a disk with no room on it &mdash; the sentence explaining it comes from the same file as everything else, because the moment you most want your own language is the moment something has failed.</p>
-
-<p><strong>The translations are drafts, and they say so.</strong> English is complete, and <strong>0.9.2 finishes the other four</strong>: Spanish, French and both Portuguese variants now carry every sentence Cairn can say rather than the screens you see most. That last part matters where it always did &mdash; the sentence explaining a mod that would not install, a download that was corrupt, a disk with no room on it. Those were exactly the ones still coming out in English, because they are the ones nobody sees while translating the buttons.</p>
-
-<p>They are still machine-written and still waiting on a reviewer who speaks the language, which each file says at the top. Anything added later shows in English until somebody translates it, rather than going blank.</p>
-
-<p>Five to choose from:</p>
+<p>The things that go wrong are translated too: the moment you most want your own language is the moment something has failed.</p>
 
 <table>
   <tr><td>English</td><td>complete</td></tr>
-  <tr><td>Español, Français</td><td>draft, awaiting review</td></tr>
-  <tr><td>Português (Portugal), Português (Brasil)</td><td>draft, awaiting review</td></tr>
+  <tr><td>Espa&ntilde;ol, Fran&ccedil;ais</td><td>draft, awaiting review</td></tr>
+  <tr><td>Portugu&ecirc;s (Portugal), Portugu&ecirc;s (Brasil)</td><td>draft, awaiting review</td></tr>
 </table>
 
-<p>The two Portuguese variants are separate files rather than one with regional patches, because they differ throughout rather than in a handful of words.</p>
+<p>The four translations are machine-written and still waiting on a reviewer who speaks the language, which each file says at the top. Anything added later shows in English rather than going blank.</p>
 
-<p><strong>If you want to fix something, or add a language:</strong> the files are the same flat JSON every Vintage Story mod ships in <code>assets/&lt;domain&gt;/lang/</code>, so if you have written one for a mod you have written one of these. Point <code>CAIRN_LANG_DIR</code> at a folder holding your own <code>de.json</code> and Cairn reads it in preference to the built-in ones and offers it in the picker &mdash; no need to build anything.</p>
+<p><strong>To fix something, or add a language:</strong> the files are the same flat JSON every Vintage Story mod ships in <code>assets/&lt;domain&gt;/lang/</code>. Point <code>CAIRN_LANG_DIR</code> at a folder holding your own <code>de.json</code> and Cairn reads it in preference to the built-in ones and offers it in the picker &mdash; nothing to build.</p>
 
 <h2>Packs you share are listed by default</h2>
 
-<p>Sharing a pack offers <strong>Public</strong> or <strong>Unlisted</strong>, and it used to arrive on Unlisted. That is a fine thing to choose and a poor thing to be given: plenty of packs were shared by people who had no idea nobody could find them, because the setting was already answered and the only thing left to press was Publish.</p>
+<p>Sharing offers <strong>Public</strong> or <strong>Unlisted</strong> and used to arrive on Unlisted, which is a fine thing to choose and a poor thing to be given: plenty of packs were shared by people with no idea nobody could find them. New shares start on <strong>Public &mdash; listed in browse</strong>. Unlisted is the same one tick away, and a pack you have already published keeps what it was published with.</p>
 
-<p>New shares now start on <strong>Public &mdash; listed in browse</strong>, so a pack you share can be found and tried. Unlisted is the same one tick away it always was, and a pack you have already published keeps whatever it was published with.</p>
+<p><strong>Your server address is still stripped</strong>, and choosing Unlisted does not put it back on its own. Tick <strong>Include</strong> beside it if you want the address in the pack you hand your own players.</p>
 
-<p><strong>Your server address is still stripped</strong>, and now in both directions &mdash; choosing Unlisted does not put it back on its own. An unlisted link gets pasted into a chat like any other, so if you want the address in the pack you hand your own players, tick <strong>Include</strong> beside it.</p>
+<h2>Moving Cairn's files takes the launcher with it</h2>
 
-<h2>Moving Cairn's files now takes the launcher with it</h2>
+<p><strong>Preferences &rarr; Move&hellip;</strong> put everything on the new drive and then the window carried on as though it had not: the Settings tab named the old disk, and pressing Play downloaded every mod again into a folder no longer in use. Restarting fixed it, because the files had been in the right place all along.</p>
 
-<p><strong>Preferences &rarr; Move&hellip;</strong> put everything on the new drive, and then the window carried on as though it had not: the pack's Settings tab still named the old disk, a new pack was made against it, and pressing Play downloaded every mod again into a folder that was no longer being used. Restarting Cairn put it all right, because the files had been where they should be the whole time &mdash; it was the launcher that had not noticed.</p>
+<p>The pack list, the paths on screen and the next launch now follow the move as it finishes.</p>
 
-<p>It notices now. The pack list, the paths on screen and the next launch all follow the move as it finishes, with no restart.</p>
-
-<p><strong>If this happened to you</strong>, the mods that were downloaded again are in the old location, where Cairn will never look for them. It is safe to delete that folder &mdash; the only thing in there worth keeping is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
+<p><strong>If this happened to you</strong>, the mods downloaded a second time are in the old location, where Cairn will never look. That folder is safe to delete &mdash; the only thing worth keeping in it is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
 
 <h2>Smaller things</h2>
 
 <ul>
-  <li><strong>A mod row too long for the window wraps instead of running off it.</strong> <strong>0.9.2.</strong> The name, the id, the version and any notes about a mod all sat on one line that could not shrink, so a mod with a long name &mdash; required by another mod, with something to say about what it is marked for &mdash; quietly lost whatever came last off the right-hand edge. The row now grows to a second line, and only when it has to.</li>
-  <li><strong>Your settings stop overwriting each other.</strong> Cairn kept its preferences in a file that was rewritten whole by whichever setting you had just changed, so a second setting would have vanished the first time you dragged the interface-size slider. That is why there was never more than one. It now keeps every setting it knows about, and every setting it does <em>not</em> &mdash; so a preference written by a newer Cairn survives being opened by an older one.</li>
-  <li><strong>A few sentences that were wrong in English got fixed</strong>, found by writing them out properly for translation: "1 thing you changed differ from the author's" now says <em>differs</em>, and the dialog that asks about a mod with no release for your game version no longer works out which version it means by taking its own sentence apart.</li>
-  <li><strong><code>cairn-server</code> can say which build it is.</strong> It could not, by any spelling &mdash; so the one question every report about a server starts with had no answer on the box itself. <code>cairn-server version</code> answers it, <code>--version</code> and <code>-v</code> do the same, and <code>run</code> prints it as its first line so <code>journalctl</code> has it for a server nobody watched start.</li>
+  <li><strong>You can say where Cairn keeps its files before it has any.</strong> <strong>0.9.3.</strong> On a fresh install Preferences answered <em>"there is nothing at ~/.cairn to move"</em>, as though choosing a location needed something to have been put in the wrong place first. The button reads <strong>Choose&hellip;</strong> when there is nothing to move and <strong>Move&hellip;</strong> when there is.</li>
+  <li><strong>Escape closes any of Cairn's dialogs.</strong> <strong>0.9.3.</strong> Preferences, Share, the pack update and game version windows did not, and Preferences could only be dismissed from the title bar.</li>
+  <li><strong>Preferences no longer runs off the bottom of the screen.</strong> <strong>0.9.3.</strong> At larger interface sizes, and in languages whose text runs longer than the English, the Overview tab could put the language picker somewhere unreachable.</li>
+  <li><strong>A mod row too long for the window wraps instead of running off it.</strong> <strong>0.9.2.</strong> A mod with a long name quietly lost whatever came last off the right-hand edge.</li>
+  <li><strong><code>cairn-server</code> can say which build it is.</strong> <strong>0.9.2.</strong> <code>cairn-server version</code>, <code>--version</code> and <code>-v</code> all answer, and <code>run</code> prints it as its first line so <code>journalctl</code> has it for a server nobody watched start.</li>
+  <li><strong>Your settings stop overwriting each other.</strong> Cairn's preferences file was rewritten whole by whichever setting you had just changed, which is why there was never more than one. It now keeps every setting it knows about, and every setting it does <em>not</em> &mdash; so a preference written by a newer Cairn survives being opened by an older one.</li>
+  <li><strong>A few sentences that were wrong in English got fixed</strong>, found by writing them out for translation: "1 thing you changed differ from the author's" now says <em>differs</em>.</li>
 </ul>
 
 <h2>Upgrading</h2>
 
-<p>Nothing to do. A pack that carries no mod config behaves exactly as it did, and Cairn stays in English unless it finds a reason not to.</p>
+<p>Nothing to do, with one exception.</p>
+
+<p><strong>If you ran 0.9.0 and a pack's ConfigLib settings never took</strong>, upgrading is not enough on its own: Cairn wrote itself a note saying you owned those values, and it is still there. Delete this file and the next launch sets it right &mdash;</p>
+
+<pre><code>&lt;your pack&gt;/data/cairn-modconfig.json</code></pre>
+
+<p>&mdash; which on a server is <code>~/.cairn/packs/&lt;pack&gt;/data/cairn-modconfig.json</code>. It holds only Cairn's record of what the pack last asked for, so losing it means the next launch treats the pack's values as a first word again. Settings you genuinely changed yourself, change back afterwards, or edit the file and remove just the entry for the mod that was stuck.</p>
+
+<p>If one of those settings shapes the world, the terrain you already have was generated against the mod's default and stays as it is; the pack's value applies to ground generated from here on. Whether that is worth starting a world over is a judgement only you can make, and on an established server it usually is not.</p>
