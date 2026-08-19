@@ -1222,15 +1222,27 @@ internal static class Program
     /// decision: this is a twenty-minute compile of a game client, and every other thing
     /// Cairn installs is a download. With no arguments it only reports, so somebody can see
     /// what it would take without starting anything.
+    ///
+    /// Which build is a game version, given as <c>--game</c> and defaulting to the newest.
+    /// The launcher never asks: it has a pack in hand and takes the pack's version. Here
+    /// there is no pack, so it has to be sayable — a machine keeping a pack on an older
+    /// version is the reason Cairn knows more than one build.
     /// </summary>
     private static async Task<int> Optimum(
         GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
     {
         var provisioner = new OptimumProvisioner(http, games, runtimes);
-        var source = OptimumSource.Pinned;
-        var plan = provisioner.Plan(source.GameVersion, source);
 
-        var action = args.Length > 1 ? args[1] : "plan";
+        var wanted = ArgValue(args, "--game");
+        var source = wanted is null ? OptimumSource.Newest : OptimumSource.ForGame(wanted);
+
+        if (source is null)
+            return Fail($"no Optimum build for game {wanted}; Cairn knows "
+                        + string.Join(", ", OptimumSource.Known.Select(s => s.GameVersion)));
+
+        var plan = provisioner.Plan(source);
+
+        var action = args.Length > 1 && !args[1].StartsWith('-') ? args[1] : "plan";
 
         if (action == "plan")
         {
@@ -1239,7 +1251,23 @@ internal static class Program
             if (plan.AlreadyBuilt)
                 Console.WriteLine($"\nAlready built: {games.InstallDir(source.InstallName)}");
 
-            Console.WriteLine($"\nBuild it with: cairn-cli optimum build");
+            // Listed whenever there is a choice, because otherwise the only way to learn
+            // that an older game version can still have one is to guess a --game and see.
+            if (OptimumSource.Known.Count > 1)
+            {
+                Console.WriteLine("\nBuilds Cairn knows:");
+
+                foreach (var known in OptimumSource.Known)
+                {
+                    var built = GameInstall.TryAt(games.InstallDir(known.InstallName)) is not null;
+                    var mark = known == source ? "*" : " ";
+
+                    Console.WriteLine(($"  {mark} game {known.GameVersion,-8} Optimum {known.Version,-8}"
+                                       + (built ? "  installed" : "")).TrimEnd());
+                }
+            }
+
+            Console.WriteLine($"\nBuild it with: cairn-cli optimum build --game {source.GameVersion}");
             return 0;
         }
 
@@ -1261,7 +1289,7 @@ internal static class Program
         }
 
         if (action != "build")
-            return Fail("usage: cairn-cli optimum [plan|build|clean] [--yes]");
+            return Fail("usage: cairn-cli optimum [plan|build|clean] [--game <version>] [--yes]");
 
         if (!plan.CanStart) return Fail(plan.Describe());
 

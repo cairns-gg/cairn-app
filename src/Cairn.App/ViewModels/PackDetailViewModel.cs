@@ -958,10 +958,19 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public bool HasInstallNote => !string.IsNullOrEmpty(InstallChoiceLine);
 
+    /// <summary>
+    /// The Optimum revision Cairn would build for this pack, if it knows one.
+    ///
+    /// Asked of the pack's own game version rather than of a single pin, because Optimum
+    /// supports one version at a time and packs sit on whichever version their mods have
+    /// releases for. Null on most packs, which is what makes the whole panel disappear.
+    /// </summary>
+    private OptimumSource? OptimumBuild => OptimumSource.ForGame(Manifest.GameVersion);
+
     /// <summary>The Optimum build for this pack's version, if one has been made.</summary>
     private GameInstall? OptimumInstall =>
-        OptimumSource.Pinned.Supports(Manifest.GameVersion)
-            ? GameInstall.TryAt(_library.Store.InstallDir(OptimumSource.Pinned.InstallName))
+        OptimumBuild is { } source
+            ? GameInstall.TryAt(_library.Store.InstallDir(source.InstallName))
             : null;
 
     /// <summary>Whether this pack is currently set to run something other than the stock game.</summary>
@@ -1035,22 +1044,24 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Whether building Optimum is worth offering for this pack.
     ///
-    /// Only where it would actually apply: Optimum targets exactly one Vintage Story
-    /// version at a time, so offering it to a pack on any other one is an invitation to
-    /// spend twenty minutes producing a client the pack cannot use. Withdrawn once it is
-    /// built, because from then on it is an install to pick, not a thing to make.
+    /// Only where it would actually apply: each Optimum revision builds for exactly one
+    /// Vintage Story version, so offering it to a pack on a version Cairn has no revision
+    /// for is an invitation to spend twenty minutes producing a client the pack cannot use.
+    /// Withdrawn once it is built, because from then on it is an install to pick, not a
+    /// thing to make.
     /// </summary>
     public bool CanBuildOptimum =>
-        OptimumSource.Pinned.Supports(Manifest.GameVersion)
+        OptimumBuild is { } source
         && OptimumPrereqs.UnsupportedReason() is null
         // Asked of the install directory rather than of the choices offered for this
         // version, because the two differ exactly when the build is broken: a half-written
         // install reports no version, drops out of the picker, and would otherwise leave
         // this hidden with nothing on screen able to rebuild it.
-        && GameInstall.TryAt(
-            _library.Store.InstallDir(OptimumSource.Pinned.InstallName)) is null;
+        && GameInstall.TryAt(_library.Store.InstallDir(source.InstallName)) is null;
 
-    public string BuildOptimumLabel => Lang.Get("optimum-build-label", OptimumSource.Pinned.Version);
+    /// <summary>Names the Optimum this pack would get, which is not always the newest one.</summary>
+    public string BuildOptimumLabel =>
+        OptimumBuild is { } source ? Lang.Get("optimum-build-label", source.Version) : "";
 
     /// <summary>
     /// Whether it can be started right now, as opposed to whether it applies to this pack.
@@ -1094,9 +1105,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         if (Confirm is null || RunOptimumBuild is null) return;
 
+        if (OptimumBuild is not { } source) return;
+
         var provisioner = new OptimumProvisioner(_http, _library.Store, _runtimes);
-        var source = OptimumSource.Pinned;
-        var plan = provisioner.Plan(source.GameVersion, source);
+        var plan = provisioner.Plan(source);
 
         if (!plan.CanStart)
         {

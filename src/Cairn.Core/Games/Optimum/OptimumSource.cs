@@ -23,24 +23,76 @@ namespace Cairn.Core.Games.Optimum;
 public sealed record OptimumSource(string Url, string Ref, string GameVersion, string Version)
 {
     /// <summary>
-    /// What Cairn builds unless told otherwise.
+    /// Every Optimum build Cairn knows how to make, one per game version.
     ///
-    /// This is dizzyd/Optimum's main plus two commits, both of which Cairn needs:
+    /// A list rather than a single pin because Optimum supports one game version at a time
+    /// and drops the previous one, while packs do not move that quickly: a pack stays on
+    /// the version its mods have releases for, which is routinely the version Optimum has
+    /// just stopped targeting. With one pin, shipping a Cairn release took Optimum away
+    /// from those packs — an update they did not ask for, removing something that was
+    /// working, to no one's benefit.
     ///
-    /// - the archive-root fix, without which the macOS build fails on the client tarball
-    ///   unpacking to "Vintage Story.app" where bootstrap expects "vintagestory";
-    /// - atomic client downloads, without which cancelling a build during the ~500 MB
-    ///   download leaves a short file at the cache path that every later build reuses and
-    ///   fails on. That one matters more here than upstream, because Cairn makes stopping a
-    ///   build a button rather than a Ctrl-C.
+    /// Old entries keep working by construction. Optimum pins the upstream refs it patches
+    /// against, so a revision that built a year ago builds the same client today; what ages
+    /// is not the entry but the evidence for it.
     ///
-    /// The pin moves to plain main once they land there.
+    /// Which is what limits the length of this list, and it is an editorial limit rather
+    /// than a structural one. Every entry is the claim that a 20–30 minute build finishes
+    /// on a real machine, and nothing here can be checked in CI: it needs a client
+    /// download, a decompiler and most of an hour. Keep the entries somebody is prepared to
+    /// re-run, and delete the ones nobody is — an entry no one has built is a button that
+    /// fails twenty minutes in, which is worse than the button not being there.
+    ///
+    /// A retired entry wants an upstream tag rather than a fork branch: a sha is only
+    /// fetchable while some ref still reaches it, and branches on a fork get tidied up.
     /// </summary>
-    public static readonly OptimumSource Pinned = new(
-        Url: "https://github.com/dizzyd/Optimum.git",
-        Ref: "98f26d60eb9bb8b11b9e4955f7acbb6e4c58fb34",
-        GameVersion: "1.22.5",
-        Version: "0.3.5");
+    public static readonly IReadOnlyList<OptimumSource> Known =
+    [
+        // Plain upstream main. Both of the commits the fork entry below carries — the
+        // macOS archive-root fix and atomic client downloads — were merged upstream in
+        // August 2026, so from 1.22.7 on there is nothing to carry.
+        new(Url: "https://github.com/Zaldaryon/Optimum.git",
+            Ref: "ca04e0cce99e4f746591725c765f4f1e7f7a6a99",
+            GameVersion: "1.22.7",
+            Version: "0.3.11"),
+
+        // dizzyd/Optimum's main plus two commits, both of which Cairn needs and neither of
+        // which existed upstream at the time:
+        //
+        // - the archive-root fix, without which the macOS build fails on the client tarball
+        //   unpacking to "Vintage Story.app" where bootstrap expects "vintagestory";
+        // - atomic client downloads, without which cancelling a build during the ~500 MB
+        //   download leaves a short file at the cache path that every later build reuses and
+        //   fails on. That one matters more here than upstream, because Cairn makes stopping
+        //   a build a button rather than a Ctrl-C.
+        //
+        // Kept on the fork rather than moved to the upstream tag it descends from, because
+        // this is the revision that was actually built and the point of a pin is that it
+        // was. It goes when 1.22.5 does.
+        new(Url: "https://github.com/dizzyd/Optimum.git",
+            Ref: "98f26d60eb9bb8b11b9e4955f7acbb6e4c58fb34",
+            GameVersion: "1.22.5",
+            Version: "0.3.5"),
+    ];
+
+    /// <summary>
+    /// The build for a game version, or null when there is none for it.
+    ///
+    /// The question every caller actually has — "may I offer Optimum for this pack" — and
+    /// the reason it is answered here rather than by each front-end holding the list.
+    /// </summary>
+    public static OptimumSource? ForGame(string gameVersion) =>
+        Known.FirstOrDefault(s => s.Supports(gameVersion));
+
+    /// <summary>
+    /// The newest build known, for a caller with no pack in hand — the CLI's default.
+    ///
+    /// Compared rather than taken as the first entry, so getting the list out of order
+    /// cannot quietly make an old build the one a bare <c>cairn-cli optimum build</c>
+    /// produces.
+    /// </summary>
+    public static OptimumSource Newest =>
+        Known.OrderByDescending(s => s.GameVersion, GameVersionComparer.Ascending).First();
 
     /// <summary>Whether this build is the right one for a pack on <paramref name="gameVersion"/>.</summary>
     public bool Supports(string gameVersion) =>

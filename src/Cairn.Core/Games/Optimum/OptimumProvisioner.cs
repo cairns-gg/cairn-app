@@ -55,12 +55,16 @@ public sealed class OptimumProvisioner
     /// </summary>
     public string LogPath => Path.Combine(BuildsRoot, "optimum-build.log");
 
-    /// <summary>What this would cost, without doing any of it. No network, no processes.</summary>
-    public OptimumBuildPlan Plan(string gameVersion, OptimumSource? source = null)
-    {
-        source ??= OptimumSource.Pinned;
-
-        return new OptimumBuildPlan
+    /// <summary>
+    /// What this would cost, without doing any of it. No network, no processes.
+    ///
+    /// Takes the build rather than a game version to look one up. Which Optimum a game
+    /// version gets is a policy question <see cref="OptimumSource.ForGame"/> answers, and
+    /// there are versions it answers "none" for — a plan for a build that does not exist
+    /// would have to invent one.
+    /// </summary>
+    public OptimumBuildPlan Plan(OptimumSource source) =>
+        new()
         {
             Prereqs = OptimumPrereqs.Check(),
             NeedsSdk = FindSdk() is null,
@@ -69,7 +73,6 @@ public sealed class OptimumProvisioner
             Source = source,
             FreeBytes = FreeSpace(BuildsRoot),
         };
-    }
 
     /// <summary>An SDK good enough for Optimum's global.json, Cairn's own or the system's.</summary>
     private DotnetSdk? FindSdk()
@@ -129,15 +132,13 @@ public sealed class OptimumProvisioner
     /// platforms' packagers fetch their own.
     /// </param>
     public async Task<GameInstall> BuildAsync(
-        OptimumSource? source = null,
+        OptimumSource source,
         GameInstall? vanilla = null,
         IProgress<OptimumStep>? progress = null,
         IProgress<string>? log = null,
         CancellationToken ct = default)
     {
-        source ??= OptimumSource.Pinned;
-
-        var plan = Plan(source.GameVersion, source);
+        var plan = Plan(source);
 
         if (!plan.Prereqs.Satisfied) throw new OptimumBuildException(plan.Prereqs.Describe());
         if (!plan.EnoughSpace) throw new OptimumBuildException(plan.Describe());
@@ -255,6 +256,17 @@ public sealed class OptimumProvisioner
         }
         else
         {
+            // The tree is shared by every build, and the builds do not all come from the
+            // same repository — an older game version can be pinned to a fork carrying a
+            // fix that upstream has since taken. Without this, a tree cloned from one of
+            // them fetches that one for ever and the reset below fails on a commit its
+            // origin has never heard of, which reads as a broken pin rather than as a
+            // remote pointing somewhere else.
+            await ProcessRunner.RunOrThrowAsync("git",
+                    ["-C", WorkingTree, "remote", "set-url", "origin", source.Url],
+                    BuildsRoot, log, ct: ct)
+                .ConfigureAwait(false);
+
             await ProcessRunner.RunOrThrowAsync("git",
                     ["-C", WorkingTree, "fetch", "--quiet", "origin"],
                     BuildsRoot, log, ct: ct)
@@ -269,6 +281,88 @@ public sealed class OptimumProvisioner
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The note recording which build the working tree was last bootstrapped for.
+    ///
+    /// Beside the tree rather than inside it, for the same reason the log is: the tree is a
+    /// checkout, and a file written into it is a change to the repository.
+    /// </summary>
+    public string TreeStatePath => Path.Combine(BuildsRoot, "optimum-tree.json");
+
+    /// <summary>
+    /// Whether the working tree holds work done for some other revision.
+    ///
+    /// True when nothing says what it holds, which covers both a tree from a Cairn that
+    /// did not keep track and one whose note could not be written. The cost of being wrong
+    /// that way is a rebuild that takes the full time; the cost of the other way is a
+    /// client assembled from two revisions.
+    /// </summary>
+    public bool TreeIsStaleFor(OptimumSource source) => LastBootstrappedRef() != source.Ref;
+
+    /// <summary>The commit the tree was last bootstrapped at, or null when nothing says.</summary>
+    private string? LastBootstrappedRef()
+    {
+        try
+        {
+            if (!File.Exists(TreeStatePath)) return null;
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(TreeStatePath));
+
+            return doc.RootElement.TryGetProperty("ref", out var v) ? v.GetString() : null;
+        }
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Notes what the tree now holds. Public so a test can arrange one.</summary>
+    public void RecordBootstrap(OptimumSource source)
+    {
+        try
+        {
+            File.WriteAllText(TreeStatePath, JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["ref"] = source.Ref,
+                ["gameVersion"] = source.GameVersion,
+                ["version"] = source.Version,
+            }));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Only costs the next build a refresh it did not need. Failing a build that has
+            // otherwise worked over a bookkeeping file would be the worse trade.
+        }
+    }
+
+    /// <summary>
+    /// The bootstrap script and its arguments, for one platform.
+    ///
+    /// Separated from running it for the same reason <see cref="PackagerFor"/> is: the
+    /// interesting part is which flags go in, and a host has only one of the two scripts to
+    /// find out with. The version passed is always the <em>Vintage Story</em> version, which
+    /// is what the script uses to fetch a client.
+    /// </summary>
+    /// <param name="refresh">
+    /// Throw away what the tree already holds. Bootstrap keeps its expensive intermediates —
+    /// the decompiled snapshot and the upstream fork clones — and reuses them whenever they
+    /// are merely present, which is what makes a rebuild minutes rather than the full job.
+    /// Present is not the same as right: the fork refs come out of the revision's own
+    /// forks.json, so a tree left by a different revision holds sources for refs this build
+    /// does not want, and the client that comes out is a mixture no pin describes.
+    /// </param>
+    public static (string Script, List<string> Arguments) BootstrapFor(
+        OptimumSource source, bool windows, bool refresh)
+    {
+        List<string> args = windows
+            ? ["-Version", source.GameVersion]
+            : ["--version", source.GameVersion];
+
+        if (refresh) args.Add(windows ? "-Refresh" : "--refresh");
+
+        return (windows ? "bootstrap.ps1" : "bootstrap.sh", args);
+    }
+
     private async Task BootstrapAsync(
         OptimumSource source, DotnetSdk sdk, IProgress<OptimumStep>? progress,
         IProgress<string> log, CancellationToken ct)
@@ -277,15 +371,18 @@ public sealed class OptimumProvisioner
             Lang.Get("optimum-decompiling"), 0.15));
 
         var windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var script = Path.Combine(WorkingTree, "scripts", windows ? "bootstrap.ps1" : "bootstrap.sh");
 
-        var (host, args) = ProcessRunner.ScriptHost(script);
-        args.AddRange(windows
-            ? ["-Version", source.GameVersion]
-            : ["--version", source.GameVersion]);
+        var (name, bootstrapArgs) = BootstrapFor(source, windows, TreeIsStaleFor(source));
+
+        var (host, args) = ProcessRunner.ScriptHost(Path.Combine(WorkingTree, "scripts", name));
+        args.AddRange(bootstrapArgs);
 
         await ProcessRunner.RunOrThrowAsync(host, args, WorkingTree, log, BuildEnv(sdk), ct)
             .ConfigureAwait(false);
+
+        // Only once it has finished. A bootstrap that was cancelled half way leaves the
+        // tree in exactly the state the refresh above exists to clear.
+        RecordBootstrap(source);
     }
 
     private async Task CompileAsync(
@@ -332,6 +429,17 @@ public sealed class OptimumProvisioner
     public long Clean()
     {
         var freed = 0L;
+
+        // The tree it describes is about to stop existing, and a note saying a tree was
+        // bootstrapped when there is no tree is worse than no note: the next build would
+        // read it and skip the refresh it is the whole point of.
+        try
+        {
+            File.Delete(TreeStatePath);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
 
         foreach (var path in new[] { WorkingTree, PackagerOutput })
         {

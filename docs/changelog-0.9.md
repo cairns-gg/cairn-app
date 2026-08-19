@@ -1,4 +1,4 @@
-# What's new in Cairn 0.9.3
+# What's new in Cairn 0.9.4
 
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
@@ -200,6 +200,20 @@ The pack list, the paths on screen and the next launch now follow the move as it
 **If this happened to you**, the mods downloaded a second time are in the old location, where
 Cairn will never look. That folder is safe to delete — the only thing worth keeping in it is the
 small `home` file, which is what points Cairn at the new drive.
+
+## Optimum, for 1.22.7 and for the version you are still on
+
+**0.9.4.** Vintage Story **1.22.7** is out, and so is the Optimum build for it: Cairn now builds
+**Optimum 0.3.11** from a pack's Settings tab, exactly as before.
+
+Optimum supports one game version at a time and drops the one before it, and Cairn used to do the
+same. That meant a Cairn update could take the option away from a pack that had not moved yet —
+and a pack does not move until the mods it uses have releases for the new version, which can be
+weeks. Cairn now keeps the older build as well: a pack on **1.22.5** is still offered **Optimum
+0.3.5**, named as itself, while a pack on 1.22.7 is offered the new one.
+
+Nothing you have already built is affected, and a pack already set to run an optimised client goes
+on running it.
 
 ## Smaller things
 

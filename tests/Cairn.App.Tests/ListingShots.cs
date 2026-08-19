@@ -82,13 +82,13 @@ public class ListingShots : IDisposable
         // On the version Optimum is built for, so the optimised-client panel is offered.
         // It targets exactly one Vintage Story version at a time and is absent everywhere
         // else, so without this pack there is nothing to photograph.
-        Pack("performance", "Big Base", OptimumSource.Pinned.GameVersion,
+        Pack("performance", "Big Base", OptimumSource.Newest.GameVersion,
             ["carryon", "bettercrates", "chiseltools", "farseer", "terraprety"]);
 
         Games.FakeInstall("1.22.6", Games.DirIn(Path.Combine(_home, "games"), "1.22.6"), bytes: 614 * 1024 * 1024);
         Games.FakeInstall("1.21.7", Games.DirIn(Path.Combine(_home, "games"), "1.21.7"), bytes: 598 * 1024 * 1024);
-        Games.FakeInstall(OptimumSource.Pinned.GameVersion,
-            Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Pinned.GameVersion), bytes: 610 * 1024 * 1024);
+        Games.FakeInstall(OptimumSource.Newest.GameVersion,
+            Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Newest.GameVersion), bytes: 610 * 1024 * 1024);
 
         // A machine that has built a client, so Storage shows the row for it. It is the
         // largest thing Cairn writes and the one most worth seeing accounted for.
@@ -355,7 +355,7 @@ public class ListingShots : IDisposable
             new Cairn.Core.Runtime.RuntimeStore(Path.Combine(_home, "runtimes")),
             Path.Combine(_home, "builds"));
 
-        var plan = provisioner.Plan(OptimumSource.Pinned.GameVersion);
+        var plan = provisioner.Plan(OptimumSource.Newest);
 
         var confirm = new ConfirmWindow
         {
@@ -372,7 +372,7 @@ public class ListingShots : IDisposable
         var build = new OptimumBuildWindow
         {
             DataContext = new OptimumBuildViewModel(
-                OptimumSource.Pinned,
+                OptimumSource.Newest,
                 phase: "bootstrap",
                 detail: "decompiling the game and applying Optimum's patches — this is the long part",
                 fraction: 0,
@@ -464,13 +464,13 @@ public class ListingShots : IDisposable
     /// </summary>
     private GameInstall MarkBuiltClient()
     {
-        var dir = Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Pinned.InstallName);
+        var dir = Games.DirIn(Path.Combine(_home, "games"), OptimumSource.Newest.InstallName);
 
-        Games.FakeInstall(OptimumSource.Pinned.GameVersion, dir, bytes: 640 * 1024 * 1024);
+        Games.FakeInstall(OptimumSource.Newest.GameVersion, dir, bytes: 640 * 1024 * 1024);
         File.WriteAllBytes(Path.Combine(dir, OperatingSystem.IsWindows()
             ? "Optimum.exe" : "Optimum"), new byte[128 * 1024]);
 
-        OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned);
+        OptimumProvisioner.WriteMarker(dir, OptimumSource.Newest);
 
         return GameInstall.TryAt(dir)!;
     }

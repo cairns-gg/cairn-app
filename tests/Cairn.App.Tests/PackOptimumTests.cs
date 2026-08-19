@@ -41,7 +41,7 @@ public class PackOptimumTests : IDisposable
     private PackStore Store => new(Path.Combine(_home, "packs"));
 
     /// <summary>The version Optimum is actually for, so a bumped pin does not fail this.</summary>
-    private static string Supported => OptimumSource.Pinned.GameVersion;
+    private static string Supported => OptimumSource.Newest.GameVersion;
 
     private string Install(string name, string? variant = null)
     {
@@ -84,17 +84,38 @@ public class PackOptimumTests : IDisposable
         var (_, _, detail) = Open(Supported);
 
         Assert.True(detail.CanBuildOptimum);
-        Assert.Contains(OptimumSource.Pinned.Version, detail.BuildOptimumLabel);
+        Assert.Contains(OptimumSource.Newest.Version, detail.BuildOptimumLabel);
     }
 
     [AvaloniaFact]
     public void It_is_not_offered_for_a_version_it_would_not_run()
     {
-        // Optimum targets exactly one game version at a time. Offering it elsewhere is an
-        // invitation to spend twenty minutes producing a client the pack cannot use.
+        // Each Optimum revision builds for exactly one game version. Offering it elsewhere
+        // is an invitation to spend twenty minutes producing a client the pack cannot use.
         var (_, _, detail) = Open("1.20.0");
 
         Assert.False(detail.CanBuildOptimum);
+    }
+
+    /// <summary>
+    /// A pack on an older version gets the older Optimum, named as itself.
+    ///
+    /// The reason Cairn keeps more than one: mods lag the game, so a pack sits on the
+    /// version its mods have releases for long after Optimum has moved on. Taking the
+    /// newest here would offer a client the pack cannot run, and labelling it with the
+    /// newest version would name a build nobody is about to get.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_on_an_older_version_is_offered_the_build_for_it()
+    {
+        var older = OptimumSource.Known.FirstOrDefault(s => s != OptimumSource.Newest);
+        Assert.SkipWhen(older is null, "only one Optimum build is known");
+
+        var (_, _, detail) = Open(older!.GameVersion);
+
+        Assert.True(detail.CanBuildOptimum);
+        Assert.Contains(older.Version, detail.BuildOptimumLabel);
+        Assert.DoesNotContain(OptimumSource.Newest.Version, detail.BuildOptimumLabel);
     }
 
     [AvaloniaFact]
@@ -107,6 +128,26 @@ public class PackOptimumTests : IDisposable
         // From here it is an install to pick, not a thing to make: a second build would
         // only overwrite the first.
         Assert.False(detail.CanBuildOptimum);
+    }
+
+    /// <summary>
+    /// A machine can hold a build for each game version, so "is Optimum installed" has to
+    /// be asked of this pack's version. Asked of Optimum in general it answers yes on the
+    /// strength of a client the pack cannot run.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_build_for_another_version_is_not_this_packs()
+    {
+        var older = OptimumSource.Known.FirstOrDefault(s => s != OptimumSource.Newest);
+        Assert.SkipWhen(older is null, "only one Optimum build is known");
+
+        Install($"{Supported}-optimum", "Optimum");
+
+        var (_, _, detail) = Open(older!.GameVersion);
+
+        Assert.False(detail.CanUseOptimum);
+        Assert.True(detail.CanBuildOptimum);
+        Assert.Contains(older.Version, detail.BuildOptimumLabel);
     }
 
     [AvaloniaFact]

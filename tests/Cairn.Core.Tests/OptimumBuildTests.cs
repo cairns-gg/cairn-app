@@ -94,7 +94,7 @@ public class OptimumBuildTests : IDisposable
         Touch(dir, OperatingSystem.IsWindows() ? "Vintagestory.exe" : "Vintagestory");
         Touch(dir, OperatingSystem.IsWindows() ? "Optimum.exe" : "Optimum");
 
-        OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned);
+        OptimumProvisioner.WriteMarker(dir, OptimumSource.Newest);
 
         var install = GameInstall.TryAt(dir);
 
@@ -118,7 +118,7 @@ public class OptimumBuildTests : IDisposable
         Touch(dir, "VintagestoryAPI.dll");
         Touch(dir, "Optimum");
 
-        OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned);
+        OptimumProvisioner.WriteMarker(dir, OptimumSource.Newest);
 
         var install = GameInstall.TryAt(dir);
 
@@ -136,7 +136,7 @@ public class OptimumBuildTests : IDisposable
         // If their packaging ever stops producing the launcher, the failure has to be here.
         // Marking it anyway would install a stock client under Optimum's name.
         var e = Assert.Throws<OptimumBuildException>(
-            () => OptimumProvisioner.WriteMarker(dir, OptimumSource.Pinned));
+            () => OptimumProvisioner.WriteMarker(dir, OptimumSource.Newest));
 
         Assert.Contains("stock game", e.Message);
     }
@@ -149,7 +149,7 @@ public class OptimumBuildTests : IDisposable
         Prereqs = prereqs ?? new PrereqReport([]),
         NeedsSdk = needsSdk,
         AlreadyBuilt = false,
-        Source = OptimumSource.Pinned,
+        Source = OptimumSource.Newest,
         FreeBytes = free,
     };
 
@@ -246,7 +246,7 @@ public class OptimumBuildTests : IDisposable
     public void The_packager_is_told_the_game_version_not_optimums(
         OptimumProvisioner.BuildPlatform platform, string flag)
     {
-        var source = OptimumSource.Pinned;
+        var source = OptimumSource.Newest;
         var (_, args) = OptimumProvisioner.PackagerFor(source, "/tmp/out", platform: platform);
 
         var value = args[args.IndexOf(flag) + 1];
@@ -263,7 +263,7 @@ public class OptimumBuildTests : IDisposable
         OptimumProvisioner.BuildPlatform platform, string script)
     {
         var (name, args) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Pinned, "/tmp/out", platform: platform);
+            OptimumSource.Newest, "/tmp/out", platform: platform);
 
         Assert.Equal(script, name);
         Assert.Contains("/tmp/out", args);
@@ -280,7 +280,7 @@ public class OptimumBuildTests : IDisposable
         };
 
         var (_, args) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Pinned, "/tmp/out", vanilla,
+            OptimumSource.Newest, "/tmp/out", vanilla,
             OptimumProvisioner.BuildPlatform.Windows);
 
         // Only Windows' packager takes one; the others fetch their own client, so passing
@@ -293,35 +293,147 @@ public class OptimumBuildTests : IDisposable
     public void The_mac_packager_is_told_which_architecture_to_build()
     {
         var (_, arm) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Pinned, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            OptimumSource.Newest, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
             arm64: true);
 
         var (_, intel) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Pinned, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            OptimumSource.Newest, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
             arm64: false);
 
         Assert.Equal("arm64", arm[arm.IndexOf("--arch") + 1]);
         Assert.Equal("x64", intel[intel.IndexOf("--arch") + 1]);
     }
 
-    // ---- the pin ----
+    // ---- the builds Cairn knows ----
 
     [Fact]
-    public void The_pinned_source_is_a_commit_not_a_branch()
+    public void Every_known_build_is_pinned_to_a_commit_not_a_branch()
     {
         // A branch would make somebody else's push into a Cairn feature that stopped
         // working, with no release of Cairn involved and nothing here to bisect.
-        Assert.Matches("^[0-9a-f]{40}$", OptimumSource.Pinned.Ref);
+        Assert.All(OptimumSource.Known, s => Assert.Matches("^[0-9a-f]{40}$", s.Ref));
+    }
+
+    [Fact]
+    public void Every_known_build_names_a_game_version_a_pack_could_target()
+    {
+        // The same gate a manifest goes through. A build for ">=1.22" would be offered to
+        // no pack at all, since no pack is allowed to say that.
+        Assert.All(OptimumSource.Known, s => Assert.True(GameVersions.IsPlausibleVersion(s.GameVersion)));
+    }
+
+    /// <summary>
+    /// Two entries for one game version make <see cref="OptimumSource.ForGame"/> a coin
+    /// toss — and the loser is silent, since both produce an install by the same name.
+    /// </summary>
+    [Fact]
+    public void No_two_builds_claim_the_same_game_version()
+    {
+        var versions = OptimumSource.Known.Select(s => s.GameVersion).ToList();
+
+        Assert.Equal(versions.Count, versions.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void A_pack_gets_the_build_for_its_own_version_or_none()
+    {
+        foreach (var known in OptimumSource.Known)
+            Assert.Same(known, OptimumSource.ForGame(known.GameVersion));
+
+        // The common case by far: most versions have no Optimum, and saying so is what
+        // keeps the offer off packs that cannot use it.
+        Assert.Null(OptimumSource.ForGame("1.19.8"));
+    }
+
+    /// <summary>
+    /// Newest by comparison, not by position. Declaring the list out of order is an easy
+    /// mistake and would otherwise make a bare <c>cairn-cli optimum build</c> quietly
+    /// produce an old client.
+    /// </summary>
+    [Fact]
+    public void The_newest_build_is_the_one_for_the_newest_game_version()
+    {
+        Assert.All(OptimumSource.Known, s => Assert.True(
+            GameVersionComparer.Ascending.Compare(OptimumSource.Newest.GameVersion, s.GameVersion) >= 0));
     }
 
     [Fact]
     public void The_install_is_named_for_the_game_version_it_is_for()
     {
-        Assert.Equal("1.22.5-optimum", OptimumSource.Pinned with { GameVersion = "1.22.5" } is var s
-            ? s.InstallName : "");
+        Assert.Equal("1.22.5-optimum",
+            (OptimumSource.Newest with { GameVersion = "1.22.5" }).InstallName);
 
-        Assert.True(OptimumSource.Pinned.Supports(OptimumSource.Pinned.GameVersion));
-        Assert.False(OptimumSource.Pinned.Supports("1.21.0"));
+        // Which is what lets two of them sit in the library at once.
+        Assert.Equal(OptimumSource.Known.Count,
+            OptimumSource.Known.Select(s => s.InstallName).Distinct().Count());
+
+        Assert.True(OptimumSource.Newest.Supports(OptimumSource.Newest.GameVersion));
+        Assert.False(OptimumSource.Newest.Supports("1.21.0"));
+    }
+
+    // ---- reusing the working tree ----
+
+    private OptimumProvisioner Provisioner() => new(
+        new HttpClient(), new GameStore(Dir("games")),
+        new Cairn.Core.Runtime.RuntimeStore(Dir("runtimes")), Dir("builds"));
+
+    /// <summary>
+    /// The tree is kept between builds because reusing it is what makes a rebuild minutes
+    /// rather than a fresh decompile — and it holds sources cloned at the refs of whichever
+    /// revision was built into it. Handing those to another revision produces a client made
+    /// of two, which nothing downstream could detect.
+    /// </summary>
+    [Fact]
+    public void A_tree_built_for_another_revision_is_refreshed()
+    {
+        var provisioner = Provisioner();
+        var source = OptimumSource.Newest;
+
+        // Nothing has been built here, and a tree that cannot say what it holds is assumed
+        // to hold the wrong thing.
+        Assert.True(provisioner.TreeIsStaleFor(source));
+
+        provisioner.RecordBootstrap(source);
+        Assert.False(provisioner.TreeIsStaleFor(source));
+
+        // Same game version, different commit: the case a check on the version alone
+        // cannot see, and the one a re-pin produces.
+        Assert.True(provisioner.TreeIsStaleFor(source with { Ref = new string('a', 40) }));
+
+        foreach (var other in OptimumSource.Known.Where(s => s != source))
+            Assert.True(provisioner.TreeIsStaleFor(other));
+    }
+
+    [Fact]
+    public void Cleaning_the_tree_takes_the_note_about_it_too()
+    {
+        var provisioner = Provisioner();
+
+        provisioner.RecordBootstrap(OptimumSource.Newest);
+        provisioner.Clean();
+
+        // Otherwise the note outlives the tree and the next build reuses intermediates
+        // that are not there, which is only saved by them not being there.
+        Assert.True(provisioner.TreeIsStaleFor(OptimumSource.Newest));
+    }
+
+    [Theory]
+    [InlineData(true, "-Version", "-Refresh")]
+    [InlineData(false, "--version", "--refresh")]
+    public void Bootstrap_is_told_the_game_version_and_whether_to_start_over(
+        bool windows, string versionFlag, string refreshFlag)
+    {
+        var source = OptimumSource.Newest;
+
+        var (script, kept) = OptimumProvisioner.BootstrapFor(source, windows, refresh: false);
+
+        Assert.Equal(windows ? "bootstrap.ps1" : "bootstrap.sh", script);
+        Assert.Equal(source.GameVersion, kept[kept.IndexOf(versionFlag) + 1]);
+        Assert.DoesNotContain(refreshFlag, kept);
+
+        var (_, refreshed) = OptimumProvisioner.BootstrapFor(source, windows, refresh: true);
+
+        Assert.Contains(refreshFlag, refreshed);
     }
 
     [Fact]
@@ -359,15 +471,22 @@ public class OptimumBuildTests : IDisposable
             new HttpClient(), games, new Cairn.Core.Runtime.RuntimeStore(Dir("runtimes")),
             Dir("builds"));
 
-        Assert.False(provisioner.Plan("1.22.5").AlreadyBuilt);
+        var source = OptimumSource.Newest;
+
+        Assert.False(provisioner.Plan(source).AlreadyBuilt);
 
         // Named by the store, not by hand: on macOS an install directory is a bundle, and a
         // path built here without the suffix is one nothing looks in.
-        var install = Dir("games", GameStore.DirectoryNameFor(OptimumSource.Pinned.InstallName));
+        var install = Dir("games", GameStore.DirectoryNameFor(source.InstallName));
         Touch(install, "VintagestoryAPI.dll");
         Touch(install, OperatingSystem.IsWindows() ? "Optimum.exe" : "Optimum");
-        OptimumProvisioner.WriteMarker(install, OptimumSource.Pinned);
+        OptimumProvisioner.WriteMarker(install, source);
 
-        Assert.True(provisioner.Plan("1.22.5").AlreadyBuilt);
+        Assert.True(provisioner.Plan(source).AlreadyBuilt);
+
+        // One build being installed says nothing about another. They are separate
+        // directories precisely so a machine can hold both.
+        var other = OptimumSource.Known.FirstOrDefault(s => s != source);
+        if (other is not null) Assert.False(provisioner.Plan(other).AlreadyBuilt);
     }
 }

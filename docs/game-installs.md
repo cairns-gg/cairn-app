@@ -98,6 +98,8 @@ less used than its performance would justify. Cairn can do it for them:
 cairn-cli optimum                   what it would cost, without doing any of it
 cairn-cli optimum build [--yes]     clone, decompile, patch, compile, install
 cairn-cli optimum clean             delete the build tree, keeping the client
+
+cairn-cli optimum --game 1.22.5     the same, for a game version that is not the newest
 ```
 
 or **Build Optimum…** in a pack's Settings tab, which shows the same warning and then a
@@ -119,10 +121,20 @@ Five things about this are deliberate:
   platform packager rather than reimplementing them. A second implementation of a
   95-patch bootstrap would only ever prove it agrees with itself, and its failure mode is
   a client that looks right and is not.
-- **The build is pinned to a commit**, not a branch — Cairn builds the revision that was
+- **Each build is pinned to a commit**, not a branch — Cairn builds the revision that was
   actually tested, so somebody else's push cannot turn into a Cairn feature that stopped
-  working. The pin carries the game version with it, because Optimum targets exactly one
-  Vintage Story version at a time.
+  working. The pin carries the game version with it, because a given Optimum revision
+  builds for exactly one Vintage Story version.
+- **Cairn knows several of them, one per game version.** Optimum supports one version at a
+  time and drops the previous one; packs do not move that quickly, because a pack sits on
+  the version its mods have releases for. With a single pin, shipping a Cairn release took
+  Optimum away from those packs — an update nobody asked for, removing something that
+  worked. Old revisions keep building the same client for ever, since Optimum pins the
+  upstream refs it patches against; what ages is the evidence, not the revision. So the
+  list is as long as somebody is willing to re-run 20-minute builds for, and an entry
+  nobody will re-run should be deleted rather than kept: a button that fails twenty minutes
+  in is worse than no button. `OptimumSource.Known` is the list, and `ForGame` is the only
+  thing that decides which build a pack is offered.
 - **Cairn cannot install the prerequisites**, so it names all of them at once with a
   reason and a command each. Windows needs only Git (`bootstrap.ps1` implements every
   fixup natively); Linux and macOS additionally need perl, python3, curl and tar. A .NET
@@ -152,6 +164,16 @@ machine. That is ruled out by construction rather than by care:
 The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
 another full decompile. It is a few gigabytes idle between pin bumps, hence
 `optimum clean`.
+
+One tree serves every build, which is why two things happen around it that would otherwise
+look like fussiness. The remote is reset to the revision's own repository before fetching,
+since the builds do not all come from the same fork. And bootstrap is passed `--refresh`
+whenever the tree was last built at a *different commit*: it reuses the decompiled snapshot
+and the cloned upstream forks whenever they are merely present, and those were cloned at the
+refs of whichever revision put them there — reusing them across revisions produces a client
+made of two, which nothing downstream could detect. The note recording what the tree holds
+is `~/.cairn/builds/optimum-tree.json`, kept outside the checkout for the same reason the
+log is.
 
 ## What a downgrade actually risks
 

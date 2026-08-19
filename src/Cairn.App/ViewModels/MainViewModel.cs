@@ -567,7 +567,7 @@ public partial class MainViewModel : ViewModelBase
             .OrderByDescending(x => x, GameVersionComparer.Ascending)
             .FirstOrDefault();
 
-        return newest ?? "1.22.5";
+        return newest ?? "1.22.7";
     }
 
     /// <summary>
