@@ -673,17 +673,56 @@ public sealed class OptimumProvisioner
     /// build that leaves daemons behind holds files open in a tree Cairn may be about to
     /// delete.
     /// </summary>
-    private static Dictionary<string, string> BuildEnv(DotnetSdk sdk)
+    private static Dictionary<string, string> BuildEnv(DotnetSdk sdk) =>
+        BuildEnv(sdk, ExecutableImage.ReadArchitecture(sdk.Executable));
+
+    /// <summary>
+    /// The environment every process in the build runs in.
+    ///
+    /// The SDK is named by <c>DOTNET_ROOT_&lt;ARCH&gt;</c> and never by bare
+    /// <c>DOTNET_ROOT</c>, and the difference is an entire failed build. The bare variable
+    /// is read by an apphost of <em>any</em> architecture, and the build runs one that is
+    /// not the SDK's: bootstrap decompiles with ilspycmd, a global .NET tool, whose apphost
+    /// is whichever architecture the .NET that installed it was — routinely x64 on an Apple
+    /// Silicon machine, where the two live side by side. Pointed at an arm64 root it cannot
+    /// load hostfxr and exits; bootstrap asks it for its version with stderr sent to
+    /// /dev/null under <c>set -e</c>, so the build ends there having printed nothing at all.
+    ///
+    /// The arch-specific variable is read only by apphosts of that architecture, so the
+    /// SDK still wins for everything meant to use it — the compile, its MSBuild nodes, a
+    /// tool Cairn's own dotnet installed — while everything else keeps hostfxr's ordinary
+    /// resolution rather than being sent somewhere it cannot run.
+    ///
+    /// Nothing is set for an architecture that cannot be read. hostfxr's own fallback beats
+    /// a guess: the same reason <see cref="Launch.GameLauncher"/> sets neither variable
+    /// when it has no matching runtime to name.
+    /// </summary>
+    /// <param name="arch">
+    /// The SDK's architecture. A parameter so all three can be checked from one host, the
+    /// same way <see cref="PackagerFor"/> takes a platform.
+    /// </param>
+    public static Dictionary<string, string> BuildEnv(DotnetSdk sdk, ExecutableArch arch)
     {
         var path = Environment.GetEnvironmentVariable("PATH") ?? "";
 
-        return new Dictionary<string, string>
+        var env = new Dictionary<string, string>
         {
-            ["DOTNET_ROOT"] = sdk.Root,
             ["PATH"] = sdk.Root + Path.PathSeparator + path,
             ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
             ["DOTNET_NOLOGO"] = "1",
             ["MSBUILDDISABLENODEREUSE"] = "1",
         };
+
+        var named = arch switch
+        {
+            ExecutableArch.X64 => "DOTNET_ROOT_X64",
+            ExecutableArch.Arm64 => "DOTNET_ROOT_ARM64",
+            ExecutableArch.X86 => "DOTNET_ROOT_X86",
+            _ => null,
+        };
+
+        if (named is not null) env[named] = sdk.Root;
+
+        return env;
     }
 }

@@ -1,6 +1,7 @@
 using Cairn.Core;
 using Cairn.Core.Games;
 using Cairn.Core.Games.Optimum;
+using Cairn.Core.Runtime;
 using Xunit;
 
 namespace Cairn.Core.Tests;
@@ -369,6 +370,43 @@ public class OptimumBuildTests : IDisposable
 
         Assert.True(OptimumSource.Newest.Supports(OptimumSource.Newest.GameVersion));
         Assert.False(OptimumSource.Newest.Supports("1.21.0"));
+    }
+
+    // ---- the environment the build runs in ----
+
+    /// <summary>
+    /// A build that failed after twenty minutes of downloading, printing nothing: bare
+    /// DOTNET_ROOT applies to an apphost of any architecture, and bootstrap runs one that
+    /// need not match the SDK — ilspycmd, installed globally by whatever .NET happened to
+    /// install it. Sent to a root of the wrong architecture it cannot start, and bootstrap
+    /// reads its version with stderr discarded, so the failure has no words in it.
+    /// </summary>
+    [Theory]
+    [InlineData(ExecutableArch.X64, "DOTNET_ROOT_X64")]
+    [InlineData(ExecutableArch.Arm64, "DOTNET_ROOT_ARM64")]
+    [InlineData(ExecutableArch.X86, "DOTNET_ROOT_X86")]
+    public void The_sdk_is_named_for_its_own_architecture_only(
+        ExecutableArch arch, string variable)
+    {
+        var sdk = new DotnetSdk("/sdks/ten", [new Version(10, 0, 100)]);
+        var env = OptimumProvisioner.BuildEnv(sdk, arch);
+
+        Assert.Equal("/sdks/ten", env[variable]);
+        Assert.False(env.ContainsKey("DOTNET_ROOT"));
+
+        // Still first on PATH, which is how bootstrap's own `dotnet` calls find it.
+        Assert.StartsWith("/sdks/ten" + Path.PathSeparator, env["PATH"]);
+    }
+
+    [Fact]
+    public void An_sdk_of_unreadable_architecture_names_no_root_at_all()
+    {
+        // hostfxr falls back to the machine's own install, which is a better answer than a
+        // guess — the same reason the launcher sets neither variable when it has no match.
+        var env = OptimumProvisioner.BuildEnv(
+            new DotnetSdk("/sdks/ten", [new Version(10, 0, 100)]), ExecutableArch.Unknown);
+
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("DOTNET_ROOT"));
     }
 
     // ---- reusing the working tree ----
