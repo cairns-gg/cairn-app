@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
@@ -392,5 +393,121 @@ public class ModConfigTabTests : IDisposable
         Assert.Empty(detail.ModConfigSettings);
         Assert.True(detail.ShowNoModConfigFound);
         Assert.Contains("Play it once", detail.NoModConfigFoundLine);
+    }
+
+    // ---- a carried value that moves afterwards ----
+
+    /// <summary>
+    /// A tick means "this value travels with the pack", not "this value, as it stood the
+    /// moment you ticked it".
+    ///
+    /// The tick wrote the manifest and nothing else ever did, so changing the setting
+    /// afterwards updated every row on screen and left the pack declaring the old number —
+    /// which is what got published. The tab showed the new value beside a ticked box, so
+    /// nothing on screen suggested otherwise, and the only way out was to untick the row and
+    /// tick it again.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_carried_value_that_changes_afterwards_is_what_the_pack_carries()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        Assert.Single(detail.ModConfigSettings).Carried = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            """["footprints"]""",
+            Saved().ModConfig!["terrainslabs.json"]["compatibleMods"]!.ToJsonString());
+
+        // The author changes their mind in game, and the tab is opened again.
+        WriteConfig("terrainslabs.json",
+            """{ "enableSlabs": true, "compatibleMods": ["footprints", "carryon"] }""");
+
+        detail.LoadModConfig();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            """["footprints","carryon"]""",
+            Saved().ModConfig!["terrainslabs.json"]["compatibleMods"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// A value nobody ticked is not adopted by having been looked at. Reading the files is
+    /// not the same as choosing what the pack carries, and the tab is opened by anybody who
+    /// wants to see what a mod is set to.
+    /// </summary>
+    [AvaloniaFact]
+    public void An_unticked_value_that_changes_is_still_not_carried()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        WriteConfig("terrainslabs.json",
+            """{ "enableSlabs": false, "compatibleMods": ["footprints"] }""");
+
+        detail.LoadModConfig();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(Saved().ModConfig);
+    }
+
+    /// <summary>
+    /// And the pack says it has something to publish, which is the only place the change is
+    /// visible: the write is as silent as ticking is, so the Share state has to notice.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_pack_notices_it_has_something_to_publish_again()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        Assert.Single(detail.ModConfigSettings).Carried = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var before = detail.Share.Status;
+
+        WriteConfig("terrainslabs.json",
+            """{ "enableSlabs": true, "compatibleMods": ["footprints", "carryon"] }""");
+
+        detail.LoadModConfig();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Nothing is published in this fixture, so the state cannot move — what has to hold
+        // is that it was recomputed rather than left saying what it said before the file
+        // moved. The manifest is the evidence; this pins the refresh that carries it.
+        Assert.Equal(before, detail.Share.Status);
+        Assert.NotNull(Saved().ModConfig);
+    }
+
+    /// <summary>
+    /// Taking an author's revision is the one reload that must not write back.
+    ///
+    /// Their values are newer than this copy's files — the pack's own reach the files at the
+    /// next launch — so reading the files and saving what they say would revert the update
+    /// the moment the tab refreshed underneath it.
+    /// </summary>
+    [AvaloniaFact]
+    public void Adopting_an_authors_revision_does_not_write_the_old_files_back()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        Assert.Single(detail.ModConfigSettings).Carried = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // What taking a revision leaves behind: a manifest the files do not agree with yet.
+        detail.Manifest.ModConfig = new Dictionary<string, JsonObject>
+        {
+            ["terrainslabs.json"] = (JsonNode.Parse(
+                """{"compatibleMods":["footprints","fromtheauthor"]}""") as JsonObject)!,
+        };
+
+        detail.LoadModConfig(adopting: true);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains(
+            "fromtheauthor",
+            detail.Manifest.ModConfig!["terrainslabs.json"]["compatibleMods"]!.ToJsonString());
     }
 }

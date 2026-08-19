@@ -207,6 +207,11 @@ small `home` file, which is what points Cairn at the new drive.
   install Preferences answered *"there is nothing at ~/.cairn to move"*, as though choosing a
   location needed something to have been put in the wrong place first. The button reads
   **Choose…** when there is nothing to move and **Move…** when there is.
+- **A mod setting you change after ticking it is the one the pack carries.** **0.9.3.** The
+  tick was being read as "carry this value, as it stood when you ticked it": change the
+  setting afterwards and every row on screen followed, while the pack went on declaring the
+  old one and publishing it. Unticking and reticking was the only way out, and nothing said
+  so.
 - **Escape closes any of Cairn's dialogs.** **0.9.3.** Preferences, Share, the pack update and
   game version windows did not, and Preferences could only be dismissed from the title bar.
 - **Preferences no longer runs off the bottom of the screen.** **0.9.3.** At larger interface

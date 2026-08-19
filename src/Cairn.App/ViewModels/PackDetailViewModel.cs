@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Media.Imaging;
@@ -867,7 +868,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // the pack's old answer is one somebody would correct — writing the old answer
             // back as though they had chosen it. Hotkeys only if that tab has already paid
             // for its scan; forced, because the rows are stale rather than absent.
-            LoadModConfig();
+            LoadModConfig(adopting: true);
             if (_hotkeysLoaded) _ = LoadHotkeysAsync(force: true);
 
             OnPropertyChanged(nameof(Title));
@@ -3080,7 +3081,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// a background thread would buy nothing and cost the race worth avoiding most — a reload
     /// landing on top of somebody who has already started ticking.
     /// </summary>
-    public void LoadModConfig()
+    /// <param name="adopting">
+    /// The manifest was just replaced from outside this tab — by taking an author's revision
+    /// — so what it declares is newer than what the files hold, and must not be written back
+    /// over from them. The pack's own values reach the files at the next launch; until then
+    /// they legitimately disagree.
+    /// </param>
+    public void LoadModConfig(bool adopting = false)
     {
         _allModConfig.Clear();
         _adoptingModConfig = true;
@@ -3109,6 +3116,68 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         RefreshModConfigFilter();
         OnPropertyChanged(nameof(ModConfigSummary));
+
+        if (!adopting) CarryCurrentValues();
+    }
+
+    /// <summary>
+    /// Brings the pack's declared values back into line with the files, for the keys it
+    /// already carries.
+    ///
+    /// A tick says "this value travels with the pack". It used to be read as "this value, as
+    /// it stood the moment you ticked it": the tick wrote the manifest and nothing else ever
+    /// did, so changing the setting afterwards updated every row on screen and left the pack
+    /// declaring the old number. Publishing then shipped it. The way out was to untick the
+    /// row and tick it again, which nobody would guess and which nothing on screen suggested
+    /// — the tab showed the new value beside a ticked box, which was simply untrue.
+    ///
+    /// Silent, like ticking is, and visible in the same place: mod config is part of the
+    /// shared document, so a pack that has moved says it has unpublished changes.
+    ///
+    /// Only for keys already carried. An untouched setting is not adopted by having been
+    /// looked at — <see cref="OnModConfigEdited"/> is still the only thing that adds one.
+    /// </summary>
+    private void CarryCurrentValues()
+    {
+        var carried = _allModConfig.Where(r => r.Carried).Select(r => r.Setting).ToList();
+        if (carried.Count == 0 && Manifest.ModConfig is null) return;
+
+        var wanted = ModConfigSurvey.ToManifest(carried);
+        if (SameModConfig(wanted, Manifest.ModConfig)) return;
+
+        Manifest.ModConfig = wanted;
+
+        try
+        {
+            _store.Save(Manifest);
+            Error = null;
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+            return;
+        }
+
+        OnPropertyChanged(nameof(ModConfigSummary));
+        ReloadShare();
+    }
+
+    /// <summary>
+    /// Whether two mod config sections say the same thing. Compared per file with DeepEquals,
+    /// since the value is a sparse object and two of them differing anywhere is a difference
+    /// — the same comparison PackUpdatePlan makes for the same reason.
+    /// </summary>
+    private static bool SameModConfig(
+        IReadOnlyDictionary<string, JsonObject>? a, IReadOnlyDictionary<string, JsonObject>? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        if (a.Count != b.Count) return false;
+
+        foreach (var (file, value) in a)
+            if (!b.TryGetValue(file, out var other) || !JsonNode.DeepEquals(value, other))
+                return false;
+
+        return true;
     }
 
     [ObservableProperty] public partial string? ModConfigError { get; set; }
