@@ -106,6 +106,12 @@ public sealed class ModInfoCache(ModDbClient moddb, string? root = null)
     public void Clear()
     {
         _entries = [];
+
+        // The client remembers mod documents for a few minutes of its own, and this is a
+        // clear somebody asked for: leaving that in place would answer the next lookup
+        // without asking ModDB, which is what the button exists to make happen.
+        moddb.Forget();
+
         try
         {
             if (File.Exists(Path)) File.Delete(Path);

@@ -15,6 +15,14 @@ public sealed class OfflineHandler : HttpMessageHandler
     public int Requests { get; private set; }
 
     /// <summary>
+    /// Every URL asked for, in order. For the tests that care how *often* something was
+    /// fetched rather than what came back — publishing used to sweep a pack's mods past
+    /// ModDB three times to draw one dialog, and nothing but a count catches that coming
+    /// back.
+    /// </summary>
+    public List<string> Urls { get; } = [];
+
+    /// <summary>
     /// Replies to name it, for the few tests that need a URL to answer with something —
     /// following a pack link, mostly. Keyed by whatever the URL ends with, so a test can
     /// say "/dizzyd/anego.json" without spelling out a host.
@@ -49,6 +57,7 @@ public sealed class OfflineHandler : HttpMessageHandler
         Requests++;
 
         var url = request.RequestUri?.ToString() ?? "";
+        Urls.Add(url);
 
         foreach (var (ending, reply) in Replies)
             if (url.EndsWith(ending, StringComparison.OrdinalIgnoreCase))

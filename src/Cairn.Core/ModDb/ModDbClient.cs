@@ -84,11 +84,17 @@ public sealed class ModDbException(string message) : Exception(message);
 /// </summary>
 public sealed record ModSearchResult(ModDbSearchEntry Mod, bool Compatible);
 
-public sealed class ModDbClient(HttpClient http)
+/// <param name="now">
+/// Where <see cref="ExistsAsync"/> reads the time from. Injected so a test can age an
+/// answer out without sleeping through <see cref="ExistsLifetime"/>.
+/// </param>
+public sealed class ModDbClient(HttpClient http, Func<DateTimeOffset>? now = null)
 {
     private const string ApiBase = "https://mods.vintagestory.at/api";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private readonly Func<DateTimeOffset> _now = now ?? (() => DateTimeOffset.UtcNow);
 
     /// <summary>
     /// The site's game-version list, fetched once per process. It is 245 entries that
@@ -96,6 +102,44 @@ public sealed class ModDbClient(HttpClient http)
     /// pure waste.
     /// </summary>
     private IReadOnlyList<ModDbGameVersion>? _gameVersions;
+
+    /// <summary>
+    /// How long a fetched mod document stands before it is asked for again.
+    ///
+    /// The same ten minutes <see cref="Packs.ModUpdateCache"/> keeps an update check for,
+    /// and for the same reason: long enough to cover a preview and the sync that follows
+    /// it, short enough that a mod published just now and somebody looking for it are not
+    /// far apart.
+    /// </summary>
+    public static readonly TimeSpan DocumentLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// What ModDB last said about each mod, keyed by the id it was asked for.
+    ///
+    /// One pack's worth of these is small — measured over the 7,900-mod corpus
+    /// <c>tools/moddb-audit.cs</c> keeps, the median document is under 4KB and the mean
+    /// around 9KB, so a seventy-mod pack is well under a megabyte. In memory rather than on
+    /// disk, so every caller gets it without being wired up to anything, including
+    /// <c>cairn-cli</c>, and the storage page has nothing new to explain.
+    ///
+    /// This does reach the install path, which <see cref="Packs.ModUpdateCache"/> refuses
+    /// for itself — and the distinction is worth being exact about, because the two are not
+    /// the same trade. That cache remembers a *decision* ("carryon should move to 1.2.1")
+    /// and replays it later under conditions that may no longer hold. This remembers the
+    /// *document* a decision is made from; the resolve still runs fresh every time, against
+    /// the game version, pin and acceptance in force at that moment.
+    ///
+    /// It is also what makes a preview true. <c>GameVersionChange.PreviewAsync</c> resolves
+    /// every mod against the target and promises to be "the same call, same arguments" as
+    /// the sync that follows — and used to re-fetch every document to do it. An author
+    /// publishing in between made the sync install something the preview never showed.
+    /// Sharing the document is what makes them agree rather than merely intend to.
+    ///
+    /// What must never come from here is a resolve whose whole purpose is to find the
+    /// newest release: see the <c>fresh</c> parameter on <see cref="GetModAsync"/>.
+    /// </summary>
+    private readonly Dictionary<string, (ModDbMod Mod, DateTimeOffset At)> _documents =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Fetches and parses one API response, reporting a body we cannot read as a
@@ -118,8 +162,17 @@ public sealed class ModDbClient(HttpClient http)
         }
     }
 
-    public async Task<ModDbMod> GetModAsync(string modId, CancellationToken ct = default)
+    /// <param name="fresh">
+    /// Ignore anything remembered and ask ModDB. For the callers whose question is "what is
+    /// the newest release" — an explicit update, above all — where being handed an answer
+    /// from ten minutes ago is not a saving but a wrong answer to what was asked, recorded
+    /// in the lock and then reported back as up to date.
+    /// </param>
+    public async Task<ModDbMod> GetModAsync(
+        string modId, CancellationToken ct = default, bool fresh = false)
     {
+        if (!fresh && Remembered(modId) is { } known) return known;
+
         var resp = await GetAsync<ModDbModResponse>(
                            $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", ct)
                        .ConfigureAwait(false)
@@ -127,6 +180,8 @@ public sealed class ModDbClient(HttpClient http)
 
         if (resp.Mod is null)
             throw new ModDbException(Lang.Get("moddb-no-such-mod", modId, resp.StatusCode));
+
+        Remember(modId, resp.Mod);
 
         return resp.Mod;
     }
@@ -142,11 +197,65 @@ public sealed class ModDbClient(HttpClient http)
     /// </summary>
     public async Task<bool> ExistsAsync(string modId, CancellationToken ct = default)
     {
+        // A document in hand is the answer. This is what makes publishing cheap: the sync
+        // resolves every mod, and the existence sweep that follows asks ModDB nothing.
+        if (Remembered(modId) is not null) return true;
+
         var resp = await GetAsync<ModDbModResponse>(
                 $"{ApiBase}/mod/{Uri.EscapeDataString(modId)}", ct)
             .ConfigureAwait(false);
 
-        return resp?.Mod is not null;
+        if (resp?.Mod is null) return false;
+
+        // Only mods that were found. An absence is the answer that goes stale in the
+        // direction that matters — a mod author publishes the mod their pack names and is
+        // told for another ten minutes that recipients cannot install it — and it is also
+        // the cheap case, because a pack whose ids are all real never records one.
+        Remember(modId, resp.Mod);
+
+        return true;
+    }
+
+    /// <summary>What was fetched recently enough to still stand, or null.</summary>
+    private ModDbMod? Remembered(string modId)
+    {
+        lock (_documents)
+        {
+            if (!_documents.TryGetValue(modId, out var known)) return null;
+
+            var now = _now();
+
+            // A clock that has gone backwards — a correction, a laptop resumed — would
+            // otherwise hold a document open for as long as the skew lasts. The same guard
+            // ModUpdateCache.Get makes, for the same reason.
+            if (known.At > now || now - known.At > DocumentLifetime)
+            {
+                _documents.Remove(modId);
+                return null;
+            }
+
+            return known.Mod;
+        }
+    }
+
+    private void Remember(string modId, ModDbMod mod)
+    {
+        // Locked because nothing else about this class is: the launcher can be drawing mod
+        // rows on one thread while a sync runs on another, both through this client, and a
+        // Dictionary written from two at once does not merely lose an entry.
+        lock (_documents) _documents[modId] = (mod, _now());
+    }
+
+    /// <summary>
+    /// Forgets every remembered document, so the next question reaches ModDB.
+    ///
+    /// For clearing that somebody asked for. <see cref="ModInfoCache.Clear"/> deletes what
+    /// it knows about mods so the next lookup asks again — and this would go on answering
+    /// from memory for another ten minutes, which makes the button somebody pressed a lie.
+    /// </summary>
+    public void Forget()
+    {
+        lock (_documents) _documents.Clear();
     }
 
     /// <summary>Every game version ModDB knows, with the tag ids searching by version needs.</summary>
@@ -340,19 +449,41 @@ public sealed class ModDbClient(HttpClient http)
     /// mod requiring it by id. Testimony, in other words, rather than a thing to infer;
     /// <c>PackSyncer.PendingMod.AcceptsUnmarked</c> is where it is decided.
     /// </param>
+    /// <param name="fresh">
+    /// Ask ModDB rather than reuse a remembered document. Set by callers looking for the
+    /// newest release — see <see cref="GetModAsync"/>.
+    /// </param>
     public async Task<ResolvedRelease?> ResolveAsync(
         string modId, string gameVersion, string? pinnedVersion = null,
-        CancellationToken ct = default, bool acceptUnmarked = false)
+        CancellationToken ct = default, bool acceptUnmarked = false, bool fresh = false)
     {
-        var mod = await GetModAsync(modId, ct).ConfigureAwait(false);
+        // Asked before the fetch, because after one the document is always remembered and
+        // the answer would be yes however it arrived.
+        var reused = !fresh && Remembered(modId) is not null;
+
+        var mod = await GetModAsync(modId, ct, fresh).ConfigureAwait(false);
 
         var candidates = Candidates(mod, gameVersion, acceptUnmarked);
 
         if (pinnedVersion is not null)
         {
+            var pinned = candidates.FirstOrDefault(x => x.Release.ModVersion == pinnedVersion);
+
+            // A remembered document that cannot satisfy a pin is asked again before the pin
+            // is refused. Otherwise pinning a release published in the last few minutes —
+            // by hand in pack.json, or from a list drawn before it landed — is told the
+            // release does not exist, which is both wrong and unactionable. Only ever one
+            // retry, and only when the document was reused: a pin that is genuinely not
+            // there must still cost one request, not two.
+            if (pinned.Release is null && reused)
+            {
+                mod = await GetModAsync(modId, ct, fresh: true).ConfigureAwait(false);
+                candidates = Candidates(mod, gameVersion, acceptUnmarked);
+                pinned = candidates.FirstOrDefault(x => x.Release.ModVersion == pinnedVersion);
+            }
+
             // A pin is authoritative: take that version even if it is not the newest,
             // but still refuse one that is not marked for this game version.
-            var pinned = candidates.FirstOrDefault(x => x.Release.ModVersion == pinnedVersion);
             if (pinned.Release is null)
             {
                 var exists = mod.Releases.Any(r => r.ModVersion == pinnedVersion);

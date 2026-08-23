@@ -139,7 +139,7 @@ public sealed record PublishPlan(
                 want.ModId, installed?.Version ?? want.Version, want.Version is not null, onModDb));
         }
 
-        var (covers, problem) = CheckLock(manifest, locked, syncFailures);
+        var (covers, problem) = Coverage(manifest, locked, syncFailures);
 
         return new PublishPlan(
             manifest.Id, mods, manifest.Connect, covers, problem,
@@ -171,9 +171,15 @@ public sealed record PublishPlan(
     /// Whether the lock actually describes this manifest. A lock that names a different
     /// game version, or misses mods the manifest asks for, would publish a claim of
     /// reproducibility that is not true.
+    ///
+    /// Public because it is also the question that decides whether publishing has to sync
+    /// first, and both front-ends need to ask it *before* the plan is built rather than by
+    /// reading one back. It is two local files compared — no network — so asking it early
+    /// costs nothing, where building a whole plan to find out spent one ModDB request per
+    /// mod on a plan that was about to be thrown away and rebuilt after the sync.
     /// </summary>
-    private static (bool Covers, string? Problem) CheckLock(
-        PackManifest manifest, PackLock? locked, IReadOnlyList<SyncStep>? syncFailures)
+    public static (bool Covers, string? Problem) Coverage(
+        PackManifest manifest, PackLock? locked, IReadOnlyList<SyncStep>? syncFailures = null)
     {
         if (manifest.Mods.Count == 0)
             return (false, Lang.Get("share-no-mods"));

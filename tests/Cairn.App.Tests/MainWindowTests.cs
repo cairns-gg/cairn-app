@@ -3811,6 +3811,71 @@ public class MainWindowTests : IDisposable
         Assert.Equal("https://cairns.gg/dizzyd/mine", store.LoadLink("mine")!.Url);
     }
 
+    /// <summary>
+    /// Publishing asks ModDB whether each mod exists, one request per mod, and syncs first
+    /// when the lock does not cover the manifest — which is what retargeting a pack at a
+    /// new game version leaves behind, because applying the change deliberately writes the
+    /// manifest and nothing else.
+    ///
+    /// That used to be three sweeps of the same endpoint: one to build a plan that was
+    /// thrown away, one inside the sync, one to build the plan again. On a seventy-mod pack
+    /// it was north of two hundred requests to draw a dialog, against an API that publishes
+    /// no rate limit and whose bandwidth somebody else pays for.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Publishing_asks_ModDB_about_each_mod_once()
+    {
+        WritePack("mine", "Mine", "1.22.6", null, ["glassview"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+
+        // The state a retarget leaves: the manifest has moved to 1.22.6 and the lock is
+        // still describing 1.22.5, so publishing has to sync before it can say anything.
+        new PackLock
+        {
+            GameVersion = "1.22.5",
+            Mods = [new LockedMod { ModId = "glassview", Version = "1.0.0" }],
+        }.Save(store.LockPath("mine"));
+
+        new CairnsSession { Server = "https://cairns.gg", Token = "tok", Username = "dizzyd" }
+            .Save();
+
+        var http = new OfflineHandler();
+        http.ServeAlways("/api/mod/glassview", """
+            {"statuscode":"200","mod":{
+              "modid":1,"assetid":2,"name":"Glass View","urlalias":"glassview","side":"client",
+              "releases":[
+                {"releaseid":2,"fileid":2,"modidstr":"glassview","modversion":"2.0.0",
+                 "filename":"glassview_2.0.0.zip",
+                 "mainfile":"https://moddbcdn.vintagestory.at/glassview_2.0.0.zip",
+                 "tags":["1.22.6"]}
+              ]
+            }}
+            """);
+
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+
+        var detail = vm.Detail!;
+        detail.ConfirmPublish = _ => Task.FromResult(false);
+
+        await detail.PublishPackCommand.ExecuteAsync(null);
+
+        // The whole journey, not the command alone. Opening the pack fetches its rows'
+        // names and icons from this same endpoint, so the one request may be made there or
+        // by the sync — whichever gets there first, and the other reuses the document.
+        // Before it was shared, this same journey asked three times.
+        var asked = http.Urls.Count(u => u.Contains("/api/mod/glassview"));
+
+        Assert.Equal(1, asked);
+
+        // And the answer is still the honest one. The zip could not be downloaded here, so
+        // the mod is not in the lock and the pack cannot be published — reported with the
+        // reason the sync gave rather than as a bare "sync the pack first".
+        Assert.False(detail.Publish!.Plan.CanPublish);
+        Assert.Contains("glassview", detail.Publish.Plan.LockProblem);
+    }
+
     [AvaloniaFact]
     public async Task A_pack_still_up_is_left_alone_by_the_withdrawal_check()
     {

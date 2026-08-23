@@ -2112,26 +2112,34 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             var progress = new Progress<string>(id => PublishStage = Lang.Get("share-checking", id));
 
-            var plan = await PublishPlan.PrepareAsync(
-                Manifest, _store.LoadLock(Id), _moddb, progress);
-
+            // Asked before anything is built, because whether the lock covers the manifest
+            // is a question about two files on this disk. Building a plan to find out meant
+            // one ModDB request per mod, thrown away, and then the same sweep again after
+            // the sync — a 70-mod pack asked about every one of its mods three times over
+            // to draw one dialog.
+            //
             // Only when it would otherwise refuse. Publishing used to answer a lock that
             // does not cover the manifest by saying "sync the pack first", which meant
             // pressing Play — starting the game — in order to share. Syncing here removes
             // that, but only in the case that was already broken: a settled pack must not
             // have its lock rewritten by the act of sharing it, and an unreachable ModDB
             // must not be able to turn sharing into a change to what is installed.
-            if (!plan.LockCovers)
+            SyncReport? sync = null;
+
+            if (!PublishPlan.Coverage(Manifest, _store.LoadLock(Id)).Covers)
             {
                 PublishStage = Lang.Get("share-syncing");
-                var sync = await RunSyncAsync(quiet: true);
+                sync = await RunSyncAsync(quiet: true);
 
                 // RunSyncAsync clears IsBusy in its own finally, and publishing continues.
                 IsBusy = true;
-
-                plan = await PublishPlan.PrepareAsync(
-                    Manifest, _store.LoadLock(Id), _moddb, progress, syncFailures: sync?.Steps);
             }
+
+            // The one sweep, over the lock as it now stands. The sync above resolved every
+            // mod it touched, so on that path this asks ModDB almost nothing — see
+            // ModDbClient.ExistsAsync.
+            var plan = await PublishPlan.PrepareAsync(
+                Manifest, _store.LoadLock(Id), _moddb, progress, syncFailures: sync?.Steps);
 
             // Before the window is built, because the window is what would refuse. A
             // withdrawal made on the site never reaches this machine, so the publish

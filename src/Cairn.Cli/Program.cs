@@ -1516,15 +1516,17 @@ internal static class Program
         // the one that says so.
         store.RefreshModConfig(id);
 
-        // The same plan the launcher's Share window shows, so both front-ends refuse the
-        // same packs for the same reasons.
         var manifest = store.Load(id);
-        var plan = await PublishPlan.PrepareAsync(manifest, store.LoadLock(id), moddb);
 
+        // Whether the lock covers the manifest is two local files compared, so it is asked
+        // before the plan rather than read back out of one — see PublishPlan.Coverage.
+        //
         // Only when it would otherwise refuse, matching the launcher. Publishing a settled
         // pack must not rewrite its lock, and an unreachable ModDB must not be able to turn
         // sharing into a change to what is installed.
-        if (!plan.LockCovers)
+        IReadOnlyList<SyncStep>? syncFailures = null;
+
+        if (!PublishPlan.Coverage(manifest, store.LoadLock(id)).Covers)
         {
             Console.WriteLine("syncing first…");
             var report = await new PackSyncer(moddb, http)
@@ -1533,9 +1535,13 @@ internal static class Program
             foreach (var step in report.Steps.Where(s => s.Action == SyncAction.Failed))
                 Console.WriteLine($"  ! {step.ModId}: {step.Detail}");
 
-            plan = await PublishPlan.PrepareAsync(
-                manifest, store.LoadLock(id), moddb, syncFailures: report.Steps);
+            syncFailures = report.Steps;
         }
+
+        // The same plan the launcher's Share window shows, so both front-ends refuse the
+        // same packs for the same reasons.
+        var plan = await PublishPlan.PrepareAsync(
+            manifest, store.LoadLock(id), moddb, syncFailures: syncFailures);
 
         if (!plan.CanPublish) return Fail(plan.LockProblem ?? "this pack cannot be published");
 

@@ -40,6 +40,12 @@ public class PackSyncPinningTests : IDisposable
         public int Lookups { get; private set; }
         public int Downloads { get; private set; }
 
+        /// <summary>
+        /// The newest release on offer. Settable so one test can stand for an author
+        /// publishing while a client is holding the document it fetched earlier.
+        /// </summary>
+        public string Newest { get; set; } = newest;
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             var url = r.RequestUri!.ToString();
@@ -51,9 +57,9 @@ public class PackSyncPinningTests : IDisposable
                 {"statuscode":"200","mod":{
                   "modid":1,"assetid":2,"name":"Olla","urlalias":"olla","side":"client",
                   "releases":[
-                    {"releaseid":1,"fileid":1,"modidstr":"olla","modversion":"{{newest}}",
-                     "filename":"olla_{{newest}}.zip",
-                     "mainfile":"https://moddbcdn.vintagestory.at/olla_{{newest}}.zip",
+                    {"releaseid":1,"fileid":1,"modidstr":"olla","modversion":"{{Newest}}",
+                     "filename":"olla_{{Newest}}.zip",
+                     "mainfile":"https://moddbcdn.vintagestory.at/olla_{{Newest}}.zip",
                      "tags":["1.22.5"]},
                     {"releaseid":2,"fileid":2,"modidstr":"olla","modversion":"1.0.0",
                      "filename":"olla_1.0.0.zip",
@@ -109,6 +115,61 @@ public class PackSyncPinningTests : IDisposable
         GameVersion = "1.22.5",
         Mods = [new PackMod { ModId = "olla", Version = pin }],
     };
+
+    /// <summary>
+    /// The rule that keeps the document cache honest, exercised through the syncer rather
+    /// than the client, because this is where getting it wrong would be expensive: an
+    /// update that quietly installed the release that was newest ten minutes ago would be
+    /// written into the lock and then reported back as up to date.
+    /// </summary>
+    [Fact]
+    public async Task An_update_gets_the_newest_release_even_with_a_document_in_hand()
+    {
+        var handler = new Stub("1.0.0");
+        var http = new HttpClient(handler);
+
+        // One client throughout, so what it learned on the first sync is still in hand.
+        var syncer = new PackSyncer(new ModDbClient(http), http);
+
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+
+        // The author publishes while Cairn is holding the document it just fetched.
+        handler.Newest = "2.0.0";
+
+        var report = await syncer.SyncAsync(
+            Pack(), ModsDir, LockPath,
+            allowUpdates: new HashSet<string>(["olla"], StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal("2.0.0", report.Lock.Mods.Single().Version);
+    }
+
+    /// <summary>
+    /// And the case the cache is for: retargeting resolves every mod again, but it is not
+    /// looking for the newest — only for one that fits — so it is content with the document
+    /// the version-change preview was just shown.
+    /// </summary>
+    [Fact]
+    public async Task A_retarget_resolves_from_the_document_it_already_has()
+    {
+        var handler = new Stub("1.0.0");
+        var http = new HttpClient(handler);
+        var syncer = new PackSyncer(new ModDbClient(http), http);
+
+        await syncer.SyncAsync(Pack(), ModsDir, LockPath);
+        var afterFirst = handler.Lookups;
+
+        // Same game version, but the lock no longer applies to a pack that has been
+        // retargeted — the resolve runs again, and asks ModDB nothing.
+        var moved = Pack();
+        moved.GameVersion = "1.22.5";
+        var locked = PackLock.Load(LockPath)!;
+        locked.GameVersion = "1.21.0";
+        locked.Save(LockPath);
+
+        await syncer.SyncAsync(moved, ModsDir, LockPath);
+
+        Assert.Equal(afterFirst, handler.Lookups);
+    }
 
     [Fact]
     public async Task A_first_sync_resolves_and_installs_the_newest()

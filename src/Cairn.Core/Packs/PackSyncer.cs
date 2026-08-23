@@ -273,8 +273,16 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
                 try
                 {
+                    // Asking for the newest is the one question a remembered document must
+                    // not answer: the caller pressed Update, and being handed the release
+                    // that was newest ten minutes ago would be recorded in the lock and
+                    // then reported back as up to date. Every other resolve here — a mod
+                    // never installed, a pack retargeted — is not looking for the newest
+                    // but for one that fits, and is happy with what the version-change
+                    // preview was just shown.
                     release = await moddb.ResolveAsync(
-                            want.ModId, manifest.GameVersion, wanted, ct, acceptUnmarked: accepted)
+                            want.ModId, manifest.GameVersion, wanted, ct,
+                            acceptUnmarked: accepted, fresh: mayUpdate)
                         .ConfigureAwait(false);
                 }
                 // JsonException as well as the two the client raises deliberately: a mod
@@ -557,7 +565,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             ResolvedRelease? newest;
             try
             {
-                newest = await moddb.ResolveAsync(want.ModId, manifest.GameVersion, null, ct)
+                // "Is there a newer release" is the same question Update asks, so it gets
+                // the same answer from the same place. Pressing the button twice is already
+                // cheap — ModUpdateCache remembers what this said, one answer per pack
+                // rather than one document per mod.
+                newest = await moddb.ResolveAsync(
+                        want.ModId, manifest.GameVersion, null, ct, fresh: true)
                     .ConfigureAwait(false);
             }
             catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)

@@ -1,4 +1,4 @@
-# What's new in Cairn 0.9.4
+# What's new in Cairn 0.9.5
 
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
@@ -217,6 +217,21 @@ on running it.
 
 ## Smaller things
 
+- **Moving a pack to a new game version stops asking ModDB the same questions over and over.**
+  **0.9.5.** Checking a version change looked up every mod; pressing **Publish** afterwards
+  looked up every mod, synced, then looked up every one of them again before the window
+  opened. On a seventy-mod pack that was the better part of three hundred requests, and a
+  long wait watching mod names go by. Cairn now settles what is installed before it asks
+  anything — that part is two files on your own disk — and remembers for a few minutes what
+  ModDB said about a mod, so the check, the sync and the share window share one answer
+  instead of fetching it three times. The same pack now takes about eighty.
+
+  It also fixes something quieter. The version-change check promised to show you exactly what
+  the sync would do, but the two asked ModDB separately — so a mod updated in the minutes
+  between them meant the sync installed something the check never showed you. They now read
+  the same answer, so what you approve is what you get. **Asking for updates is unaffected**:
+  pressing **Update** always asks ModDB afresh, because "what is newest" is the one question a
+  remembered answer must not be allowed to answer. Nothing to do.
 - **You can say where Cairn keeps its files before it has any.** **0.9.3.** On a fresh
   install Preferences answered *"there is nothing at ~/.cairn to move"*, as though choosing a
   location needed something to have been put in the wrong place first. The button reads
