@@ -121,13 +121,23 @@ public static class Diagnostics
             text.AppendLine($"  managed  {install.Describe,-22} {install.Architecture}, "
                             + $"needs .NET {install.RequiredFramework}  {Redact(install.Directory)}");
 
+        // Clients somebody built and pointed Cairn at. Listed because a pack runs from one
+        // and this list is meant to be what is on the machine — and because a directory
+        // outside Cairn's root is otherwise invisible in a report, which makes "runs with"
+        // below name a path nothing else here accounts for.
+        var external = Safely(() => library.External, []);
+
+        foreach (var install in external)
+            text.AppendLine($"  yours    {install.Describe,-22} {install.Architecture}, "
+                            + $"needs .NET {install.RequiredFramework}  {Redact(install.Directory)}");
+
         var system = Safely(() => library.System, null);
 
         text.AppendLine(system is null
             ? "  system   none found"
             : $"  system   {system.Version,-10} {system.Architecture}  {Redact(system.Directory)}");
 
-        if (managed.Count == 0 && system is null)
+        if (managed.Count == 0 && external.Count == 0 && system is null)
             text.AppendLine("  (nothing installed — this is why a pack would not launch)");
 
         text.AppendLine();

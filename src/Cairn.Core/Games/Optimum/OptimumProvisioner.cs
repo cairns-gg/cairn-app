@@ -636,8 +636,7 @@ public sealed class OptimumProvisioner
     /// </summary>
     public static void WriteMarker(string dir, OptimumSource source)
     {
-        var launcher = new[] { "Optimum.exe", "Optimum" }
-            .FirstOrDefault(name => File.Exists(Path.Combine(dir, name)));
+        var launcher = OptimumSource.FindLauncher(dir);
 
         if (launcher is null)
             throw new OptimumBuildException(Lang.Get("optimum-no-launcher", source.Url));

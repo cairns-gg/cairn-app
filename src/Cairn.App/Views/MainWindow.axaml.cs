@@ -3,8 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
+using Cairn.Core;
 
 namespace Cairn.App.Views;
 
@@ -43,6 +45,7 @@ public partial class MainWindow : Window
         vm.ChooseWorlds = ChooseWorldsAsync;
         vm.Confirm = ConfirmAsync;
         vm.RunOptimumBuild = RunOptimumBuildAsync;
+        vm.PickClientFolder = PickClientFolderAsync;
         vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
     }
@@ -140,6 +143,34 @@ public partial class MainWindow : Window
 
     private Task<bool> ConfirmAsync(ConfirmViewModel confirm) =>
         new ConfirmWindow { DataContext = confirm }.ShowDialog<bool>(this);
+
+    /// <summary>
+    /// The platform's own folder chooser, opened beside the last client somebody pointed
+    /// Cairn at so re-pointing after a rebuild starts where the last one was.
+    ///
+    /// On macOS this cannot be used to select a <c>.app</c> — a picker will not enter a
+    /// bundle — so the folder holding it is what gets chosen, and ClientAdoption looks one
+    /// level down. Same arrangement as the install picker in the import window.
+    /// </summary>
+    private async Task<string?> PickClientFolderAsync()
+    {
+        var last = (DataContext as MainViewModel)?.LastClientFolder;
+
+        var start = last is not null && Directory.Exists(last)
+            ? await StorageProvider.TryGetFolderFromPathAsync(last)
+            : null;
+
+        var picked = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = Lang.Get("adopt-choose"),
+            AllowMultiple = false,
+            SuggestedStartLocation = start,
+        });
+
+        // TryGetLocalPath rather than the URI: a folder on a network share or in a sandbox
+        // has no local path, and everything below this works in paths.
+        return picked.Count == 0 ? null : picked[0].TryGetLocalPath();
+    }
 
     /// <summary>
     /// Commits a settings field as focus leaves it.

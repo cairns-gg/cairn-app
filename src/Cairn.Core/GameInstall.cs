@@ -6,6 +6,17 @@ using Cairn.Core.Runtime;
 namespace Cairn.Core;
 
 /// <summary>
+/// What a directory holds, when the answer does not come from a marker in the directory
+/// itself — the same two facts a marker carries.
+///
+/// Exists because a client Cairn did not build cannot be relied on to keep a marker: its
+/// packager rewrites the directory on every rebuild. See <see cref="Games.ExternalClients"/>.
+/// </summary>
+/// <param name="Label">What to call it, e.g. "Optimum".</param>
+/// <param name="Executable">The binary to run, bare filename.</param>
+public sealed record VariantSpec(string Label, string Executable);
+
+/// <summary>
 /// A located Vintage Story installation.
 /// </summary>
 public sealed class GameInstall
@@ -339,23 +350,48 @@ public sealed class GameInstall
         return null;
     }
 
-    public static GameInstall? TryAt(string dir)
+    public static GameInstall? TryAt(string dir) => TryAt(dir, null);
+
+    /// <param name="declared">
+    /// What this directory is, when a caller already knows and the directory does not say —
+    /// a client somebody built themselves and pointed Cairn at, whose own tree carries no
+    /// marker and would lose one on the next rebuild. Wins over a marker that is there, so
+    /// re-pointing at a tree corrects a stale marker rather than being overruled by it.
+    /// Null for every other caller, which reads the directory as before.
+    /// </param>
+    public static GameInstall? TryAt(string dir, VariantSpec? declared)
     {
         if (!System.IO.Directory.Exists(dir)) return null;
 
         var api = Path.Combine(dir, "VintagestoryAPI.dll");
         if (!File.Exists(api)) return null;
 
-        var (variant, declaredExe) = ReadVariant(dir);
+        var (variant, declaredExe) = declared is null
+            ? ReadVariant(dir)
+            : (declared.Label, declared.Executable);
 
         // A variant may run something other than the game's own binary. Optimum's install
         // is vanilla files plus its own launcher, so the stock executable is right there
         // and starting it gets you the stock game — which is why the marker is allowed to
         // say otherwise, and why a marker naming a launcher that is not there is refused
         // rather than quietly fallen back from.
-        var exe = declaredExe is null
-            ? Path.Combine(dir, ExecutableName)
-            : Path.Combine(dir, SafeExecutableName(declaredExe) ?? ExecutableName);
+        //
+        // A name that is not a bare filename is refused on the same grounds rather than
+        // falling back to the stock binary, which is what it used to do: the fallback made
+        // an install that declared a launcher run vanilla under the launcher's name, which
+        // is the single substitution the marker exists to prevent — reached, here, by
+        // writing something the marker was never allowed to say.
+        string exe;
+
+        if (declaredExe is null)
+        {
+            exe = Path.Combine(dir, ExecutableName);
+        }
+        else
+        {
+            if (SafeExecutableName(declaredExe) is not { } safe) return null;
+            exe = Path.Combine(dir, safe);
+        }
 
         // A server download is the client minus the client: same assets, same Lib, no
         // Vintagestory binary at all. Refusing it here is refusing to see the install, so

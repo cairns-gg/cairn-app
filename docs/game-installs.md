@@ -149,17 +149,61 @@ game by metadata alone. An Optimum build of 1.22.5 answers "is 1.22.5 installed?
 as the stock game does — and would then be handed silently to every 1.22.5 pack on the
 machine. That is ruled out by construction rather than by care:
 
-- a build marks itself with a `.cairn-variant` file, and no automatic lookup ever returns
-  one — only a choice recorded against a specific pack;
-- the marker names **which executable to run**. Optimum ships a copy of the vanilla client
+- a build Cairn made marks itself with a `.cairn-variant` file, and one somebody pointed
+  Cairn at is recorded in `~/.cairn/games/external.json` — the two say the same two things
+  and are applied at the same point. A directory that says neither reads as the stock game,
+  whatever else it contains, and no automatic lookup ever returns a variant either way:
+  only a choice recorded against a specific pack;
+- both name **which executable to run**. Optimum ships a copy of the vanilla client
   plus its own launcher, byte-identical game binaries and all, and does its patching at
   startup from that launcher. An install without this runs the stock game while every
-  message says otherwise — which is exactly what happened before the marker carried it;
+  message says otherwise — which is exactly what happened before the marker carried it.
+  A named launcher that is missing, or a name carrying a path rather than a bare filename,
+  makes the install invisible rather than falling back to the stock binary beside it: the
+  fallback was that same substitution reached by writing something a marker may not say;
 - a recorded choice stops applying when the pack's game version moves away from it. The
   pack's mods were resolved against the version it *now* targets, so a client nothing in
-  it was chosen for is not an override, it is a mismatch;
+  it was chosen for is not an override, it is a mismatch. It stops applying too when the
+  directory is no longer a modified client at all — see `ChoiceState.NotAVariant` below;
 - the diagnostics report says which install a pack actually runs, and marks a variant
   loudly. "The game is behaving oddly" is unanswerable without it.
+
+### A client you built yourself
+
+Cairn's pin only moves when Cairn does, so somebody who builds Optimum themselves was waiting
+on a Cairn release to use it — and a pack on a game version Cairn has no revision for was
+offered nothing at all. **Use a client I built…** in a pack's Settings tab, or:
+
+```
+cairn-cli optimum use <dir> --pack <id>       run a client you built
+cairn-cli optimum use --stock --pack <id>     put the pack back
+cairn-cli optimum forget <dir>                stop offering it
+```
+
+`ClientAdoption` decides whether a directory can be used, so both front-ends refuse the same
+things: not an install, no Optimum launcher in it, no readable version, or a version other
+than the pack's. The launcher check is the one that matters — Optimum's output is a copy of
+the vanilla client plus its own launcher, so a directory without one is the stock game, and
+taking it would produce a pack announcing Optimum and playing vanilla.
+
+Three things about this are deliberate:
+
+- **The directory is referenced, never copied.** Copying would defeat the point: the reason
+  to point at your own build is that you rebuild it, and a copy goes stale the moment you do.
+  Cairn runs the folder you named and never updates or deletes it, and **Forget this client**
+  in Preferences → Games forgets the record rather than the directory.
+- **The record lives on Cairn's side**, in `~/.cairn/games/external.json`, rather than as a
+  `.cairn-variant` written into their tree. A marker there is the obvious implementation and
+  is wrong for exactly one reason: Optimum's packager rewrites its output directory, so the
+  marker does not survive a rebuild — and what is left is a directory that reads as the stock
+  game with a pack still pointed at it, launching vanilla with nothing able to say so.
+  `ExternalClients` carries the reasoning; `GameStore.At` is the only place it is applied,
+  which is what keeps an *unrecorded* directory reading as whatever it looks like.
+- **A choice that stops meaning anything stops applying.** `ChoiceState.NotAVariant` is the
+  case: forget a client, or delete a marker out of a build, and the recorded directory is
+  still an install of the right version. Honouring it then runs the stock binary sitting
+  beside the launcher — out of somebody's build directory, right after they asked Cairn to
+  stop using it — so the pack falls back to the stock install and says why.
 
 The build tree is kept under `~/.cairn/builds/optimum` so a rebuild is minutes rather than
 another full decompile. It is a few gigabytes idle between pin bumps, hence

@@ -14,7 +14,8 @@ namespace Cairn.App.ViewModels;
 
 /// <summary>A game version Cairn can launch: one it installed, or the machine's own.</summary>
 public class InstalledGameViewModel(
-    GameInstall install, RuntimeResolution runtime, bool managed = true) : ViewModelBase
+    GameInstall install, RuntimeResolution runtime, bool managed = true, bool external = false)
+    : ViewModelBase
 {
     public GameInstall Install { get; } = install;
 
@@ -25,11 +26,26 @@ public class InstalledGameViewModel(
     /// </summary>
     public bool IsManaged { get; } = managed;
 
-    /// <summary>Cairn only deletes what Cairn installed.</summary>
-    public bool CanRemove => IsManaged;
+    /// <summary>
+    /// A client somebody built and pointed Cairn at. Not managed — Cairn will not update it
+    /// and must not delete it — but not merely found either: it is here because somebody
+    /// said so, and the way back out is to say otherwise.
+    /// </summary>
+    public bool IsExternal { get; } = external;
 
-    public string Origin =>
-        IsManaged ? Lang.Get("games-installed-by-cairn") : Lang.Get("games-found-here");
+    /// <summary>Cairn only deletes what Cairn installed. Forgetting one of theirs is not deleting.</summary>
+    public bool CanRemove => IsManaged || IsExternal;
+
+    /// <summary>Names the button for what pressing it does, which is not the same on both.</summary>
+    public string RemoveLabel =>
+        IsExternal ? Lang.Get("prefs-version-forget") : Lang.Get("prefs-version-remove");
+
+    public string Origin => (IsExternal, IsManaged) switch
+    {
+        (true, _) => Lang.Get("games-you-pointed"),
+        (_, true) => Lang.Get("games-installed-by-cairn"),
+        _ => Lang.Get("games-found-here"),
+    };
 
     public string Version => Install.Version;
 
@@ -88,11 +104,21 @@ public partial class GamesViewModel : ViewModelBase
     private GameInstall? _system;
     private readonly Func<string, IReadOnlyList<string>> _packsUsing;
 
+    /// <summary>
+    /// Packs pointed at a particular directory, as opposed to targeting a version.
+    ///
+    /// A separate question from <see cref="_packsUsing"/> and not answerable from it: two
+    /// clients for the same game version can both be on the machine, and forgetting one of
+    /// them costs the packs pointed at *it* rather than every pack on that version.
+    /// </summary>
+    private readonly Func<string, IReadOnlyList<string>> _packsPointedAt;
+
     public GamesViewModel(
         HttpClient http, GameStore store, RuntimeStore runtimes,
         Action<string> log, Action onLibraryChanged,
         GameInstall? system = null,
-        Func<string, IReadOnlyList<string>>? packsUsing = null)
+        Func<string, IReadOnlyList<string>>? packsUsing = null,
+        Func<string, IReadOnlyList<string>>? packsPointedAt = null)
     {
         _http = http;
         _store = store;
@@ -102,6 +128,7 @@ public partial class GamesViewModel : ViewModelBase
         _onLibraryChanged = onLibraryChanged;
         _system = system;
         _packsUsing = packsUsing ?? (_ => []);
+        _packsPointedAt = packsPointedAt ?? (_ => []);
 
         RefreshInstalled();
     }
@@ -215,6 +242,14 @@ public partial class GamesViewModel : ViewModelBase
         foreach (var install in _store.ListInstalled())
             Installed.Add(Describe(install, managed: true));
 
+        // Clients somebody built and pointed Cairn at. Listed for the same reason the
+        // machine's own install is: a pack runs from one, so a list that left it out would
+        // disagree with what actually starts — and this is the only place it can be
+        // un-pointed-at.
+        foreach (var external in _store.ListExternal())
+            if (!Installed.Any(i => SamePath(i.Directory, external.Directory)))
+                Installed.Add(Describe(external, managed: false, external: true));
+
         // The machine's own install, if it is not the same directory as a managed one. A
         // pack launches from it whenever its version matches (GameLibrary.ForVersion), so
         // this list would otherwise disagree with what actually runs.
@@ -228,12 +263,13 @@ public partial class GamesViewModel : ViewModelBase
         foreach (var a in Available) a.IsInstalled = _store.IsInstalled(a.Version);
     }
 
-    private InstalledGameViewModel Describe(GameInstall install, bool managed)
+    private InstalledGameViewModel Describe(GameInstall install, bool managed, bool external = false)
     {
         // Resolve against a managed runtime too, otherwise a game we can already run
         // would be reported as unusable.
         var options = new LaunchOptions { PreferredDotnetRoot = _runtimes.RootFor(install) };
-        return new InstalledGameViewModel(install, new GameLauncher(install).ResolveRuntime(options), managed);
+        return new InstalledGameViewModel(
+            install, new GameLauncher(install).ResolveRuntime(options), managed, external);
     }
 
     private static bool SamePath(string a, string b) =>
@@ -335,12 +371,38 @@ public partial class GamesViewModel : ViewModelBase
     [ObservableProperty] public partial bool ConfirmingRemove { get; set; }
     [ObservableProperty] public partial string RemoveConsequence { get; set; } = "";
 
+    /// <summary>
+    /// Names the yes button for what it does. "Remove" over a client somebody built reads
+    /// as an offer to delete their build, which is the one thing this will never do.
+    /// </summary>
+    [ObservableProperty] public partial string ConfirmRemoveLabel { get; set; } =
+        Lang.Get("prefs-version-remove-confirm");
+
     [RelayCommand(CanExecute = nameof(CanRemove))]
     private void RequestRemove()
     {
         var chosen = SelectedInstalled!;
+
+        // Two different consequences, so two different sentences. Removing a version costs
+        // a download; forgetting a client of theirs costs nothing at all on disk and drops
+        // the packs pointed at it back to the stock game — which is the part worth saying,
+        // since "forget" sounds like it might delete the twenty minutes they spent.
+        if (chosen.IsExternal)
+        {
+            var pointed = _packsPointedAt(chosen.Directory);
+
+            ConfirmRemoveLabel = Lang.Get("prefs-version-forget-confirm");
+            RemoveConsequence = pointed.Count == 0
+                ? Lang.Get("games-forget-unused", chosen.Display)
+                : Lang.Plural("games-forget-used", pointed.Count, Listed(pointed), chosen.Display);
+
+            ConfirmingRemove = true;
+            return;
+        }
+
         var packs = _packsUsing(chosen.Version);
 
+        ConfirmRemoveLabel = Lang.Get("prefs-version-remove-confirm");
         RemoveConsequence = packs.Count == 0
             ? Lang.Get("games-remove-unused", chosen.Version)
             : Lang.Plural("games-remove-used", packs.Count, Listed(packs), chosen.Version);
@@ -368,6 +430,18 @@ public partial class GamesViewModel : ViewModelBase
 
         try
         {
+            // Forgotten, never deleted. It is not Cairn's directory, and the twenty minutes
+            // in it are not Cairn's to spend again.
+            if (chosen.IsExternal)
+            {
+                _store.External.Forget(chosen.Directory);
+                _log($"forgot client at {chosen.Directory}");
+
+                RefreshInstalled();
+                _onLibraryChanged();
+                return;
+            }
+
             _store.Remove(chosen.Install);
             _log($"removed game {chosen.Version}");
 

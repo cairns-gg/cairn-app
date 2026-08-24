@@ -140,6 +140,13 @@ public partial class MainViewModel : ViewModelBase
             packsUsing: version => Packs
                 .Where(p => p.Manifest.GameVersion == version)
                 .Select(p => p.Display)
+                .ToList(),
+            // Which packs a client of theirs is actually in use by, for the same reason:
+            // forgetting it drops those and only those back to the stock game.
+            packsPointedAt: directory => Packs
+                .Where(p => _store.LoadLocalState(p.Id).InstallDirectory is { } chosen
+                            && SamePath(chosen, directory))
+                .Select(p => p.Display)
                 .ToList());
 
         NewPackGameVersion = DefaultPackGameVersion();
@@ -647,6 +654,7 @@ public partial class MainViewModel : ViewModelBase
         // Same read-through arrangement as CopyToClipboard above, and for the same reason.
         Detail.Confirm = c => Confirm?.Invoke(c) ?? Task.FromResult(false);
         Detail.RunOptimumBuild = b => RunOptimumBuild?.Invoke(b) ?? Task.FromResult(false);
+        Detail.PickClientFolder = () => PickClientFolder?.Invoke() ?? Task.FromResult<string?>(null);
         Detail.ChoosePinnedVersion = c => ChoosePinnedVersion?.Invoke(c) ?? Task.FromResult(false);
         Detail.ChooseWorlds = c => ChooseWorlds?.Invoke(c) ?? Task.FromResult(false);
 
@@ -1159,6 +1167,39 @@ public partial class MainViewModel : ViewModelBase
     /// twenty-minute compile to be missing.
     /// </summary>
     public Func<OptimumBuildViewModel, Task<bool>>? RunOptimumBuild { get; set; }
+
+    /// <summary>
+    /// Asks for a folder holding a client somebody built, returning null if they cancelled.
+    /// Supplied by the view; absent in headless tests, where picking nothing is the same as
+    /// pressing Cancel and nothing is recorded.
+    /// </summary>
+    public Func<Task<string?>>? PickClientFolder { get; set; }
+
+    /// <summary>
+    /// Where the folder chooser should open: the last client somebody pointed Cairn at.
+    ///
+    /// Their build tree, in other words — which is where re-pointing after a rebuild almost
+    /// always leads, and is nowhere near wherever the platform's picker last happened to be.
+    /// Null before there is one, which opens it wherever the platform likes.
+    /// </summary>
+    public string? LastClientFolder =>
+        _gameStore.External.All.LastOrDefault()?.Directory;
+
+    /// <summary>Linux file systems are case-sensitive; macOS and Windows are not.</summary>
+    private static bool SamePath(string a, string b)
+    {
+        try
+        {
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
+                OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or IOException or NotSupportedException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Asks which version of a mod to pin, returning whether one was chosen. Supplied by

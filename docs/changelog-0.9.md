@@ -227,6 +227,42 @@ It reads the file itself now rather than its name. **Install its .NET** in Prefe
 works on Windows, and so does the .NET SDK that building Optimum needs — which is why building
 Optimum on Windows could not get past its first step either.
 
+## Run the Optimum you built yourself
+
+**0.9.6.** Cairn builds a pinned revision of Optimum, and that pin only moves when Cairn does — so
+if you build your own, you have been waiting on a Cairn release to use it, and a pack on a game
+version Cairn has no revision for was offered nothing at all.
+
+A pack's Settings tab now has **Use a client I built…** beside the build button, and it is there
+on every pack, including the ones Cairn cannot build for. Point it at the folder your build ends
+up in. Cairn checks what is there before it takes it — the game version, and that Optimum's
+launcher is really in there — and shows you all of it before anything changes:
+
+```
+Use this client?
+
+/Users/you/src/Optimum/publish
+
+  Vintage Story  1.22.9
+  Launcher       Optimum
+```
+
+**Your build stays where it is.** Cairn does not copy it, update it or delete it — it runs the
+folder you named, so rebuilding is enough and there is nothing to tell Cairn afterwards. Pick the
+folder once and every pack on that game version gets a one-press **Use Optimum (your build)**;
+**Use the stock game** puts a pack back whenever you like.
+
+A folder that is not a client is refused with the reason, and the one worth knowing about is a
+folder holding the *stock* game: an Optimum build is a copy of the ordinary client plus its own
+launcher, so without that launcher Cairn would run vanilla while telling you it was running
+Optimum. It says so and takes nothing.
+
+Your builds are listed in **Preferences → Games** as *you pointed Cairn at this*, with **Forget
+this client** — which forgets it and never touches the folder.
+
+`cairn-cli optimum use <dir> --pack <id>` does the same thing headlessly, and
+`cairn-cli optimum use --stock --pack <id>` undoes it.
+
 ## Optimum, for 1.22.7 and for the version you are still on
 
 **0.9.4.** Vintage Story **1.22.7** is out, and so is the Optimum build for it: Cairn now builds

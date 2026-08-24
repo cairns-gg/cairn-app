@@ -102,6 +102,23 @@ public sealed record OptimumSource(string Url, string Ref, string GameVersion, s
     public string InstallName => $"{GameVersion}-optimum";
 
     /// <summary>
+    /// What Optimum's own launcher is called in a packaged client, per platform naming.
+    /// </summary>
+    public static readonly IReadOnlyList<string> LauncherNames = ["Optimum.exe", "Optimum"];
+
+    /// <summary>
+    /// Optimum's launcher in a packaged client directory, or null when there is none.
+    ///
+    /// The one thing that distinguishes a built Optimum from the stock game on disk. Its
+    /// output is a copy of the vanilla client — byte-identical binaries and all — plus this,
+    /// with the patching done at startup from here. So a directory without it is the stock
+    /// game whatever else it is called, which is what both callers need to know: the builder
+    /// refuses to finish, and pointing Cairn at one refuses to start.
+    /// </summary>
+    public static string? FindLauncher(string dir) =>
+        LauncherNames.FirstOrDefault(name => File.Exists(Path.Combine(dir, name)));
+
+    /// <summary>
     /// The game version a checkout actually declares, read from its forks.json.
     ///
     /// Checked against <see cref="GameVersion"/> after cloning rather than trusted. The pin

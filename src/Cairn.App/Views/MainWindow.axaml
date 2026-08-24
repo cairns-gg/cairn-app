@@ -777,32 +777,79 @@
                                        Foreground="{DynamicResource VsWarningBrush}" />
 
                             <!--
-                                One action at a time: make it, use it, or stop using it.
-                                Gone entirely on the versions Optimum is not for, which is
-                                most of them — this is an advanced option rather than a
-                                setting everybody needs an opinion about.
+                                One action at a time: make it, use it, point at your own, or
+                                stop. Always present now — it used to be hidden on versions
+                                Optimum has no revision for, which turned out to hide it from
+                                exactly the person who had built one themselves. See
+                                HasOptimumPanel.
                             -->
                             <StackPanel Spacing="6"
                                         IsVisible="{Binding Detail.HasOptimumPanel, FallbackValue=False}">
                                 <TextBlock Text="{l:Tr packsettings-optimum}" FontSize="12" Opacity="0.7" />
 
-                                <Button x:Name="BuildOptimum"
-                                        Content="{Binding Detail.BuildOptimumLabel}"
-                                        IsVisible="{Binding Detail.CanBuildOptimum}"
-                                        Command="{Binding Detail.BuildOptimumCommand}"
-                                        HorizontalAlignment="Left" Padding="12,5" />
+                                <!-- Wraps, because two buttons side by side are wider than
+                                     the settings column at the window's minimum width. -->
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
+                                    <Button x:Name="BuildOptimum"
+                                            Content="{Binding Detail.BuildOptimumLabel}"
+                                            IsVisible="{Binding Detail.CanBuildOptimum}"
+                                            Command="{Binding Detail.BuildOptimumCommand}"
+                                            Padding="12,5" />
 
-                                <Button x:Name="UseOptimum" Content="{l:Tr packsettings-use-optimum}"
-                                        IsVisible="{Binding Detail.CanUseOptimum}"
-                                        Command="{Binding Detail.UseOptimumCommand}"
-                                        HorizontalAlignment="Left" Padding="12,5" />
+                                    <Button x:Name="UseOptimum" Content="{l:Tr packsettings-use-optimum}"
+                                            IsVisible="{Binding Detail.CanUseOptimum}"
+                                            Command="{Binding Detail.UseOptimumCommand}"
+                                            Padding="12,5" />
 
-                                <!-- Without this, running a modified client would be a
-                                     decision nothing on screen could undo. -->
-                                <Button x:Name="UseStockGame" Content="{l:Tr packsettings-use-stock}"
-                                        IsVisible="{Binding Detail.IsUsingVariant}"
-                                        Command="{Binding Detail.UseStockGameCommand}"
-                                        HorizontalAlignment="Left" Padding="12,5" />
+                                    <!-- One click, no picker: the folder was chosen once,
+                                         for the machine rather than for this pack. -->
+                                    <Button x:Name="UseExternalClient"
+                                            Content="{l:Tr packsettings-use-external}"
+                                            IsVisible="{Binding Detail.CanUseExternal}"
+                                            Command="{Binding Detail.UseExternalCommand}"
+                                            Padding="12,5" />
+
+                                    <!-- Without this, running a modified client would be a
+                                         decision nothing on screen could undo. -->
+                                    <Button x:Name="UseStockGame" Content="{l:Tr packsettings-use-stock}"
+                                            IsVisible="{Binding Detail.IsUsingVariant}"
+                                            Command="{Binding Detail.UseStockGameCommand}"
+                                            Padding="12,5" />
+
+                                    <!-- Reads as "point somewhere else" once a client of
+                                         theirs is already in use, because that is what
+                                         pressing it then does. -->
+                                    <Button x:Name="AdoptClient"
+                                            Content="{l:Tr packsettings-use-own}"
+                                            IsVisible="{Binding !Detail.IsUsingExternal}"
+                                            Command="{Binding Detail.AdoptClientCommand}"
+                                            Padding="12,5" />
+
+                                    <Button x:Name="RepointClient"
+                                            Content="{l:Tr packsettings-point-elsewhere}"
+                                            IsVisible="{Binding Detail.IsUsingExternal}"
+                                            Command="{Binding Detail.AdoptClientCommand}"
+                                            Padding="12,5" />
+                                </WrapPanel>
+
+                                <!-- Where their client is. Trimmed rather than wrapped: it
+                                     is a reference, not a sentence, and a three-line path
+                                     pushes the buttons off the panel. -->
+                                <TextBlock x:Name="ExternalClientPath"
+                                           Text="{Binding Detail.ExternalPathLine}"
+                                           ToolTip.Tip="{Binding Detail.ExternalPathLine}"
+                                           IsVisible="{Binding Detail.HasExternalPathLine}"
+                                           FontSize="11" Opacity="0.6"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <!-- Why the folder just picked was not taken. Inline, not a
+                                     dialog: nothing was committed and the picker is one
+                                     click away. -->
+                                <TextBlock x:Name="AdoptProblem"
+                                           Text="{Binding Detail.AdoptProblem}"
+                                           IsVisible="{Binding Detail.HasAdoptProblem}"
+                                           FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource VsWarningBrush}" />
 
                                 <!-- Which version a build would be for, while the version
                                      picker shows another. Disabled without this is a
@@ -813,11 +860,11 @@
                                            FontSize="11" TextWrapping="Wrap"
                                            Foreground="{DynamicResource VsWarningBrush}" />
 
-                                <!-- Only while it is a thing to make. Once it exists, the
-                                     cost has been paid and describing it again is noise. -->
-                                <TextBlock FontSize="11" TextWrapping="Wrap" Opacity="0.7"
-                                           IsVisible="{Binding Detail.CanBuildOptimum}"
-                                           Text="{l:Tr packsettings-optimum-explain}" />
+                                <!-- Says a different thing depending on whether Cairn has a
+                                     build to offer here; empty once one is running. -->
+                                <TextBlock x:Name="OwnClientExplain"
+                                           FontSize="11" TextWrapping="Wrap" Opacity="0.7"
+                                           Text="{Binding Detail.OwnClientExplain}" />
                             </StackPanel>
 
                             <StackPanel Spacing="4">

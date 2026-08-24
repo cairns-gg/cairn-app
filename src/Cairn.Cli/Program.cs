@@ -84,7 +84,7 @@ internal static class Program
                 "import" => await Import(store, http, args),
                 "import-install" => await ImportInstall(store, moddb, args),
                 "games" => await Games(games, http, args),
-                "optimum" => await Optimum(games, runtimes, http, args),
+                "optimum" => await Optimum(store, games, runtimes, http, args),
                 "runtimes" => await Runtimes(runtimes, http, args),
                 "pull" => await Pull(store, http, args),
                 "sync" => await Sync(store, moddb, http, args),
@@ -135,6 +135,9 @@ internal static class Program
               cairn-cli optimum                       what building the Optimum client would cost
               cairn-cli optimum build [--yes]         build and install it (long; see the warning)
               cairn-cli optimum clean                 delete the build tree, keeping the client
+              cairn-cli optimum use <dir> --pack <id>  run a client you built yourself
+              cairn-cli optimum use --stock --pack <id>  go back to the stock game
+              cairn-cli optimum forget <dir>          stop offering a client you built
               cairn-cli runtimes                      list .NET runtimes Cairn manages
               cairn-cli runtimes install <major>      download a private .NET runtime (e.g. 8)
               cairn-cli runtimes remove <version>     delete one
@@ -751,8 +754,13 @@ internal static class Program
         // --install overrides for this run only; the pack's own choice is what it was told
         // to use. Neither is ever inferred: ForVersion will not return a modified client,
         // so running one is always something somebody asked for.
+        // Through the store rather than GameInstall directly, so a client somebody pointed
+        // Cairn at is read here as what they said it was. Without that, --install at a
+        // directory `optimum use` accepted runs the stock binary sitting beside the
+        // launcher — which is the whole failure the record exists to prevent, reintroduced
+        // by the one path that bypassed it.
         var install = ArgValue(args, "--install") is { } dir
-            ? GameInstall.TryAt(dir) ?? throw new InvalidOperationException(
+            ? gameStore.At(dir) ?? throw new InvalidOperationException(
                   $"'{dir}' is not a Vintage Story install.")
             : Resolve(store, library, id);
 
@@ -1229,9 +1237,15 @@ internal static class Program
     /// version is the reason Cairn knows more than one build.
     /// </summary>
     private static async Task<int> Optimum(
-        GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
+        PackStore store, GameStore games, RuntimeStore runtimes, HttpClient http, string[] args)
     {
         var provisioner = new OptimumProvisioner(http, games, runtimes);
+
+        var action = args.Length > 1 && !args[1].StartsWith('-') ? args[1] : "plan";
+
+        // Ahead of the pin lookup, because neither of these needs one: pointing at a client
+        // somebody built is exactly the case where Cairn has no revision for the version.
+        if (action is "use" or "forget") return UseClient(store, games, args, action);
 
         var wanted = ArgValue(args, "--game");
         var source = wanted is null ? OptimumSource.Newest : OptimumSource.ForGame(wanted);
@@ -1241,8 +1255,6 @@ internal static class Program
                         + string.Join(", ", OptimumSource.Known.Select(s => s.GameVersion)));
 
         var plan = provisioner.Plan(source);
-
-        var action = args.Length > 1 && !args[1].StartsWith('-') ? args[1] : "plan";
 
         if (action == "plan")
         {
@@ -1267,7 +1279,26 @@ internal static class Program
                 }
             }
 
+            // Listed here rather than under `games`, because this is the command somebody
+            // reaches for when they want a client that is not the stock one — and a client
+            // Cairn did not build is invisible everywhere else in the CLI.
+            if (games.External.All.Count > 0)
+            {
+                Console.WriteLine("\nClients you pointed Cairn at:");
+
+                foreach (var client in games.External.All)
+                {
+                    var found = games.At(client.Directory);
+
+                    Console.WriteLine($"    game {found?.Version ?? "gone",-8} {client.Label,-8} "
+                                      + $"{client.Directory}"
+                                      + (found is null ? "  (not there any more)" : ""));
+                }
+            }
+
             Console.WriteLine($"\nBuild it with: cairn-cli optimum build --game {source.GameVersion}");
+            Console.WriteLine("Or point Cairn at one you built: "
+                              + "cairn-cli optimum use <dir> --pack <id>");
             return 0;
         }
 
@@ -1289,7 +1320,10 @@ internal static class Program
         }
 
         if (action != "build")
-            return Fail("usage: cairn-cli optimum [plan|build|clean] [--game <version>] [--yes]");
+            return Fail("usage: cairn-cli optimum [plan|build|clean] [--game <version>] [--yes]\n"
+                        + "       cairn-cli optimum use <dir> --pack <id>   point a pack at one you built\n"
+                        + "       cairn-cli optimum use --stock --pack <id>\n"
+                        + "       cairn-cli optimum forget <dir>");
 
         if (!plan.CanStart) return Fail(plan.Describe());
 
@@ -1340,6 +1374,70 @@ internal static class Program
         {
             return Fail($"cancelled; the working tree is kept at {provisioner.WorkingTree}");
         }
+    }
+
+    /// <summary>
+    /// Points a pack at a client somebody built themselves, or stops.
+    ///
+    /// The rules are ClientAdoption's, not this command's — the launcher asks the same type
+    /// the same question, so a directory refused in one is refused in the other. What is
+    /// here is only the arguments and what gets said about the answer.
+    /// </summary>
+    private static int UseClient(PackStore store, GameStore games, string[] args, string action)
+    {
+        const string usage =
+            "usage: cairn-cli optimum use <dir> --pack <id>\n"
+            + "       cairn-cli optimum use --stock --pack <id>\n"
+            + "       cairn-cli optimum forget <dir>";
+
+        if (action == "forget")
+        {
+            if (args.Length < 3 || args[2].StartsWith('-')) return Fail(usage);
+
+            // Never deletes. It is not Cairn's directory, and the twenty minutes in it are
+            // not Cairn's to spend again.
+            if (!games.External.Forget(args[2]))
+                return Fail($"'{args[2]}' is not a client Cairn was pointed at");
+
+            Console.WriteLine($"forgot {args[2]}; the directory itself is untouched");
+            Console.WriteLine("packs pointed at it will run the stock game");
+            return 0;
+        }
+
+        if (ArgValue(args, "--pack") is not { } id) return Fail(usage);
+
+        var manifest = store.Load(id);
+        var state = store.LoadLocalState(id);
+
+        if (args.Contains("--stock"))
+        {
+            state.InstallDirectory = null;
+            store.SaveLocalState(id, state);
+
+            Console.WriteLine($"'{id}' will run the stock game");
+            return 0;
+        }
+
+        if (args.Length < 3 || args[2].StartsWith('-')) return Fail(usage);
+
+        var found = ClientAdoption.Inspect(args[2], manifest.GameVersion);
+
+        if (!found.Ok || found.Client is null) return Fail(found.Message);
+
+        games.External.Remember(found.Client);
+
+        // Read back through the store rather than trusting the inspection, so what is
+        // recorded against the pack is the install as everything downstream will resolve it.
+        var install = games.At(found.Client.Directory)
+                      ?? throw new InvalidOperationException(
+                          $"recorded '{found.Client.Directory}' but it does not resolve as an install");
+
+        state.InstallDirectory = install.Directory;
+        store.SaveLocalState(id, state);
+
+        Console.WriteLine($"'{id}' will run {install.Describe} at {install.Directory}");
+        Console.WriteLine("it stays where it is; Cairn will not update or delete it");
+        return 0;
     }
 
     private static async Task<int> Runtimes(RuntimeStore store, HttpClient http, string[] args)

@@ -125,6 +125,27 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p>It reads the file itself now rather than its name. <strong>Install its .NET</strong> in Preferences &rarr; Storage works on Windows, and so does the .NET SDK that building Optimum needs &mdash; which is why building Optimum on Windows could not get past its first step either.</p>
 
+<h2>Run the Optimum you built yourself</h2>
+
+<p><strong>0.9.6.</strong> Cairn builds a pinned revision of Optimum, and that pin only moves when Cairn does &mdash; so if you build your own, you have been waiting on a Cairn release to use it, and a pack on a game version Cairn has no revision for was offered nothing at all.</p>
+
+<p>A pack's Settings tab now has <strong>Use a client I built&hellip;</strong> beside the build button, and it is there on every pack, including the ones Cairn cannot build for. Point it at the folder your build ends up in. Cairn checks what is there before it takes it &mdash; the game version, and that Optimum's launcher is really in there &mdash; and shows you all of it before anything changes:</p>
+
+<pre><code>Use this client?
+
+/Users/you/src/Optimum/publish
+
+  Vintage Story  1.22.9
+  Launcher       Optimum</code></pre>
+
+<p><strong>Your build stays where it is.</strong> Cairn does not copy it, update it or delete it &mdash; it runs the folder you named, so rebuilding is enough and there is nothing to tell Cairn afterwards. Pick the folder once and every pack on that game version gets a one-press <strong>Use Optimum (your build)</strong>; <strong>Use the stock game</strong> puts a pack back whenever you like.</p>
+
+<p>A folder that is not a client is refused with the reason, and the one worth knowing about is a folder holding the <em>stock</em> game: an Optimum build is a copy of the ordinary client plus its own launcher, so without that launcher Cairn would run vanilla while telling you it was running Optimum. It says so and takes nothing.</p>
+
+<p>Your builds are listed in <strong>Preferences &rarr; Games</strong> as <em>you pointed Cairn at this</em>, with <strong>Forget this client</strong> &mdash; which forgets it and never touches the folder.</p>
+
+<p><code>cairn-cli optimum use &lt;dir&gt; --pack &lt;id&gt;</code> does the same thing headlessly, and <code>cairn-cli optimum use --stock --pack &lt;id&gt;</code> undoes it.</p>
+
 <h2>Optimum, for 1.22.7 and for the version you are still on</h2>
 
 <p><strong>0.9.4.</strong> Vintage Story <strong>1.22.7</strong> is out, and so is the Optimum build for it: Cairn now builds <strong>Optimum 0.3.11</strong> from a pack's Settings tab, exactly as before.</p>

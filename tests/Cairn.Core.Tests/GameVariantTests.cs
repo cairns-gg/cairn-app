@@ -123,12 +123,12 @@ public class GameVariantTests : IDisposable
         File.WriteAllText(Path.Combine(dir, GameInstall.VariantMarker),
             """{"label":"Optimum","executable":"../../evil"}""");
 
-        var install = GameInstall.TryAt(dir);
-
-        // Rejected as a name, so it falls back to the stock executable, which is present.
-        Assert.NotNull(install);
-        Assert.Equal(Path.Combine(dir, OperatingSystem.IsWindows()
-            ? "Vintagestory.exe" : "Vintagestory"), install.Executable);
+        // Refused outright, rather than falling back to the stock executable sitting in the
+        // same directory — which is what this used to do. The fallback was the substitution
+        // the marker exists to prevent, reached by writing something the marker was never
+        // allowed to say: an install labelled Optimum, running vanilla, with nothing able to
+        // tell. The install being invisible is the loud failure, and the right one.
+        Assert.Null(GameInstall.TryAt(dir));
     }
 
     [Fact]

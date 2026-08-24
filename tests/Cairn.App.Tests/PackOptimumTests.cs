@@ -404,13 +404,25 @@ public class PackOptimumTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void The_panel_is_absent_where_optimum_does_not_apply()
+    public void The_panel_offers_your_own_client_where_cairn_has_no_build()
     {
-        // Most packs. An advanced option that is simply not there beats one that is there
-        // and does nothing.
+        // The panel used to disappear here, on the grounds that an advanced option nobody
+        // can act on is clutter. It is the wrong call now that a client can be one somebody
+        // built: Optimum releases for a game version before Cairn has a revision pinned for
+        // it, so the pack with nothing to offer is exactly the pack whose owner has built
+        // one — and hiding the panel hid the only control that would have helped them.
         var (_, _, detail) = Open("1.20.0");
 
-        Assert.False(detail.HasOptimumPanel);
+        Assert.True(detail.HasOptimumPanel);
+
+        // Nothing to build and nothing built, so the one action left is pointing at theirs.
+        Assert.False(detail.CanBuildOptimum);
+        Assert.False(detail.CanUseOptimum);
+        Assert.False(detail.CanUseExternal);
+
+        // And the line under it names the version, because "no build for this" otherwise
+        // reads as "Optimum does not exist for this".
+        Assert.Contains("1.20.0", detail.OwnClientExplain);
     }
 
     [AvaloniaFact]

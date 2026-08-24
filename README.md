@@ -501,7 +501,9 @@ a machine with **no .NET at all**, where Cairn fetches a private runtime and poi
 game at it; the game installed as a **Flatpak**, common on Bazzite and SteamOS, where the
 runtime comes from inside the sandbox; and the **Optimum** community client, which Cairn can
 build from source on the machine — a twenty-minute compile that nothing starts without an
-explicit yes.
+explicit yes. Cairn builds a pinned revision of Optimum, so a pack can also be pointed at a
+build you made yourself: **Use a client I built…**, which runs the folder you name and leaves
+it entirely alone.
 
 A modified client is only ever run because you said so: an install Cairn did not put there
 is used when you point a pack at it, and never picked up on its own.

@@ -149,6 +149,13 @@ public sealed class GameStore
     /// somebody spent twenty minutes building would quietly fall back to the stock game the
     /// first time it ran after an update.
     /// </summary>
+    /// <remarks>
+    /// A directory somebody pointed Cairn at is read as what they said it was, because its
+    /// own tree carries nothing that says so — see <see cref="ExternalClients"/>. This is
+    /// the only place that applies, which is what keeps "a modified client never runs by
+    /// accident" true of a client Cairn did not build: an unrecorded directory reads as
+    /// whatever it looks like, and looking like the stock game is not a variant.
+    /// </remarks>
     public GameInstall? At(string directory)
     {
         var dir = Bundled && !Directory.Exists(directory)
@@ -156,8 +163,27 @@ public sealed class GameStore
             ? directory + BundleSuffix
             : directory;
 
-        return GameInstall.TryAt(dir) is { } install ? Named(install, dir) : null;
+        var declared = External.For(dir);
+
+        return GameInstall.TryAt(dir, declared is null ? null : new VariantSpec(declared.Label, declared.Executable))
+            is { } install
+            ? Named(install, dir)
+            : null;
     }
+
+    /// <summary>Clients somebody built themselves and pointed Cairn at. See <see cref="ExternalClients"/>.</summary>
+    public ExternalClients External => ExternalClients.In(Root);
+
+    /// <summary>
+    /// The recorded external clients that are actually there, as installs.
+    ///
+    /// Separate from <see cref="ListInstalled"/> rather than folded into it: that one
+    /// enumerates a directory Cairn owns and everything downstream — cleanup, removal,
+    /// migration — is entitled to treat what it returns as Cairn's to move and delete.
+    /// These are somebody else's directories.
+    /// </summary>
+    public IReadOnlyList<GameInstall> ListExternal() =>
+        External.All.Select(c => At(c.Directory)).OfType<GameInstall>().ToList();
 
     /// <summary>
     /// A managed install a pack can launch: that version, stock, with a client in it.
@@ -355,8 +381,24 @@ public sealed class GameLibrary(GameStore store, GameInstall? system)
         choices.AddRange(Managed.Where(
             i => i.IsVariant && string.Equals(i.Version, version, StringComparison.OrdinalIgnoreCase)));
 
+        choices.AddRange(External.Where(
+            i => string.Equals(i.Version, version, StringComparison.OrdinalIgnoreCase)));
+
         return choices;
     }
+
+    /// <summary>Clients somebody built themselves and pointed Cairn at, that are still there.</summary>
+    public IReadOnlyList<GameInstall> External => store.ListExternal();
+
+    /// <summary>
+    /// Whether this install is one somebody pointed Cairn at rather than one Cairn made.
+    ///
+    /// Asked of the record rather than of the install, because the two are indistinguishable
+    /// once resolved — that is the point of resolving them the same way. It changes only what
+    /// is said about it: Cairn updates and removes its own builds and does neither to these.
+    /// </summary>
+    public bool IsExternal(GameInstall? install) =>
+        install is not null && store.External.For(install.Directory) is not null;
 
     /// <summary>The install in a particular directory, whatever it is. Null if not one.</summary>
     public GameInstall? At(string directory) => store.At(directory);
@@ -375,6 +417,19 @@ public sealed class GameLibrary(GameStore store, GameInstall? system)
 
         /// <summary>The recorded install is for a different game version than the pack.</summary>
         WrongVersion,
+
+        /// <summary>
+        /// The recorded directory is still an install, but no longer a modified client.
+        ///
+        /// A choice is only ever recorded to run something other than the stock game, so
+        /// once the directory stops being one the choice has nothing left to mean. It
+        /// happens two ways, and honouring it is wrong in both: a marker deleted out of a
+        /// build, and a client of theirs forgotten. The second is the sharp one — their
+        /// tree holds a copy of the vanilla client, so honouring the stale choice runs the
+        /// stock game out of somebody's build directory, silently, after they asked Cairn
+        /// to stop using it.
+        /// </summary>
+        NotAVariant,
     }
 
     /// <param name="Install">What the pack will actually launch, stock or otherwise.</param>
@@ -411,6 +466,9 @@ public sealed class GameLibrary(GameStore store, GameInstall? system)
 
         if (!string.Equals(chosen.Version, version, StringComparison.OrdinalIgnoreCase))
             return new InstallResolution(ForVersion(version), ChoiceState.WrongVersion, chosen);
+
+        if (!chosen.IsVariant)
+            return new InstallResolution(ForVersion(version), ChoiceState.NotAVariant, chosen);
 
         return new InstallResolution(chosen, ChoiceState.Honoured, chosen);
     }

@@ -274,7 +274,12 @@
                                 <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,6,0,0">
                                     <StackPanel Orientation="Horizontal" Spacing="6"
                                                 IsVisible="{Binding !Games.ConfirmingRemove}">
-                                        <Button Content="{l:Tr prefs-version-remove}"
+                                        <!-- Named by the row, because the same button
+                                             deletes a version Cairn installed and merely
+                                             forgets a client somebody built. -->
+                                        <Button Content="{Binding Games.SelectedInstalled.RemoveLabel,
+                                                                 FallbackValue={l:Tr prefs-version-remove},
+                                                                 TargetNullValue={l:Tr prefs-version-remove}}"
                                                 Command="{Binding Games.RequestRemoveCommand}" />
                                         <Button Content="{l:Tr prefs-install-runtime}"
                                                 Command="{Binding Games.InstallRuntimeCommand}" />
@@ -288,7 +293,7 @@
                                             <TextBlock Text="{Binding Games.RemoveConsequence}"
                                                        FontSize="12" TextWrapping="Wrap" />
                                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Button Content="{l:Tr prefs-version-remove-confirm}" Classes="accent" Padding="14,4"
+                                                <Button Content="{Binding Games.ConfirmRemoveLabel}" Classes="accent" Padding="14,4"
                                                         Command="{Binding Games.RemoveSelectedCommand}" />
                                                 <Button Content="{l:Tr prefs-version-keep}" Padding="14,4"
                                                         Command="{Binding Games.CancelRemoveCommand}" />

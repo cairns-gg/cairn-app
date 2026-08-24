@@ -977,6 +977,30 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool IsUsingVariant => ResolvedInstall is { IsVariant: true };
 
     /// <summary>
+    /// A client somebody built themselves that fits this pack's version, if one has been
+    /// pointed at.
+    ///
+    /// Asked of the registry rather than of a per-pack setting, which is what makes the
+    /// folder picker a once-per-machine gesture instead of a once-per-pack one: five packs
+    /// on 1.22.7 should not mean opening the same folder five times.
+    /// </summary>
+    private GameInstall? ExternalClient => _library.External.FirstOrDefault(
+        i => string.Equals(i.Version, Manifest.GameVersion, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Whether what this pack runs is a client somebody pointed Cairn at.</summary>
+    public bool IsUsingExternal => _library.IsExternal(ResolvedInstall);
+
+    /// <summary>A client of theirs is available for this version and this pack is not on it.</summary>
+    public bool CanUseExternal => ExternalClient is not null && !IsUsingExternal;
+
+    /// <summary>Points this pack at a client already registered, with no picker.</summary>
+    [RelayCommand]
+    private void UseExternal()
+    {
+        if (ExternalClient is { } install) ChooseInstall(install);
+    }
+
+    /// <summary>
     /// A built client is available and this pack is not using it.
     ///
     /// The other half of <see cref="CanBuildOptimum"/>: between them the panel offers
@@ -1004,6 +1028,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public string InstallChoiceLine => Resolution switch
     {
+        // Named, for a client of theirs, because the path is the clue: Cairn's own builds
+        // go missing when somebody clears them out, and theirs go missing because they
+        // moved or renamed the directory they built in.
+        { State: GameLibrary.ChoiceState.Missing } when ChosenPath is { } gone =>
+            Lang.Get("install-external-gone", gone),
+
         { State: GameLibrary.ChoiceState.Missing } =>
             Lang.Get("install-gone"),
 
@@ -1012,10 +1042,51 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         { State: GameLibrary.ChoiceState.WrongVersion, Chosen: { } c } =>
             Lang.Get("install-wrong-version", c.Describe, c.Version, Manifest.GameVersion),
 
+        // Forgotten, or a marker deleted out of a build. The directory is still there and
+        // still a game, which is what makes silence here so misleading: the pack would look
+        // like it was running their client and be running the vanilla copy beside it.
+        { State: GameLibrary.ChoiceState.NotAVariant, Chosen: { } c } =>
+            Lang.Get("install-no-longer-variant", c.Directory),
+
+        // Said differently for a client of theirs, because what follows from it differs:
+        // Cairn's own build is Cairn's to replace, and theirs is not.
+        { Install: { IsVariant: true } v } when IsUsingExternal =>
+            Lang.Get("install-variant-external", v.Variant),
+
         { Install: { IsVariant: true } v } => Lang.Get("install-variant", v.Variant),
 
         _ => "",
     };
+
+    /// <summary>
+    /// The directory this pack was told to use, when it is one outside Cairn's own store —
+    /// so a message can name it.
+    ///
+    /// Only theirs, because only theirs is worth naming. Cairn's builds live at a path
+    /// nobody chose and reading it back at somebody is noise; a directory they picked is one
+    /// they can go and look at, and where it went is the whole question.
+    /// </summary>
+    private string? ChosenPath
+    {
+        get
+        {
+            if (_store.LoadLocalState(Id).InstallDirectory is not { } chosen) return null;
+
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_library.Store.Root));
+            var dir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(chosen));
+
+            var comparison = OperatingSystem.IsLinux()
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+
+            return dir.StartsWith(root + Path.DirectorySeparatorChar, comparison) ? null : chosen;
+        }
+    }
+
+    /// <summary>The path of the client of theirs this pack runs, for the line under the buttons.</summary>
+    public string ExternalPathLine => IsUsingExternal ? ResolvedInstall?.Directory ?? "" : "";
+
+    public bool HasExternalPathLine => !string.IsNullOrEmpty(ExternalPathLine);
 
     /// <summary>
     /// Picks the install this pack launches with. Null clears it, which is not the same as
@@ -1053,6 +1124,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool CanBuildOptimum =>
         OptimumBuild is { } source
         && OptimumPrereqs.UnsupportedReason() is null
+        // Not offered to somebody who already builds their own for this version. They have
+        // answered the question this button asks, and a twenty-minute compile of an older
+        // revision is not a second opinion worth putting beside their own build. Forgetting
+        // the client in Preferences brings it back.
+        && ExternalClient is null
         // Asked of the install directory rather than of the choices offered for this
         // version, because the two differ exactly when the build is broken: a half-written
         // install reports no version, drops out of the picker, and would otherwise leave
@@ -1084,13 +1160,100 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool HasBuildOptimumBlockedNote => !string.IsNullOrEmpty(BuildOptimumBlockedNote);
 
     /// <summary>
-    /// Whether the optimised-client panel has anything to say at all.
+    /// Whether the optimised-client panel is shown, which is now always.
     ///
-    /// False on every pack targeting a version Optimum is not for, which is most of them —
-    /// and the panel disappearing entirely is the point: it is an advanced option, not a
-    /// setting everybody has to have an opinion about.
+    /// It used to disappear on every pack targeting a version Optimum has no revision for,
+    /// on the grounds that an advanced option nobody can act on is clutter. That reasoning
+    /// stopped holding the moment a client could be one somebody built themselves: Optimum
+    /// releases for a game version before Cairn has a revision pinned for it, so the pack
+    /// with nothing to offer was exactly the pack whose owner had built one — and the panel
+    /// hid the only control that would have helped them.
+    ///
+    /// The cost is a header and one button on packs that will never use either.
+    /// <see cref="OwnClientExplain"/> is what earns them.
     /// </summary>
-    public bool HasOptimumPanel => CanBuildOptimum || CanUseOptimum || IsUsingVariant;
+    public bool HasOptimumPanel => true;
+
+    /// <summary>
+    /// The line under the buttons, which says a different thing depending on whether Cairn
+    /// has a build of its own to offer here.
+    ///
+    /// Empty once a client is chosen: from then on the panel is showing what is running and
+    /// how to stop, and describing the feature again is noise.
+    /// </summary>
+    public string OwnClientExplain => (IsUsingVariant, CanBuildOptimum) switch
+    {
+        (true, _) => "",
+        (_, true) => Lang.Get("packsettings-optimum-explain"),
+
+        // Names the version, because "no build for this" invites the reasonable and wrong
+        // conclusion that Optimum does not exist for it either.
+        _ when OptimumBuild is null =>
+            Lang.Get("packsettings-no-optimum-for", Manifest.GameVersion),
+
+        _ => Lang.Get("packsettings-own-client-explain"),
+    };
+
+    // ---- a client somebody built themselves ----
+
+    /// <summary>Set by the view; the platform's folder chooser. Null outside a real window.</summary>
+    public Func<Task<string?>>? PickClientFolder { get; set; }
+
+    /// <summary>
+    /// Why the last attempt to point at a client was refused, or empty.
+    ///
+    /// Inline under the buttons rather than a dialog, because nothing has been committed
+    /// and the answer is nearly always "you picked the wrong folder" — which wants the
+    /// picker still one click away rather than behind an OK.
+    /// </summary>
+    [ObservableProperty] public partial string AdoptProblem { get; set; } = "";
+
+    public bool HasAdoptProblem => !string.IsNullOrEmpty(AdoptProblem);
+
+    partial void OnAdoptProblemChanged(string value) => OnPropertyChanged(nameof(HasAdoptProblem));
+
+    /// <summary>
+    /// Points this pack at a client somebody built themselves.
+    ///
+    /// The confirmation is not a formality. The whole risk of the feature is running a
+    /// binary other than the one being named on screen, so Cairn says what it found — the
+    /// directory, the game version it reports, the launcher it will start — before anything
+    /// is recorded. <see cref="ClientAdoption"/> is what decides; this only asks and shows.
+    /// </summary>
+    [RelayCommand]
+    private async Task AdoptClientAsync()
+    {
+        if (PickClientFolder is null || Confirm is null) return;
+
+        AdoptProblem = "";
+
+        if (await PickClientFolder() is not { } directory) return;
+
+        var found = ClientAdoption.Inspect(directory, Manifest.GameVersion);
+
+        if (!found.Ok || found.Client is null || found.Install is null)
+        {
+            AdoptProblem = found.Message;
+            return;
+        }
+
+        if (!await Confirm(new ConfirmViewModel(
+                Lang.Get("adopt-title"),
+                found.Message + "\n\n" + Lang.Get("adopt-explain"),
+                Lang.Get("adopt-confirm"))))
+            return;
+
+        // Recorded first, then chosen: ChooseInstall stores a directory only for an install
+        // that reads as a variant, and this one reads as the stock game until the record
+        // exists to say otherwise.
+        _library.Store.External.Remember(found.Client);
+
+        var registered = _library.Store.At(found.Client.Directory) ?? found.Install;
+
+        _log(Lang.Get("adopt-using", registered.Describe, registered.Directory));
+
+        ChooseInstall(registered);
+    }
 
     /// <summary>
     /// Builds Optimum, then points this pack at it.
@@ -1646,6 +1809,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanUseOptimum));
         OnPropertyChanged(nameof(IsUsingVariant));
         OnPropertyChanged(nameof(HasOptimumPanel));
+
+        OnPropertyChanged(nameof(IsUsingExternal));
+        OnPropertyChanged(nameof(CanUseExternal));
+        OnPropertyChanged(nameof(ExternalPathLine));
+        OnPropertyChanged(nameof(HasExternalPathLine));
+        OnPropertyChanged(nameof(OwnClientExplain));
+
         NotifyPendingVersionChanged();
     }
 
