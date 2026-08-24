@@ -115,19 +115,17 @@ public sealed class GameCatalog(HttpClient http)
     /// client, it would drop every pre-1.22 version out of the list of versions that can be
     /// installed at all.
     /// </summary>
-    public static IReadOnlyList<string> PlatformKeys
-    {
-        get
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                return ExecutableImage.NativeArchitecture == ExecutableArch.Arm64
-                    ? ["mac-arm64", "mac-x64"]
-                    : ["mac-x64"];
+    public static IReadOnlyList<string> PlatformKeys =>
+        KeysFor(Host.This, ExecutableImage.NativeArchitecture);
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return ["windows"];
-            return ["linux"];
-        }
-    }
+    /// <param name="os">Taken rather than asked, so all three are checkable from one host.</param>
+    /// <param name="arch">Only consulted on macOS, the one platform publishing two.</param>
+    public static IReadOnlyList<string> KeysFor(HostOs os, ExecutableArch arch) => os switch
+    {
+        HostOs.MacOs => arch == ExecutableArch.Arm64 ? ["mac-arm64", "mac-x64"] : ["mac-x64"],
+        HostOs.Windows => ["windows"],
+        _ => ["linux"],
+    };
 
     /// <summary>This machine's platform, for a message about a version that has none.</summary>
     public static string PlatformDescription => string.Join(" or ", PlatformKeys);
@@ -144,15 +142,17 @@ public sealed class GameCatalog(HttpClient http)
     /// version before 1.18.15 published instead of the two platform ones, and a tool that
     /// filtered on "linuxserver" alone would report those versions as having no download.
     /// </summary>
-    public static IReadOnlyList<string> ServerPlatformKeys
+    public static IReadOnlyList<string> ServerPlatformKeys =>
+        ServerKeysFor(Host.This, ExecutableImage.NativeArchitecture);
+
+    /// <param name="os">Taken rather than asked; see <see cref="KeysFor"/>.</param>
+    /// <param name="arch">Only reaches macOS, which falls back to the client keys.</param>
+    public static IReadOnlyList<string> ServerKeysFor(HostOs os, ExecutableArch arch) => os switch
     {
-        get
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return ["windowsserver", "server"];
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return PlatformKeys;
-            return ["linuxserver", "server"];
-        }
-    }
+        HostOs.Windows => ["windowsserver", "server"],
+        HostOs.MacOs => KeysFor(os, arch),
+        _ => ["linuxserver", "server"],
+    };
 
     public async Task<string?> GetLatestStableAsync(CancellationToken ct = default)
     {

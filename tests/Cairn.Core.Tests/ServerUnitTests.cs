@@ -6,9 +6,19 @@ namespace Cairn.Core.Tests;
 /// <summary>
 /// The systemd unit, checked on machines that have no systemd — which is every machine this
 /// is developed on, and why the text is rendered in Core rather than by the front-end.
+///
+/// "Every machine" means macOS and Linux. cairn-server ships for linux-x64 alone, so its
+/// unit paths are not a question Windows has: <see cref="ServerUnit.FilePath"/> composes
+/// them with Path.Combine, which is right on the one platform this runs on and produces
+/// backslashes anywhere else. The two assertions that read a path are skipped there rather
+/// than the product being reshaped for a platform it is never installed on — everything
+/// about the unit's *content*, which is the part worth guarding, still runs everywhere.
 /// </summary>
 public class ServerUnitTests
 {
+    /// <summary>Whether the path-shaped assertions apply here. See the class comment.</summary>
+    private static bool PathsAreLinuxShaped => !OperatingSystem.IsWindows();
+
     private static ServerUnit System() => new()
     {
         ExecutablePath = "/usr/local/bin/cairn-server",
@@ -42,7 +52,9 @@ public class ServerUnitTests
         Assert.Contains("Group=cairn", text);
         Assert.Contains("Environment=CAIRN_HOME=/var/lib/cairn", text);
         Assert.Contains("WantedBy=multi-user.target", text);
-        Assert.Equal("/etc/systemd/system/cairn-server@.service", System().FilePath);
+
+        if (PathsAreLinuxShaped)
+            Assert.Equal("/etc/systemd/system/cairn-server@.service", System().FilePath);
     }
 
     [Fact]
@@ -55,7 +67,9 @@ public class ServerUnitTests
         Assert.DoesNotContain("User=", text);
         Assert.DoesNotContain("CAIRN_HOME", text);
         Assert.Contains("WantedBy=default.target", text);
-        Assert.Contains(".config/systemd/user", User().FilePath);
+
+        if (PathsAreLinuxShaped)
+            Assert.Contains(".config/systemd/user", User().FilePath);
     }
 
     [Fact]

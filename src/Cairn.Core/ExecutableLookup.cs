@@ -96,9 +96,20 @@ public static class ExecutableLookup
     /// platform is on PATH under its bare name — so checking only the bare name reports
     /// every tool missing on the one platform with the shortest prerequisite list.
     /// </summary>
-    private static IEnumerable<string> Candidates(string name)
+    private static IEnumerable<string> Candidates(string name) =>
+        Candidates(name, Host.This, Environment.GetEnvironmentVariable("PATHEXT"));
+
+    /// <param name="os">Taken rather than asked, so the Windows list is checkable anywhere.</param>
+    /// <param name="pathext">
+    /// PATHEXT's value, or null for the default. Passed in for the same reason as the
+    /// platform: a machine that is not Windows has none, and the default is the part most
+    /// worth pinning — it decides whether "git" is ever looked for as "git.exe", and
+    /// getting it wrong reports every prerequisite missing on the one platform whose
+    /// prerequisite list is shortest.
+    /// </param>
+    public static IEnumerable<string> Candidates(string name, HostOs os, string? pathext)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (os != HostOs.Windows)
         {
             yield return name;
             yield break;
@@ -107,10 +118,8 @@ public static class ExecutableLookup
         // An explicit extension is already a filename.
         if (Path.HasExtension(name)) { yield return name; yield break; }
 
-        var pathext = Environment.GetEnvironmentVariable("PATHEXT")
-                      ?? ".COM;.EXE;.BAT;.CMD";
-
-        foreach (var ext in pathext.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var ext in (pathext ?? ".COM;.EXE;.BAT;.CMD")
+                 .Split(';', StringSplitOptions.RemoveEmptyEntries))
             yield return name + ext.Trim();
     }
 }

@@ -21,11 +21,16 @@ public sealed record DotnetRuntime(string Root, ExecutableArch Arch, IReadOnlyLi
 /// </summary>
 public static class DotnetRuntimeLocator
 {
-    private static string HostFileName =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet";
+    private static string HostFileName => Host.This.Exe("dotnet");
 
     /// <summary>Plausible install roots, most authoritative first.</summary>
-    public static IEnumerable<string> CandidateRoots(string? preferredRoot = null)
+    /// <param name="preferredRoot">A root to try ahead of everything, or null.</param>
+    /// <param name="os">
+    /// Taken rather than asked, so the Windows list is checkable from any machine. The two
+    /// lists share nothing at all below the environment variables, so a mistake in either
+    /// is invisible to a run on the other.
+    /// </param>
+    public static IEnumerable<string> CandidateRoots(string? preferredRoot = null, HostOs? os = null)
     {
         if (!string.IsNullOrWhiteSpace(preferredRoot)) yield return preferredRoot;
 
@@ -35,7 +40,7 @@ public static class DotnetRuntimeLocator
             if (!string.IsNullOrWhiteSpace(value)) yield return value;
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if ((os ?? Host.This) == HostOs.Windows)
         {
             foreach (var var in new[] { "ProgramFiles", "ProgramFiles(x86)" })
             {

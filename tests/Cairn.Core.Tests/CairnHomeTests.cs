@@ -14,7 +14,26 @@ namespace Cairn.Core.Tests;
 [Collection(HomeEnvironment.Collection)]
 public class CairnHomeTests
 {
-    private const string Default = "/home/someone/.cairn";
+    /// <summary>
+    /// A fully-qualified path for the platform this is running on.
+    ///
+    /// Not decoration. <see cref="CairnHome.ResolvePointer"/> refuses a pointer that is not
+    /// fully qualified, and Elsewhere is not one on Windows — it is rooted but has no
+    /// drive, so Path.IsPathFullyQualified says false and the pointer is correctly ignored.
+    /// Written the Unix way only, these tests asserted the rule on two platforms and
+    /// asserted its refusal branch on the third while claiming to test the rule.
+    /// </summary>
+    private static string Abs(params string[] parts) =>
+        (OperatingSystem.IsWindows() ? "C:" : "")
+        + Path.DirectorySeparatorChar
+        + string.Join(Path.DirectorySeparatorChar, parts);
+
+    private static readonly string Default = Abs("home", "someone", ".cairn");
+    private static readonly string Elsewhere = Abs("mnt", "big", "cairn");
+    private static readonly string Managed = Abs("var", "lib", "cairn");
+    private static readonly string Sandbox = Abs("tmp", "sandbox", ".cairn");
+    private static readonly string Missing = Abs("Volumes", "Gone", "cairn");
+
     private static readonly string Pointer = Path.Combine(Default, CairnHome.PointerName);
 
     private static Func<string, string?> Pointing(string? contents) => _ => contents;
@@ -35,9 +54,9 @@ public class CairnHomeTests
     {
         // ServerUnit writes Environment=CAIRN_HOME= into systemd units. A pointer file that
         // outranked it would redirect a running server to somewhere else entirely.
-        var r = CairnHome.Resolve("/var/lib/cairn", Default, Pointing("/mnt/big/cairn"));
+        var r = CairnHome.Resolve(Managed, Default, Pointing(Elsewhere));
 
-        Assert.Equal("/var/lib/cairn", r.Root);
+        Assert.Equal(Managed, r.Root);
         Assert.Equal(HomeSource.Environment, r.Source);
     }
 
@@ -58,9 +77,9 @@ public class CairnHomeTests
     [Fact]
     public void A_pointer_file_moves_the_root()
     {
-        var r = CairnHome.Resolve(null, Default, Pointing("/mnt/big/cairn"));
+        var r = CairnHome.Resolve(null, Default, Pointing(Elsewhere));
 
-        Assert.Equal("/mnt/big/cairn", r.Root);
+        Assert.Equal(Elsewhere, r.Root);
         Assert.Equal(HomeSource.Pointer, r.Source);
         Assert.Null(r.Problem);
     }
@@ -76,14 +95,15 @@ public class CairnHomeTests
         Assert.Equal(Pointer, asked);
     }
 
-    [Theory]
-    [InlineData("/mnt/big/cairn\n")]
-    [InlineData("/mnt/big/cairn\r\n")]
-    [InlineData("  /mnt/big/cairn  ")]
-    public void Whitespace_around_the_path_is_ignored(string written)
+    [Fact]
+    public void Whitespace_around_the_path_is_ignored()
     {
         // Every editor adds a trailing newline, and SetPointer writes one deliberately.
-        Assert.Equal("/mnt/big/cairn", CairnHome.Resolve(null, Default, Pointing(written)).Root);
+        //
+        // A Fact over a loop rather than a Theory, because the path has to be built for the
+        // platform and InlineData takes compile-time constants only.
+        foreach (var written in new[] { Elsewhere + "\n", Elsewhere + "\r\n", "  " + Elsewhere + "  " })
+            Assert.Equal(Elsewhere, CairnHome.Resolve(null, Default, Pointing(written)).Root);
     }
 
     [Fact]
@@ -128,17 +148,17 @@ public class CairnHomeTests
         // have made every sandboxed run take the one branch users do not — including
         // refusing the move, which is the thing a sandbox exists to try.
         var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
-        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", "/tmp/sandbox/.cairn");
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", Sandbox);
 
         try
         {
-            Assert.Equal("/tmp/sandbox/.cairn", CairnHome.DefaultRoot);
+            Assert.Equal(Sandbox, CairnHome.DefaultRoot);
 
             // And it is a default, not an override: the pointer still outranks it, which is
             // the whole point of sandboxing this way rather than with CAIRN_HOME.
-            var r = CairnHome.Resolve(null, CairnHome.DefaultRoot, _ => "/mnt/big/cairn");
+            var r = CairnHome.Resolve(null, CairnHome.DefaultRoot, _ => Elsewhere);
 
-            Assert.Equal("/mnt/big/cairn", r.Root);
+            Assert.Equal(Elsewhere, r.Root);
             Assert.Equal(HomeSource.Pointer, r.Source);
         }
         finally
@@ -157,7 +177,7 @@ public class CairnHomeTests
 
         try
         {
-            CairnHome.SetPointer("/mnt/big/cairn");
+            CairnHome.SetPointer(Elsewhere);
 
             Assert.True(File.Exists(CairnHome.PointerPath));
             Assert.Equal(HomeSource.Pointer, CairnHome.Resolve().Source);
@@ -181,7 +201,7 @@ public class CairnHomeTests
     [Fact]
     public void Preflight_passes_when_the_pointer_target_is_there()
     {
-        var r = new HomeResolution("/mnt/big/cairn", HomeSource.Pointer, null);
+        var r = new HomeResolution(Elsewhere, HomeSource.Pointer, null);
 
         Assert.Null(CairnHome.Preflight(r, _ => true));
     }
@@ -191,12 +211,12 @@ public class CairnHomeTests
     {
         // The unplugged-disk case. Falling back would start Cairn with an empty root, which
         // reads as total loss and invites re-downloading the game beside data that is fine.
-        var r = new HomeResolution("/Volumes/Gone/cairn", HomeSource.Pointer, null);
+        var r = new HomeResolution(Missing, HomeSource.Pointer, null);
 
         var problem = CairnHome.Preflight(r, _ => false);
 
         Assert.NotNull(problem);
-        Assert.Contains("/Volumes/Gone/cairn", problem);
+        Assert.Contains(Missing, problem);
     }
 
     [Fact]
@@ -213,7 +233,7 @@ public class CairnHomeTests
         // Somebody who set CAIRN_HOME is looking at what they set it to; a server unit that
         // names a directory systemd will create is the ordinary case, not a fault.
         Assert.Null(CairnHome.Preflight(
-            new HomeResolution("/var/lib/cairn", HomeSource.Environment, null), _ => false));
+            new HomeResolution(Managed, HomeSource.Environment, null), _ => false));
     }
 
     [Fact]

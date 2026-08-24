@@ -1,0 +1,71 @@
+name: CI
+
+# Every push and every pull request, which is the gap this fills.
+#
+# `release.yml` runs the suites too, and its test job is described there as "the only gate
+# between a tag and something people download" — which was true and was the problem. It
+# fires on `push: tags: ['v*']`, so the first time a commit met the test suite was the
+# moment somebody was cutting a release from it. A break found there is found at the worst
+# possible time, and a break that only shows on a platform that job does not run is not
+# found at all: Windows could not install a private .NET runtime for as long as anyone can
+# tell, because nothing ever ran a Windows job and the failing branch is one only Windows
+# takes.
+#
+# This is deliberately not a copy of the release pipeline. It builds nothing for
+# publication, signs nothing and uploads nothing; it answers one question, on three
+# platforms, as fast as it can.
+on:
+  push:
+    branches: ['**']
+    # Tags are release.yml's, and it runs the same suites. Without this a tag push runs
+    # both workflows over the identical commit.
+    tags-ignore: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# Only what checkout needs. Same reasoning as release.yml: actions/checkout leaves the
+# token where git will use it for the whole job, so a job with write hands repository write
+# to every package `dotnet test` restores.
+permissions:
+  contents: read
+
+# No DOTNET_VERSION, deliberately: every setup-dotnet below reads global.json, so the SDK
+# is decided in one file rather than in a workflow variable free to disagree with it.
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+# A second push to the same branch makes the first one's answer uninteresting. Not applied
+# to the default branch, where every commit's result is worth having on its own.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    strategy:
+      # One platform failing is a fact about that platform, and the others' answers are
+      # what tell you whether it is platform-specific. Cancelling them throws that away.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - run: dotnet test tests/Cairn.Core.Tests/Cairn.Core.Tests.csproj -c Release
+
+      # Run through the built dll rather than `dotnet test`: this suite is xunit v3 with
+      # Avalonia's headless backend, which needs no display but does want its own runner.
+      # `dotnet test` on it discovers zero tests and exits 0, which is a whole suite
+      # vanishing while the job stays green.
+      - run: dotnet build tests/Cairn.App.Tests -c Release
+      - run: dotnet tests/Cairn.App.Tests/bin/Release/net10.0/Cairn.App.Tests.dll

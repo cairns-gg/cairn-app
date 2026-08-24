@@ -65,6 +65,33 @@ The `Cairn.Core.Tests` conformance suite compiles only when `VINTAGE_STORY` poin
 install (`HAS_GAME`); it runs Cairn's version comparator against the real
 `Vintagestory.API.Config.GameVersion` over a corpus. A clean checkout skips it.
 
+### Platform forks
+
+`.github/workflows/ci.yml` runs both suites on Linux, Windows and macOS for every push —
+`release.yml` runs them too, but only when a tag is pushed, which is the wrong time to first
+learn something is broken.
+
+CI on three platforms is not the main defence, though, and it is worth knowing why. A
+platform fork is a branch only one machine can reach, and a branch nothing reaches is a
+branch nothing checks: `ArchiveExtractor` chose its unpacker by filename while every caller
+hands it `<name>.partial`, so the zip half was dead code on macOS and Linux and broken on
+Windows — no private .NET runtime could be installed there at all — and the suites were
+green throughout.
+
+So **a platform fork takes the platform as a parameter**, defaulted to `Host.This`, which is
+the one place in Cairn that asks the runtime what it is. `OptimumProvisioner` arrived at
+this first ("a parameter so all three can be tested from one host"); `HostOs` is that idea
+with one type. `PlatformForkTests` then asks all three from whichever machine is running,
+in milliseconds, rather than half an hour later in a job somebody has to go and read.
+
+Prefer, in order: a test that hands the code Windows-shaped *input* (a real zip named
+`…zip.partial`, a `.exe` name, a backslash in a marker); a test that names `HostOs.Windows`;
+and only then the Windows CI job, which is there to catch what the first two missed.
+
+Two things are genuinely per-platform and are guarded rather than parameterised: unix file
+modes (`OwnerOnlyTests`), and `cairn-server`'s systemd unit paths, which are composed with
+`Path.Combine` and so only come out right on the one platform it ships for.
+
 ### Auditing what ModDB actually serves
 
 ```bash

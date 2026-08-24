@@ -136,12 +136,23 @@ public class ExecutableLookupTests : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Same file, allowing for the case of the extension on Windows.
+    ///
+    /// PATHEXT is upper case by convention — ".COM;.EXE;.BAT;.CMD" — so a bare "faketool"
+    /// is found as "faketool.EXE" while the file planted is "faketool.exe". They name the
+    /// same file on a case-insensitive filesystem, and it is the file that is being
+    /// asserted about. Exact on every other platform, where case means something.
+    /// </summary>
+    private static void SameFile(string expected, string? actual) =>
+        Assert.Equal(expected, actual, ignoreCase: OperatingSystem.IsWindows());
+
     [Fact]
     public void A_command_on_the_search_path_is_found()
     {
         var planted = Plant(OperatingSystem.IsWindows() ? "faketool.exe" : "faketool");
 
-        Assert.Equal(planted, ExecutableLookup.Find("faketool", _dir));
+        SameFile(planted, ExecutableLookup.Find("faketool", _dir));
         Assert.True(ExecutableLookup.Exists("faketool", _dir));
     }
 
@@ -158,7 +169,7 @@ public class ExecutableLookupTests : IDisposable
         var planted = Plant(OperatingSystem.IsWindows() ? "faketool.exe" : "faketool");
         var search = string.Join(Path.PathSeparator, Path.Combine(_dir, "nope"), _dir);
 
-        Assert.Equal(planted, ExecutableLookup.Find("faketool", search));
+        SameFile(planted, ExecutableLookup.Find("faketool", search));
     }
 
     [Fact]
@@ -178,7 +189,7 @@ public class ExecutableLookupTests : IDisposable
 
         var planted = Plant("faketool.cmd");
 
-        Assert.Equal(planted, ExecutableLookup.Find("faketool", _dir));
+        SameFile(planted, ExecutableLookup.Find("faketool", _dir));
     }
 
     [Fact]

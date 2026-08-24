@@ -46,7 +46,11 @@ public class DiagnosticsTests
         // The whole reason Redact exists: /Users/<name> is a real person's name, and this
         // text is going somewhere public.
         Assert.DoesNotContain(home, Diagnostics.Report());
-        Assert.Equal("~/.cairn/packs", Diagnostics.Redact(Path.Combine(home, ".cairn", "packs")));
+
+        // The tail keeps the platform's own separators — Redact replaces the home prefix
+        // and rewrites nothing else — so the expectation is built the same way the input is.
+        Assert.Equal(Path.Combine("~", ".cairn", "packs"),
+            Diagnostics.Redact(Path.Combine(home, ".cairn", "packs")));
     }
 
     [Fact]
