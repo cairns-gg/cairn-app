@@ -201,6 +201,14 @@ The pack list, the paths on screen and the next launch now follow the move as it
 Cairn will never look. That folder is safe to delete — the only thing worth keeping in it is the
 small `home` file, which is what points Cairn at the new drive.
 
+## Moving Cairn's files could leave the old copy behind on Windows
+
+**0.9.6.** **Preferences → Move…** copies everything to the new drive and then clears out the
+old location. If anything in the old one was a linked folder, that last step failed on Windows
+and stopped there — so the space was never given back, which is usually the whole reason for
+moving. Your files were never at risk: the move itself had already finished and been checked,
+and the failure was in the tidying up afterwards.
+
 ## Private .NET runtimes install on Windows
 
 **0.9.6.** On a Windows machine with no .NET, Cairn is supposed to fetch a private copy so the

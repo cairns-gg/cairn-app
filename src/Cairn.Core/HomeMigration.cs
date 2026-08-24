@@ -290,7 +290,22 @@ public static class HomeMigration
 
             // A link is unlinked, never followed — deleting through one would take what it
             // points at, which is somewhere else entirely and not ours to remove.
-            if (info.LinkTarget is not null) { File.Delete(entry); continue; }
+            //
+            // Which call does the unlinking is a platform question wearing a portable API's
+            // clothes: File.Delete removes a symlink of either kind on Unix, and Windows
+            // refuses one that points at a directory, wanting Directory.Delete. Asked of the
+            // entry's own attributes rather than of the operating system, because the
+            // attribute is there on both and the distinction is real on both.
+            //
+            // Directory.Delete without recursion on a link removes the link and not what is
+            // behind it, which is the same promise File.Delete makes here.
+            if (info.LinkTarget is not null)
+            {
+                if (info.Attributes.HasFlag(FileAttributes.Directory)) Directory.Delete(entry);
+                else File.Delete(entry);
+
+                continue;
+            }
 
             if (info.Attributes.HasFlag(FileAttributes.Directory))
             {

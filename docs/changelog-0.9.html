@@ -111,6 +111,10 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p><strong>If this happened to you</strong>, the mods downloaded a second time are in the old location, where Cairn will never look. That folder is safe to delete &mdash; the only thing worth keeping in it is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
 
+<h2>Moving Cairn's files could leave the old copy behind on Windows</h2>
+
+<p><strong>0.9.6.</strong> <strong>Preferences &rarr; Move&hellip;</strong> copies everything to the new drive and then clears out the old location. If anything in the old one was a linked folder, that last step failed on Windows and stopped there &mdash; so the space was never given back, which is usually the whole reason for moving. Your files were never at risk: the move itself had already finished and been checked, and the failure was in the tidying up afterwards.</p>
+
 <h2>Private .NET runtimes install on Windows</h2>
 
 <p><strong>0.9.6.</strong> On a Windows machine with no .NET, Cairn is supposed to fetch a private copy so the game can start. It never could: the download failed to unpack every time, reporting</p>
