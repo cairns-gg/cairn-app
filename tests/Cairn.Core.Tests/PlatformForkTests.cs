@@ -106,10 +106,19 @@ public class PlatformForkTests
 
     // ---- where a .NET runtime lives ----
 
+    /// <summary>
+    /// A machine with nothing pointing at a .NET, so the platform's own list is all there
+    /// is to see. Not decoration: a CI runner sets DOTNET_ROOT=/usr/share/dotnet, which
+    /// turned up in the Windows list and made this look like the branch was wrong when what
+    /// was wrong was the test reading the machine it ran on.
+    /// </summary>
+    private static readonly Func<string, string?> NothingSet = _ => null;
+
     [Fact]
     public void Windows_looks_for_dotnet_under_program_files_and_nowhere_unix()
     {
-        var roots = DotnetRuntimeLocator.CandidateRoots(os: HostOs.Windows).ToList();
+        var roots = DotnetRuntimeLocator
+            .CandidateRoots(os: HostOs.Windows, environment: NothingSet).ToList();
 
         // The two lists share nothing below the environment variables, so a mistake in
         // either is invisible to a run on the other.
@@ -122,7 +131,7 @@ public class PlatformForkTests
     [InlineData(HostOs.MacOs)]
     public void Unix_looks_where_microsofts_installer_puts_it(HostOs os)
     {
-        var roots = DotnetRuntimeLocator.CandidateRoots(os: os).ToList();
+        var roots = DotnetRuntimeLocator.CandidateRoots(os: os, environment: NothingSet).ToList();
 
         // The x64 root first: a default install on Apple Silicon is arm64 and cannot host
         // the game's x64 apphost.
@@ -139,7 +148,8 @@ public class PlatformForkTests
     [InlineData(HostOs.MacOs)]
     public void A_preferred_root_outranks_everything_on_every_platform(HostOs os)
     {
-        var roots = DotnetRuntimeLocator.CandidateRoots("/somewhere/chosen", os).ToList();
+        var roots = DotnetRuntimeLocator
+            .CandidateRoots("/somewhere/chosen", os, NothingSet).ToList();
 
         Assert.Equal("/somewhere/chosen", roots[0]);
     }

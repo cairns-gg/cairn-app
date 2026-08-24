@@ -30,13 +30,24 @@ public static class DotnetRuntimeLocator
     /// lists share nothing at all below the environment variables, so a mistake in either
     /// is invisible to a run on the other.
     /// </param>
-    public static IEnumerable<string> CandidateRoots(string? preferredRoot = null, HostOs? os = null)
+    /// <param name="environment">
+    /// How to read DOTNET_ROOT and its x64 sibling. Taken for the same reason as the
+    /// platform, and it is not hypothetical: a CI runner has DOTNET_ROOT set to
+    /// /usr/share/dotnet, so a test asking for the Windows list on Linux got a Unix path
+    /// back in it and could not tell that from the branch being wrong. The same arrangement
+    /// <see cref="GameInstall.CandidateDirectories(string?, string?)"/> already makes, and
+    /// for the same reason.
+    /// </param>
+    public static IEnumerable<string> CandidateRoots(
+        string? preferredRoot = null, HostOs? os = null, Func<string, string?>? environment = null)
     {
+        var read = environment ?? Environment.GetEnvironmentVariable;
+
         if (!string.IsNullOrWhiteSpace(preferredRoot)) yield return preferredRoot;
 
         foreach (var name in new[] { "DOTNET_ROOT_X64", "DOTNET_ROOT" })
         {
-            var value = Environment.GetEnvironmentVariable(name);
+            var value = read(name);
             if (!string.IsNullOrWhiteSpace(value)) yield return value;
         }
 
