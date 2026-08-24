@@ -201,6 +201,24 @@ The pack list, the paths on screen and the next launch now follow the move as it
 Cairn will never look. That folder is safe to delete — the only thing worth keeping in it is the
 small `home` file, which is what points Cairn at the new drive.
 
+## Private .NET runtimes install on Windows
+
+**0.9.6.** On a Windows machine with no .NET, Cairn is supposed to fetch a private copy so the
+game can start. It never could: the download failed to unpack every time, reporting
+
+```
+The archive entry was compressed using an unsupported compression method.
+```
+
+which reads like a corrupt download and was not one. Cairn worked out what an archive was from
+its name, and the file it looks at is the part-downloaded one — `…zip.partial`, not `…zip` — so
+Windows's zip downloads were fed to the tarball unpacker. Everywhere else the downloads are
+tarballs, so the same mistake picked the right unpacker by accident and nobody saw it.
+
+It reads the file itself now rather than its name. **Install its .NET** in Preferences → Storage
+works on Windows, and so does the .NET SDK that building Optimum needs — which is why building
+Optimum on Windows could not get past its first step either.
+
 ## Optimum, for 1.22.7 and for the version you are still on
 
 **0.9.4.** Vintage Story **1.22.7** is out, and so is the Optimum build for it: Cairn now builds

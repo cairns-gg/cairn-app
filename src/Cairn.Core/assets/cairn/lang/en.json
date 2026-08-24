@@ -604,6 +604,7 @@
   "install-unknown-artifact": "{0} for {1} ships as '{2}', which Cairn does not know how to install. Install it manually, then point Cairn at the resulting install.",
   "install-windows-only": "{0} is a Windows installer and can only be run on Windows.",
   "install-not-a-game": "Unpacked {0} but {1} does not look like a game install.",
+  "archive-unknown-format": "{0} is neither a zip nor a gzipped tar, so Cairn cannot unpack it. The download may be incomplete.",
   "install-not-a-game-log": "Installed {0} but {1} does not look like a game install. The installer's log is at {2}.",
   "install-no-md5": "The version manifest published no md5 for this download, so there is nothing to check it against. Refusing to install it.",
   "install-corrupt": "Download is corrupt: md5 {0} does not match the published {1}.",

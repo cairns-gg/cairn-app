@@ -111,6 +111,16 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 
 <p><strong>If this happened to you</strong>, the mods downloaded a second time are in the old location, where Cairn will never look. That folder is safe to delete &mdash; the only thing worth keeping in it is the small <code>home</code> file, which is what points Cairn at the new drive.</p>
 
+<h2>Private .NET runtimes install on Windows</h2>
+
+<p><strong>0.9.6.</strong> On a Windows machine with no .NET, Cairn is supposed to fetch a private copy so the game can start. It never could: the download failed to unpack every time, reporting</p>
+
+<pre><code>The archive entry was compressed using an unsupported compression method.</code></pre>
+
+<p>which reads like a corrupt download and was not one. Cairn worked out what an archive was from its name, and the file it looks at is the part-downloaded one &mdash; <code>&hellip;zip.partial</code>, not <code>&hellip;zip</code> &mdash; so Windows's zip downloads were fed to the tarball unpacker. Everywhere else the downloads are tarballs, so the same mistake picked the right unpacker by accident and nobody saw it.</p>
+
+<p>It reads the file itself now rather than its name. <strong>Install its .NET</strong> in Preferences &rarr; Storage works on Windows, and so does the .NET SDK that building Optimum needs &mdash; which is why building Optimum on Windows could not get past its first step either.</p>
+
 <h2>Optimum, for 1.22.7 and for the version you are still on</h2>
 
 <p><strong>0.9.4.</strong> Vintage Story <strong>1.22.7</strong> is out, and so is the Optimum build for it: Cairn now builds <strong>Optimum 0.3.11</strong> from a pack's Settings tab, exactly as before.</p>
