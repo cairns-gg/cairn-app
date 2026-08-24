@@ -48,13 +48,26 @@ public sealed record OptimumSource(string Url, string Ref, string GameVersion, s
     /// </summary>
     public static readonly IReadOnlyList<OptimumSource> Known =
     [
-        // Plain upstream main. Both of the commits the fork entry below carries — the
-        // macOS archive-root fix and atomic client downloads — were merged upstream in
-        // August 2026, so from 1.22.7 on there is nothing to carry.
-        new(Url: "https://github.com/Zaldaryon/Optimum.git",
-            Ref: "ca04e0cce99e4f746591725c765f4f1e7f7a6a99",
+        // Plain upstream, at the v0.3.13 tag. Both of the commits the fork entry below
+        // carries — the macOS archive-root fix and atomic client downloads — were merged
+        // upstream in August 2026, so from 1.22.7 on there is nothing to carry.
+        //
+        // The repository moved from Zaldaryon/Optimum to StratumServer/Optimum in August
+        // 2026. GitHub redirects the old name and a clone of it still resolves this sha,
+        // but the entry names where the refs actually live: a redirect is somebody else's
+        // to withdraw, and this list exists because a pin should not depend on one.
+        //
+        // Replaced 0.3.11, which was not merely old. Optimum's from-source Windows build
+        // was broken from 0.3.6 to 0.3.11 — a duplicated FrameworkReference in the
+        // generated runtime-donor project, failing as NETSDK1087 — so every Windows user
+        // who pressed the button got a twenty-minute failure. 0.3.12 fixed it, and their
+        // Windows CI only began running the packaging step that would have caught it in
+        // the same release. That is the version of this list going stale that costs
+        // somebody an afternoon rather than a few frames per second.
+        new(Url: "https://github.com/StratumServer/Optimum.git",
+            Ref: "e5888a3f38fd3520be29706636016eb12f3b850b",
             GameVersion: "1.22.7",
-            Version: "0.3.11"),
+            Version: "0.3.13"),
 
         // dizzyd/Optimum's main plus two commits, both of which Cairn needs and neither of
         // which existed upstream at the time:

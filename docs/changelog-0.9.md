@@ -227,6 +227,15 @@ It reads the file itself now rather than its name. **Install its .NET** in Prefe
 works on Windows, and so does the .NET SDK that building Optimum needs — which is why building
 Optimum on Windows could not get past its first step either.
 
+## Optimum builds again on Windows
+
+**0.9.6.** Cairn built **Optimum 0.3.11**, and Optimum's from-source build was broken on Windows
+from 0.3.6 through 0.3.11 — so pressing **Build Optimum** on Windows spent twenty minutes and then
+failed. Optimum fixed it in 0.3.12; Cairn now builds **0.3.13**, still for Vintage Story 1.22.7.
+
+Nothing you have already built is affected, and a pack already running an optimised client goes on
+running it. If a build of yours failed, this is why, and it is worth another go.
+
 ## Run the Optimum you built yourself
 
 **0.9.6.** Cairn builds a pinned revision of Optimum, and that pin only moves when Cairn does — so
