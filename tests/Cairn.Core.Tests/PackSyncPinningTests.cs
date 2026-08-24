@@ -94,6 +94,16 @@ public class PackSyncPinningTests : IDisposable
             using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
             {
                 var entry = zip.CreateEntry("modinfo.json");
+                // Pinned, or the same URL does not serve the same bytes twice. A zip
+                // entry stamps the current time, and DOS timestamps have two-second
+                // granularity — so two builds of identical content are byte-identical
+                // within a bucket and differ across one. A sync that re-downloads a locked
+                // release then hashes it, finds a checksum that does not match the lock,
+                // and correctly refuses the mod. That is the syncer being right about a
+                // stub being wrong: a real CDN serves one file for one URL, and this has to
+                // as well. It failed roughly once in a hundred runs, which is exactly often
+                // enough to be dismissed as CI being CI.
+                entry.LastWriteTime = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
                 using var writer = new StreamWriter(entry.Open());
                 writer.Write($$"""{"type":"content","modid":"olla","name":"{{marker}}"}""");
             }
