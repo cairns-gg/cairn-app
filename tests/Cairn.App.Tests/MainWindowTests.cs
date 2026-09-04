@@ -3115,6 +3115,124 @@ public class MainWindowTests : IDisposable
     }
 
     /// <summary>
+    /// A check narrows the list to what it found. Six updates scattered through a hundred
+    /// and fifty rows are six rows nobody can see at once, and the point of checking is to
+    /// work through them.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_check_shows_what_it_found_rather_than_the_whole_pack()
+    {
+        var (window, vm) = Show(TwoUpdatesWaiting());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Nothing to narrow to before a check has run, so nothing is offered.
+        Assert.False(detail.OnlyUpdates);
+        Assert.False(detail.ShowOnlyUpdates);
+
+        detail.Mods.Single(m => m.ModId == "glassview").UpdateAvailable = null;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(detail.OnlyUpdates);
+        Assert.True(detail.ShowOnlyUpdates);
+
+        var box = window.GetVisualDescendants().OfType<CheckBox>()
+            .Single(c => c.Name == "OnlyUpdates");
+
+        Assert.True(box.IsEffectivelyVisible);
+        Assert.True(box.IsChecked);
+    }
+
+    /// <summary>
+    /// Both narrowings compose rather than one of them winning: "which of the ones waiting
+    /// is the chisel one".
+    /// </summary>
+    [AvaloniaFact]
+    public async Task The_tick_and_the_box_narrow_together()
+    {
+        var (_, vm) = Show(TwoUpdatesWaiting());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, detail.VisibleMods.Count);
+
+        detail.SearchText = "unchi";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+        Assert.Equal("showing 1 of 2", detail.ListHeading);
+
+        // Unticking widens back to the pack, with the typed word still applying.
+        detail.OnlyUpdates = false;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+
+        // A second check, on a pane that is already narrowed. The flag does not move, so
+        // the rows have to be re-filtered against what this check found rather than the
+        // last one — here, glassview having been taken in the meantime.
+        detail.OnlyUpdates = true;
+        new PackLock
+        {
+            GameVersion = "1.22.5",
+            Mods =
+            [
+                new LockedMod { ModId = "glassview", Version = "2.0.0" },
+                new LockedMod { ModId = "unchisel", Version = "1.0.0" },
+            ],
+        }.Save(Path.Combine(_home, "packs", "anego", "pack.lock.json"));
+
+        detail.SearchText = "";
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+
+        // And a word matching nothing that is waiting says which nothing this is, rather
+        // than implying the mod is not in the pack at all.
+        detail.SearchText = "glassvi";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(detail.ShowNoModsMatch);
+        Assert.Equal("No mod with an update waiting matches that.", detail.NoModsMatchLine);
+    }
+
+    /// <summary>
+    /// It lets go by itself. Left on, taking the last update would leave an empty list
+    /// under a full pack.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Taking_the_last_one_widens_the_list_again()
+    {
+        var (_, vm) = Show(TwoUpdatesWaiting());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+        Assert.True(detail.OnlyUpdates);
+
+        // One of the two. The tick stays, because one is still waiting.
+        detail.Mods.Single(m => m.ModId == "glassview").UpdateCommand.Execute(null);
+        await WaitFor(() => !detail.IsBusy
+                            && detail.Mods.Single(m => m.ModId == "glassview").InstalledVersion == "2.0.0");
+
+        Assert.True(detail.OnlyUpdates);
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+
+        await detail.UpdateAllCommand.ExecuteAsync(null);
+
+        Assert.False(detail.OnlyUpdates);
+        Assert.False(detail.ShowOnlyUpdates);
+        Assert.Equal(2, detail.VisibleMods.Count);
+        Assert.Equal("2 mods in this pack", detail.ListHeading);
+    }
+
+    /// <summary>
     /// Nothing is left over once the last one is taken, so the pane does not go on offering
     /// an update to a pack that has none.
     /// </summary>
@@ -3131,6 +3249,148 @@ public class MainWindowTests : IDisposable
         Assert.False(detail.AnyUpdates);
         Assert.Null(detail.UpdateSummary);
         Assert.False(detail.HasUpdateSummary);
+    }
+
+    // ---- finding a mod in a pack of a hundred and fifty ----
+
+    [AvaloniaFact]
+    public void Filtering_narrows_what_is_drawn_and_nothing_else()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var detail = vm.Detail!;
+        var list = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "PackMods");
+
+        Assert.Equal(2, list.ItemCount);
+
+        detail.SearchText = "unchi";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+        Assert.Equal(1, list.ItemCount);
+
+        // A filter, not a removal: the pack still has both, and so does everything that
+        // reasons about the pack rather than about the list.
+        Assert.Equal(2, detail.Mods.Count);
+        Assert.Equal("showing 1 of 2", detail.ListHeading);
+
+        detail.ClearSearchCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(2, list.ItemCount);
+        Assert.Equal("2 mods in this pack", detail.ListHeading);
+    }
+
+    /// <summary>
+    /// One box, two jobs, and no control to say which. What is typed narrows the pack
+    /// straight away; the same words go to ModDB when Search is pressed; and clearing the
+    /// box undoes whichever of the two is on screen.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_one_box_filters_the_pack_and_searches_moddb()
+    {
+        var http = new OfflineHandler();
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var detail = vm.Detail!;
+        Assert.Equal("Filter this pack, or search ModDB…", detail.SearchPlaceholder);
+
+        // Opening the pack sends its rows off for names and icons; nothing after that is
+        // this test's doing, so the count is the baseline rather than zero.
+        var asked = http.Requests;
+
+        // Typing. Nothing has to be pressed, and nothing is fetched.
+        detail.SearchText = "glass";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(detail.IsFilteringMods);
+        Assert.False(detail.ShowingSearch);
+        Assert.Equal(["glassview"], detail.VisibleMods.Select(m => m.ModId));
+        Assert.Equal(asked, http.Requests);
+
+        // Pressing Search. Same words, sent on — and the pack list gives way to results
+        // rather than sitting under them.
+        detail.ShowResults("glass", [Hit("glasspanes", "Glass Panes")]);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(detail.ShowingSearch);
+        Assert.Equal("1 result for “glass”", detail.ListHeading);
+
+        // No "nothing in this pack matches" over the results: an empty pack list is what
+        // the results are standing in front of.
+        Assert.False(detail.ShowNoModsMatch);
+
+        // And one Clear for both. Emptying the box is what undoes either.
+        Assert.True(detail.CanClearSearch);
+        detail.ClearSearchCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(detail.ShowingSearch);
+        Assert.False(detail.IsFilteringMods);
+        Assert.False(detail.CanClearSearch);
+        Assert.Equal("2 mods in this pack", detail.ListHeading);
+
+    }
+
+    [AvaloniaFact]
+    public void A_filter_that_matches_nothing_says_so()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        vm.Detail!.SearchText = "nothing here";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Otherwise an empty list under a full pack reads as a pack that has lost its mods.
+        Assert.True(vm.Detail.ShowNoModsMatch);
+        Assert.Contains("No mod in this pack matches that. Press Search to look for it on ModDB.",
+                        VisibleText(window));
+    }
+
+    /// <summary>
+    /// The reason Mods and VisibleMods are two collections. A filter is about what is on
+    /// screen; if it reached the update buttons, typing in a box would change what pressing
+    /// one installs.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_filter_does_not_change_what_update_all_would_take()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        detail.Mods.Single(m => m.ModId == "glassview").UpdateAvailable = "2.0.0";
+
+        detail.SearchText = "unchisel";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.DoesNotContain(detail.VisibleMods, m => m.ModId == "glassview");
+        Assert.True(detail.AnyUpdates);
+    }
+
+    /// <summary>
+    /// A pack holds mod ids and a person remembers names, and for a good few mods the two
+    /// are nothing like each other — "Glass View" against `glassview` is the mild case.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_filter_matches_the_name_as_well_as_the_id()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+
+        // What ModDB supplies once it answers, which is all the row shows from then on.
+        detail.Mods.Single(m => m.ModId == "glassview").Name = "Clear Panes";
+
+        detail.SearchText = "clear pan";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["glassview"], detail.VisibleMods.Select(m => m.ModId));
     }
 
     [AvaloniaFact]

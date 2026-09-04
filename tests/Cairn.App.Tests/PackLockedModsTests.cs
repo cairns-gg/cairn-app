@@ -213,4 +213,51 @@ public class PackLockedModsTests : IDisposable
 
         Assert.True(vm.Detail.Mods.Single().CanChange);
     }
+    /// <summary>
+    /// The one box on the Mods tab does two jobs, and only one of them makes sense here:
+    /// nothing on a locked pack may add a mod, so there is no Search beside it and the box
+    /// says it filters. Filtering itself is not a change to the pack and stays — a followed
+    /// pack of a hundred and fifty mods is the same long scroll as anybody else's.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_locked_pack_keeps_the_filter_and_loses_the_search()
+    {
+        Follow("glassview", "unchisel");
+        var (window, vm) = Open();
+
+        var detail = vm.Detail!;
+        Assert.True(detail.IsLocked);
+        Assert.False(Showing(window, "Search"));
+        Assert.Equal("Filter the mods in this pack…", detail.SearchPlaceholder);
+
+        detail.SearchText = "unchi";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["unchisel"], detail.VisibleMods.Select(m => m.ModId));
+        Assert.Equal(2, detail.Mods.Count);
+
+        // And no invitation to go and find it on ModDB, where there is nothing to press.
+        detail.SearchText = "nothing here";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("No mod in this pack matches that.", detail.NoModsMatchLine);
+    }
+
+    /// <summary>Unlocking gives the box its other half back.</summary>
+    [AvaloniaFact]
+    public void Unlocking_brings_the_search_back()
+    {
+        Follow("glassview", "unchisel");
+        var (window, vm) = Open();
+
+        vm.Detail!.UnlockModsCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(Showing(window, "Search"));
+        Assert.Equal("Filter this pack, or search ModDB…", vm.Detail.SearchPlaceholder);
+    }
+
+    private static bool Showing(Visual root, string label) =>
+        root.GetVisualDescendants().OfType<Button>()
+            .Any(b => (b.Content as string) == label && b.IsEffectivelyVisible);
 }

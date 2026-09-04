@@ -295,6 +295,100 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<ModRowViewModel> Mods { get; } = [];
 
+    /// <summary>
+    /// The rows the list actually draws: <see cref="Mods"/> narrowed by <see cref="ModFilter"/>.
+    ///
+    /// Mods stays the whole pack. Everything that reasons about what the pack contains —
+    /// how many updates are waiting, which of them Update all would take — has to go on
+    /// meaning the pack rather than whatever happens to be on screen, or a typed filter
+    /// would quietly change what a button installs.
+    /// </summary>
+    public ObservableCollection<ModRowViewModel> VisibleMods { get; } = [];
+
+    /// <summary>
+    /// Whether <see cref="SearchText"/> is currently narrowing the pack — which is whenever
+    /// there is anything in the box, since nothing has to be pressed for that half.
+    /// </summary>
+    public bool IsFilteringMods => SearchText.Trim().Length > 0;
+
+    /// <summary>
+    /// Narrows the list to the mods a check found something for.
+    ///
+    /// Turned on by a check that finds any, because that is the moment it is wanted: six
+    /// updates scattered through a hundred and fifty rows are six rows nobody can see at
+    /// once, and the point of checking is to work through them. It is a tick rather than
+    /// something automatic-and-hidden so it can be turned off, and it takes itself off when
+    /// there is nothing left to show — otherwise taking the last update leaves an empty list
+    /// under a full pack.
+    /// </summary>
+    [ObservableProperty] public partial bool OnlyUpdates { get; set; }
+
+    partial void OnOnlyUpdatesChanged(bool value) => RefreshModFilter();
+
+    /// <summary>Whether the list is showing less than the pack, by either means.</summary>
+    public bool IsNarrowed => IsFilteringMods || OnlyUpdates;
+
+    /// <summary>
+    /// Whether the tick is worth offering: only where there is something to narrow to, and
+    /// not over a list of ModDB results, which are nobody's updates.
+    /// </summary>
+    public bool ShowOnlyUpdates => AnyUpdates && !ShowingSearch;
+
+    /// <summary>
+    /// Refills <see cref="VisibleMods"/>.
+    ///
+    /// Called from both halves that can move: the text, and the rows — which are rebuilt on
+    /// every pack edit and reordered again once ModDB has said what each mod is called. That
+    /// last one matters, because a name is half of what this matches on and it arrives after
+    /// the row does.
+    /// </summary>
+    private void RefreshModFilter()
+    {
+        var term = SearchText.Trim();
+
+        VisibleMods.Clear();
+
+        foreach (var row in Mods)
+        {
+            // Both narrowings, so a tick and a typed word compose rather than one of them
+            // winning: "which of the six waiting is the terrain one".
+            if (OnlyUpdates && !row.HasUpdate) continue;
+
+            // Name and id, because a pack holds ids and a person remembers names — and for
+            // a good few mods the two are nothing like each other.
+            if (term.Length > 0
+                && !row.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                && !row.ModId.Contains(term, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            VisibleMods.Add(row);
+        }
+
+        OnPropertyChanged(nameof(ListHeading));
+        OnPropertyChanged(nameof(ShowNoModsMatch));
+        OnPropertyChanged(nameof(NoModsMatchLine));
+    }
+
+    /// <summary>
+    /// Says so when the filter matched nothing. An empty list under a full pack otherwise
+    /// reads as a pack that has lost its mods. Not while results are up: they are what the
+    /// empty pack list is standing behind.
+    /// </summary>
+    public bool ShowNoModsMatch => IsNarrowed && !ShowingSearch && VisibleMods.Count == 0;
+
+    /// <summary>
+    /// And what to do about it, where there is something to do. Nothing in this pack matches
+    /// is exactly the moment the other half of the box is worth knowing about — but a pack
+    /// that is somebody else's has no Search, so it gets the plain sentence, and a list
+    /// already narrowed to the updates says which nothing this is rather than implying the
+    /// mod is not in the pack at all.
+    /// </summary>
+    public string NoModsMatchLine => OnlyUpdates
+        ? Lang.Get("mods-none-match-updates")
+        : CanEditMods
+            ? Lang.Get("mods-none-match-search")
+            : Lang.Get("mods-none-match");
+
     public ObservableCollection<SearchHitViewModel> SearchHits { get; } = [];
 
     public ObservableCollection<string> ReleaseChoices { get; } = [];
@@ -355,7 +449,26 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         || Emptied(EditDescription) != Manifest.Description
         || Emptied(EditConnect) != Manifest.Connect;
 
+    /// <summary>
+    /// One box for both kinds of looking: what you type narrows the pack as you type it,
+    /// and pressing Search sends the same words to ModDB.
+    ///
+    /// Not a mode with a control to set it. The two questions — "which of my mods is this?"
+    /// and "what else is out there?" — are asked in the same words and answered in the same
+    /// place, and a selector in front of the box would mean typing into the wrong one and
+    /// watching nothing happen. The local answer is free and instant, so it costs nothing to
+    /// give it while somebody is still deciding which question they are asking; the one that
+    /// needs the network waits to be asked for.
+    /// </summary>
     [ObservableProperty] public partial string SearchText { get; set; } = "";
+
+    /// <summary>
+    /// What the box says it is for. A pack that is somebody else's has no Search beside it —
+    /// nothing here may add a mod — so on one of those the box is a filter and says so.
+    /// </summary>
+    public string SearchPlaceholder => CanEditMods
+        ? Lang.Get("mods-search-placeholder")
+        : Lang.Get("mods-filter-placeholder");
 
     /// <summary>
     /// True once a search has run, until it is cleared. One list serves both purposes:
@@ -416,11 +529,26 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(ListHeading));
         OnPropertyChanged(nameof(ShowModUpdateCheck));
+        OnPropertyChanged(nameof(CanClearSearch));
+        OnPropertyChanged(nameof(ShowNoModsMatch));
+        OnPropertyChanged(nameof(ShowOnlyUpdates));
     }
 
-    /// <summary>Says which of the two lists is on screen, and how big it is.</summary>
+    /// <summary>
+    /// Whether there is anything to clear: results on screen, or a filter narrowing the
+    /// pack. One button for both, because emptying the box is what undoes either.
+    /// </summary>
+    public bool CanClearSearch => ShowingSearch || IsFilteringMods;
+
+    /// <summary>
+    /// Says which of the two lists is on screen, and how big it is — and, while a filter is
+    /// narrowing the pack, how much of it is being hidden. Without that last part the same
+    /// heading sits above three rows and a hundred and fifty of them.
+    /// </summary>
     public string ListHeading => ShowingSearch
         ? Lang.Plural("mods-results-for", SearchHits.Count, SearchHits.Count, _searchedFor)
+        : IsNarrowed
+            ? Lang.Get("mods-filtered", VisibleMods.Count, Mods.Count)
             : Lang.Plural("mods-in-pack", Mods.Count, Mods.Count);
 
     private string _searchedFor = "";
@@ -440,7 +568,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ListHeading));
     }
 
-    /// <summary>Puts the pack back, without discarding what was typed.</summary>
+    /// <summary>
+    /// Empties the box, which puts the whole pack back — the results if there are any, and
+    /// the filter either way. One action, because with one box there is one thing to undo.
+    /// </summary>
     [RelayCommand]
     private void ClearSearch()
     {
@@ -733,6 +864,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanEditMods));
         OnPropertyChanged(nameof(ShowUnlockedNote));
         OnPropertyChanged(nameof(ShowModUpdateCheck));
+
+        // The box loses its Search on a pack that is somebody else's, so it stops claiming
+        // to reach ModDB and says it filters — and stops offering a button that is not there
+        // to somebody whose filter matched nothing.
+        OnPropertyChanged(nameof(SearchPlaceholder));
+        OnPropertyChanged(nameof(NoModsMatchLine));
 
         // Pushed rather than read, so a row built before the share state was known does
         // not keep believing it is editable.
@@ -1397,6 +1534,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // The rows are new objects, so anything the old ones were carrying has to be put
         // back on them. What a check found is the pack's knowledge, not the row's.
         RestorePendingUpdates();
+        RefreshModFilter();
 
         ModRowViewModel Row(PackMod mod, LockedMod? locked) => new(
             mod, locked,
@@ -1527,6 +1665,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             var from = Mods.IndexOf(sorted[target]);
             if (from != target) Mods.Move(from, target);
         }
+
+        // The names that provoked the re-sort are also what a filter matches on, so the
+        // narrowed list is stale by exactly the rows that just arrived.
+        RefreshModFilter();
     }
 
     private void Persist()
@@ -1905,7 +2047,17 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     private bool CanSearch => !IsBusy && !string.IsNullOrWhiteSpace(SearchText);
 
-    partial void OnSearchTextChanged(string value) => SearchCommand.NotifyCanExecuteChanged();
+    partial void OnSearchTextChanged(string value)
+    {
+        SearchCommand.NotifyCanExecuteChanged();
+
+        // The free half of what the box does, done on the way past. Nothing is fetched and
+        // nothing is decided — the pack is already in memory.
+        OnPropertyChanged(nameof(IsFilteringMods));
+        OnPropertyChanged(nameof(IsNarrowed));
+        OnPropertyChanged(nameof(CanClearSearch));
+        RefreshModFilter();
+    }
 
     /// <summary>
     /// Fetches the icons for a set of results and hands each one to its row as it lands.
@@ -2167,8 +2319,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                      id => !Mods.Any(m => string.Equals(m.ModId, id, StringComparison.OrdinalIgnoreCase))).ToList())
             _pendingUpdates.Remove(gone);
 
+        // Nothing left to narrow to. Left on, it would leave an empty list under a full
+        // pack the moment the last update was taken.
+        if (_pendingUpdates.Count == 0) OnlyUpdates = false;
+
         RefreshUpdateSummary();
         OnPropertyChanged(nameof(AnyUpdates));
+        OnPropertyChanged(nameof(ShowOnlyUpdates));
         UpdateAllCommand.NotifyCanExecuteChanged();
     }
 
@@ -2220,12 +2377,24 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             foreach (var row in Mods)
                 row.UpdateAvailable = _pendingUpdates.GetValueOrDefault(row.ModId);
 
+            // Straight to what was found. Six updates scattered through a hundred and
+            // fifty rows are six rows nobody can see at once, and a check nobody can read
+            // the result of is a check worth less than it cost. Off again when there is
+            // nothing to show, rather than leaving an empty list behind.
+            OnlyUpdates = updates.Count > 0;
+
+            // Explicitly, not as a side effect of the line above: a second check on a pane
+            // already narrowed leaves that flag where it was, and the rows it just rewrote
+            // would go on being filtered against what the first check found.
+            RefreshModFilter();
+
             UpdateSummary = updates.Count == 0
                 ? Lang.Get("mods-up-to-date")
                     : Lang.Plural("mods-updates-available", updates.Count, updates.Count);
 
             foreach (var u in updates) _log(Lang.Get("mods-update-available", u.Describe()));
             OnPropertyChanged(nameof(AnyUpdates));
+            OnPropertyChanged(nameof(ShowOnlyUpdates));
             UpdateAllCommand.NotifyCanExecuteChanged();
         }
         catch (Exception e)

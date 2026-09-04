@@ -389,22 +389,40 @@
                                 </Grid>
                             </Border>
 
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto"
-                                  IsVisible="{Binding Detail.CanEditMods}">
-                                <TextBox Grid.Column="0" Text="{Binding Detail.SearchText}"
-                                         PlaceholderText="{l:Tr mods-search-placeholder}"
+                            <!--
+                                One box for both kinds of looking, and no control to say
+                                which. Typing narrows the pack as you type — free and
+                                instant, since the answer is already in memory — and Search
+                                sends the same words to ModDB for what the pack has not got.
+                                Two boxes stacked said the same thing twice and still left
+                                you reading placeholders to find out which one you wanted; a
+                                selector in front of one box would be a mode, and a mode is
+                                something to be in the wrong one of.
+                            -->
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" x:Name="ModSearchBox"
+                                         Text="{Binding Detail.SearchText}"
+                                         PlaceholderText="{Binding Detail.SearchPlaceholder}"
                                          Margin="0,0,6,0" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                     <!-- Always the default button, not only before the first
                                          search. It used to stop being one as soon as results
                                          appeared, so typing a second search and pressing
                                          enter did nothing at all — the one moment the key is
-                                         most obviously meant to search again. -->
+                                         most obviously meant to search again.
+
+                                         Gone on a pack that is somebody else's, which is
+                                         what leaves the box a plain filter there: nothing on
+                                         a locked pack may add a mod, so offering to go and
+                                         find one would be offering a dead end. -->
                                     <Button Content="{l:Tr mods-search}"
+                                            IsVisible="{Binding Detail.CanEditMods}"
                                             Command="{Binding Detail.SearchCommand}"
                                             IsDefault="True" />
+                                    <!-- One button for both, because emptying the box is
+                                         what undoes either. -->
                                     <Button Content="{l:Tr mods-search-clear}"
-                                            IsVisible="{Binding Detail.ShowingSearch}"
+                                            IsVisible="{Binding Detail.CanClearSearch, FallbackValue=False}"
                                             Command="{Binding Detail.ClearSearchCommand}" />
                                 </StackPanel>
                             </Grid>
@@ -429,6 +447,17 @@
                                             IsVisible="{Binding Detail.ShowModUpdateCheck}"
                                             Command="{Binding Detail.CheckUpdatesCommand}"
                                             Padding="10,3" FontSize="11" />
+
+                                    <!-- Ticked by the check that found them, because six
+                                         updates scattered through a hundred and fifty rows
+                                         are six rows nobody can see at once. Here rather
+                                         than done invisibly, so it can be unticked — and it
+                                         unticks itself when the last update is taken. -->
+                                    <CheckBox x:Name="OnlyUpdates"
+                                              Content="{l:Tr mods-only-updates}"
+                                              IsChecked="{Binding Detail.OnlyUpdates}"
+                                              IsVisible="{Binding Detail.ShowOnlyUpdates, FallbackValue=False}"
+                                              VerticalAlignment="Center" FontSize="11" />
                                     <Button Content="{l:Tr mods-update-all}" Classes="accent"
                                             IsVisible="{Binding Detail.AnyUpdates}"
                                             Command="{Binding Detail.UpdateAllCommand}"
@@ -453,9 +482,11 @@
                                  dock the first one to the left at content width. -->
                             <Panel>
                                 <!-- The pack -->
+                                <!-- VisibleMods, not Mods: the filter narrows what is drawn
+                                     and nothing else. See PackDetailViewModel.VisibleMods. -->
                                 <ListBox x:Name="PackMods"
                                          IsVisible="{Binding !Detail.ShowingSearch}"
-                                         ItemsSource="{Binding Detail.Mods}">
+                                         ItemsSource="{Binding Detail.VisibleMods}">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ModRowViewModel">
                                         <Panel Margin="0,4" Background="Transparent"
@@ -711,6 +742,16 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+
+                                <!-- Which nothing this is, and what to do about it. An empty
+                                     list under a pack of a hundred and fifty mods otherwise
+                                     reads as a pack that has lost them — and this is the
+                                     moment the other half of the box is worth knowing
+                                     about. -->
+                                <TextBlock Text="{Binding Detail.NoModsMatchLine}"
+                                           IsVisible="{Binding Detail.ShowNoModsMatch, FallbackValue=False}"
+                                           Margin="2,8,0,0" FontSize="12" Opacity="0.7"
+                                           VerticalAlignment="Top" TextWrapping="Wrap" />
                             </Panel>
                         </DockPanel>
                     </TabItem>

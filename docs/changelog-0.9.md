@@ -16,6 +16,33 @@ comes down by one, and the rest are still there to press. An update that fails t
 its button. Nothing else has changed — nothing updates on its own, a pinned mod is never
 offered one, and **Update all** still takes everything the check found.
 
+**And a check now shows you what it found.** Five updates scattered through a hundred and fifty
+rows are five rows you cannot see at once, so a check that finds any narrows the list to them:
+
+```
+showing 5 of 18   5 updates available.    [Check for mod updates] [✓ Only updates] [Update all mods]
+```
+
+**Only updates** is a tick you can clear, and it clears itself once the last one is taken, so
+you are never left looking at an empty list. The box above works alongside it, for when you
+want the one of them you were actually after.
+
+## Finding a mod in a pack of a hundred and fifty
+
+**0.9.7.** The box at the top of the Mods tab now does both jobs. **Type in it and your own
+pack narrows as you type** — on any part of a mod's name or its id — so reaching the one row
+you came to pin is no longer a scroll. The heading says **showing 2 of 150** while it does.
+Nothing is fetched and nothing has to be pressed.
+
+Press **Search** and the same words go to ModDB, exactly as before, and the results take the
+list over until you press **Clear**. So there is no mode to be in the wrong one of: typing
+narrows what you have, the button asks for what you have not. If nothing in your pack matches,
+the empty list says so and points at the button.
+
+It is a filter and nothing else — the pack is untouched, and **Update all** still means the
+whole pack rather than whatever is on screen. On a pack you follow rather than own, where
+nothing may be added, the box is a plain filter with no Search beside it.
+
 ## Updates notice what a revision actually changed
 
 **0.9.3.** The commonest revision an author publishes takes the month's mod updates and changes
