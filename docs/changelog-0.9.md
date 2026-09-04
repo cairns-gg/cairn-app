@@ -1,4 +1,4 @@
-# What's new in Cairn 0.9.6
+# What's new in Cairn 0.9.7
 
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
