@@ -560,4 +560,47 @@ public class ModConfigTabTests : IDisposable
         Assert.Equal("Publish changes", detail.ShareLabel);
         Assert.True(detail.ShareIsUrgent);
     }
+
+    // ---- getting to the file itself ----
+
+    /// <summary>
+    /// A row knows its file by the name the survey gave it — a path relative to ModConfig,
+    /// with forward slashes whatever the platform. Turning that into somewhere a file
+    /// manager can be pointed is the pane's job, because the row knows nothing about where
+    /// the pack keeps its data.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_row_knows_where_its_file_is()
+    {
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        var row = detail.ModConfigSettings.Single(r => r.File == "terrainslabs.json");
+
+        Assert.Equal(
+            Path.Combine(DataDir, "ModConfig", "terrainslabs.json"),
+            detail.ModConfigFilePath(row));
+    }
+
+    /// <summary>
+    /// And the case the folder button below cannot answer: a mod that keeps its settings in
+    /// a subfolder of its own. The separator has to be the machine's, not the slash the
+    /// survey records.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_file_in_a_subfolder_resolves_to_a_native_path()
+    {
+        WriteConfig(Path.Combine("charcoalpit", "settings.json"), """{ "Rate": 1 }""");
+        ModConfigFiles.Capture(DataDir);
+        WriteConfig(Path.Combine("charcoalpit", "settings.json"), """{ "Rate": 4 }""");
+
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        var row = detail.ModConfigSettings.Single(r => r.File == "charcoalpit/settings.json");
+
+        Assert.Equal(
+            Path.Combine(DataDir, "ModConfig", "charcoalpit", "settings.json"),
+            detail.ModConfigFilePath(row));
+    }
 }

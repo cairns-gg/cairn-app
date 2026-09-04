@@ -930,6 +930,40 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public string ModsDirectory => _store.ModsDir(Id);
 
     /// <summary>
+    /// Opens the pack's Mods folder in the machine's file manager.
+    ///
+    /// The path has always been printed beside this, which is a fine thing to be able to
+    /// read and a poor thing to have to retype. Everything anybody actually wants from that
+    /// folder is done in a file manager — dropping in a zip ModDB does not carry, or taking
+    /// one out to look at — and sync runs on every Play, so nothing needs telling that it
+    /// was touched.
+    /// </summary>
+    [RelayCommand]
+    private void OpenModsFolder() => OpenPackFolder(ModsDirectory);
+
+    /// <summary>
+    /// Behind both of the pack's folder buttons.
+    ///
+    /// Created if it is not there, for the same reason as <see cref="OpenModConfigFolder"/>:
+    /// a pack that has never synced or never launched has no such folder yet, and a button
+    /// that silently does nothing is worse than an empty window. The game and the syncer
+    /// both make these themselves, so making one early costs nothing.
+    /// </summary>
+    private void OpenPackFolder(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Said below, in the same line as a folder that would not open.
+        }
+
+        if (!Files.OpenFolder(folder)) _log(Lang.Get("pack-open-failed", folder));
+    }
+
+    /// <summary>
     /// The install this pack will actually launch, or null when its version is absent.
     ///
     /// A chosen install wins, and only a chosen one: <see cref="GameLibrary.ForVersion"/>
@@ -2865,6 +2899,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// </summary>
     public string DataDirectory => _packData.DataPathFor(Id);
 
+    /// <summary>
+    /// Opens it. A pack's saves are under here and nowhere a player would think to look —
+    /// backing one up, or handing it to somebody, starts with getting to the folder.
+    /// </summary>
+    [RelayCommand]
+    private void OpenDataFolder() => OpenPackFolder(DataDirectory);
+
     // ---- hotkeys ----
 
     /// <summary>
@@ -3625,6 +3666,29 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         WatchModConfig();
 
         if (!Files.OpenFolder(folder)) _log(Lang.Get("modconfig-open-failed", folder));
+    }
+
+    /// <summary>
+    /// Where one row's config file is. A property of the pane rather than of the row,
+    /// because a row knows the file by the name the survey gave it — a relative path with
+    /// forward slashes — and knows nothing about where the pack keeps them.
+    /// </summary>
+    public string ModConfigFilePath(ModConfigRowViewModel row) => Path.Combine(
+        ModConfigFolder, row.File.Replace('/', Path.DirectorySeparatorChar));
+
+    /// <summary>
+    /// Shows one config file in the file manager, picked out where the platform can do that.
+    ///
+    /// The folder button beside it lands in ModConfig, which is right about nine times in
+    /// ten and no use at all for a mod that keeps its settings in a subfolder of its own —
+    /// and either way leaves somebody reading names in a folder of a hundred files to find
+    /// the one whose row they were looking at.
+    /// </summary>
+    public void RevealModConfigFile(ModConfigRowViewModel row)
+    {
+        var path = ModConfigFilePath(row);
+
+        if (!Files.Reveal(path)) _log(Lang.Get("modconfig-open-failed", path));
     }
 
     private void RefreshModConfigFilter()

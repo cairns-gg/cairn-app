@@ -219,4 +219,23 @@ public partial class MainWindow : Window
                 break;
         }
     }
+
+    /// <summary>
+    /// Double-clicking a mod config row shows that row's file in the file manager — the
+    /// same bargain the mod list makes above, and the only way to a file kept in a subfolder
+    /// of ModConfig without going hunting through the folder for it.
+    /// </summary>
+    private void OnModConfigRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        // The row's tick belongs to the tick. A CheckBox is a Button, so this is the same
+        // guard as the mod list's.
+        if (e.Source is Visual source && source.GetSelfAndVisualAncestors()
+                .TakeWhile(v => v != sender)
+                .Any(v => v is Button or ComboBox))
+            return;
+
+        if ((sender as Control)?.DataContext is ModConfigRowViewModel row
+            && (DataContext as MainViewModel)?.Detail is { } detail)
+            detail.RevealModConfigFile(row);
+    }
 }

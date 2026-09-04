@@ -288,6 +288,12 @@ on running it.
 
 ## Smaller things
 
+- **Buttons to the folders.** **0.9.7.** Pack settings now has an **Open folder** button
+  beside each of the two paths it prints: the pack's `Mods` folder, for dropping in a zip ModDB
+  does not carry, and its data folder, where its worlds and settings live. And in **Mod
+  config**, double-clicking a row shows that setting's file in your file manager, picked out —
+  which is the answer for a mod that keeps its config in a subfolder of its own. The **Open
+  config folder** button beside it is unchanged.
 - **Moving a pack to a new game version stops asking ModDB the same questions over and over.**
   **0.9.5.** Checking a version change looked up every mod; pressing **Publish** afterwards
   looked up every mod, synced, then looked up every one of them again before the window

@@ -1570,6 +1570,36 @@ public class MainWindowTests : IDisposable
         Assert.Contains(vm.Detail.Log, l => l.Contains("could not open"));
     }
 
+    // ---- getting to the pack's folders ----
+
+    [AvaloniaFact]
+    public void The_pack_settings_offer_a_button_to_each_of_its_folders()
+    {
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        // Settings. A TabControl only realises the selected tab, so the buttons are not in
+        // the tree until it is showing.
+        var detail = vm.Detail!;
+        detail.SelectedTab = 1;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Deliberately not executed: opening one would put a file manager window on
+        // whatever machine is running the suite. What a test can say is that the buttons
+        // are there, bound, and pointing at this pack — the same bargain ModConfigFolder
+        // makes for the button beside it.
+        var buttons = window.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.Name is "OpenModsFolder" or "OpenDataFolder")
+            .ToList();
+
+        Assert.Equal(2, buttons.Count);
+        Assert.All(buttons, b => Assert.True(b.IsEffectivelyVisible));
+        Assert.All(buttons, b => Assert.NotNull(b.Command));
+
+        Assert.EndsWith(Path.Combine("packs", "anego", "Mods"), detail.ModsDirectory);
+        Assert.EndsWith(Path.Combine("packs", "anego", "data"), detail.DataDirectory);
+    }
+
     // ---- changing the game version ----
 
     /// <summary>

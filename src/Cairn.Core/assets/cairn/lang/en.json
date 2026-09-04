@@ -160,6 +160,8 @@
   "packsettings-connect-note": "Leave blank to start at the main menu — you can still join servers from there.",
   "packsettings-save": "Save",
   "packsettings-mods-dir": "Mods directory",
+  "packsettings-open-folder": "Open folder",
+  "pack-open-failed": "could not open {0}",
   "packsettings-worlds": "Worlds and settings",
   "packsettings-worlds-explain": "This pack's saves and mod configs are its own. Created on first launch.",
   "packsettings-bring-world": "Bring in a world",
@@ -884,6 +886,7 @@
   "modconfig-showing": "showing {0} of {1}",
 
   "modconfig-open-folder": "Open config folder",
+  "modconfig-reveal-tip": "Double-click to show this file in your file manager",
   "modconfig-carry-tip": "Carry this value in the pack.",
   "modconfig-was": "was {0}",
   "modconfig-orphan": "no mod in this pack has {0} any more",
