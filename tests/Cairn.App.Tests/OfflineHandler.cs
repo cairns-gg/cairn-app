@@ -51,6 +51,15 @@ public sealed class OfflineHandler : HttpMessageHandler
         HttpStatusCode status = HttpStatusCode.OK) =>
         Bodies[endingWith] = (body, status);
 
+    /// <summary>
+    /// The same bytes every time, for a URL that serves a file rather than a document —
+    /// a mod zip, which through <see cref="StringContent"/> comes back re-encoded as UTF-8
+    /// and is no longer a zip.
+    /// </summary>
+    public Dictionary<string, byte[]> Downloads { get; } = [];
+
+    public void ServeBytes(string endingWith, byte[] body) => Downloads[endingWith] = body;
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken ct)
     {
@@ -68,6 +77,13 @@ public sealed class OfflineHandler : HttpMessageHandler
                 return Task.FromResult(new HttpResponseMessage(reply.Status)
                 {
                     Content = new StringContent(reply.Body),
+                });
+
+        foreach (var (ending, bytes) in Downloads)
+            if (url.EndsWith(ending, StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes),
                 });
 
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)

@@ -3,6 +3,19 @@
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
 
+## Mod updates you can take one at a time
+
+**0.9.7.** **Check for mod updates** finds everything waiting, and taking one used to throw the
+rest away: install a single mod and every other **→ 2.0.0** button vanished with it. The only
+way back was to run the whole check again — one request to ModDB for every unpinned mod in the
+pack — to be told what had been on screen a second earlier. On a pack big enough to want to
+work through its updates one at a time, that made doing so the most expensive way to do it.
+
+The list now stays. Take one and it is the only one that goes: the count beside the heading
+comes down by one, and the rest are still there to press. An update that fails to install keeps
+its button. Nothing else has changed — nothing updates on its own, a pinned mod is never
+offered one, and **Update all** still takes everything the check found.
+
 ## Updates notice what a revision actually changed
 
 **0.9.3.** The commonest revision an author publishes takes the month's mod updates and changes

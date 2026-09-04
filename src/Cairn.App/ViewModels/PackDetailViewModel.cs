@@ -1394,6 +1394,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         foreach (var row in Arrange(rows)) Mods.Add(row);
 
+        // The rows are new objects, so anything the old ones were carrying has to be put
+        // back on them. What a check found is the pack's knowledge, not the row's.
+        RestorePendingUpdates();
+
         ModRowViewModel Row(PackMod mod, LockedMod? locked) => new(
             mod, locked,
             loadReleases: ChoosePinForRowAsync,
@@ -2121,6 +2125,65 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     public bool AnyUpdates => Mods.Any(m => m.HasUpdate);
 
     /// <summary>
+    /// What the last check found and nothing has taken yet: mod id to the version it would
+    /// move to.
+    ///
+    /// Kept on the pane rather than only on the rows, because the rows do not survive an
+    /// install — every path that changes a pack ends at <see cref="ReloadMods"/>, which
+    /// builds new ones. So taking a single update used to clear the offer from every other
+    /// mod as a side effect, and the only way back was to spend the entire check again, one
+    /// ModDB request per unpinned mod, to be told what was already known. On a pack big
+    /// enough to want to work through the updates one at a time — which is the only kind
+    /// where that matters — the check cost more each time than the updates did.
+    /// </summary>
+    private readonly Dictionary<string, string> _pendingUpdates =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Puts the outstanding offers back onto freshly built rows.
+    ///
+    /// An offer is dropped when the lockfile now shows the version it was offering, which
+    /// is what makes an update that landed stop being offered without a second check — and
+    /// leaves one that did not land still on the row, where it belongs.
+    /// </summary>
+    private void RestorePendingUpdates()
+    {
+        foreach (var row in Mods)
+        {
+            if (!_pendingUpdates.TryGetValue(row.ModId, out var to)) continue;
+
+            if (string.Equals(row.InstalledVersion, to, StringComparison.OrdinalIgnoreCase))
+            {
+                _pendingUpdates.Remove(row.ModId);
+                continue;
+            }
+
+            row.UpdateAvailable = to;
+        }
+
+        // And a mod removed from the pack takes its offer with it, rather than leaving a
+        // count that no row accounts for.
+        foreach (var gone in _pendingUpdates.Keys.Where(
+                     id => !Mods.Any(m => string.Equals(m.ModId, id, StringComparison.OrdinalIgnoreCase))).ToList())
+            _pendingUpdates.Remove(gone);
+
+        RefreshUpdateSummary();
+        OnPropertyChanged(nameof(AnyUpdates));
+        UpdateAllCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Recounts the line beside the heading from what is still outstanding, rather than
+    /// leaving it where the check put it. Empty once there is nothing left to take: the
+    /// check's own "everything is up to date" is set by the check, and only then, because
+    /// it answers a question somebody has just asked.
+    /// </summary>
+    private void RefreshUpdateSummary() =>
+        UpdateSummary = _pendingUpdates.Count == 0
+            ? null
+            : Lang.Plural("mods-updates-available", _pendingUpdates.Count, _pendingUpdates.Count);
+
+    /// <summary>
     /// Asks ModDB what each followed mod would move to. Reports only — nothing is
     /// installed until it is asked for, one mod or all.
     /// </summary>
@@ -2151,10 +2214,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             var updates = await syncer.CheckUpdatesAsync(
                 Manifest, _store.LockPath(Id), progress, cache: new ModUpdateCache());
 
+            _pendingUpdates.Clear();
+            foreach (var u in updates) _pendingUpdates[u.ModId] = u.To;
+
             foreach (var row in Mods)
-                row.UpdateAvailable = updates
-                    .FirstOrDefault(u => string.Equals(u.ModId, row.ModId, StringComparison.OrdinalIgnoreCase))
-                    ?.To;
+                row.UpdateAvailable = _pendingUpdates.GetValueOrDefault(row.ModId);
 
             UpdateSummary = updates.Count == 0
                 ? Lang.Get("mods-up-to-date")
@@ -2200,7 +2264,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 allowUpdates: new HashSet<string>(modIds, StringComparer.OrdinalIgnoreCase));
 
             if (report.Failed) Error = Lang.Get("mods-update-failed");
-            UpdateSummary = null;
+
+            // Taken, so no longer outstanding — and only these. What the rest of the check
+            // found stands, which is the whole of being able to take them one at a time.
+            //
+            // Not on a failed run: an offer withdrawn because installing it did not work is
+            // an offer somebody has to go and find again. A mod that did land inside a run
+            // that failed elsewhere is dropped anyway, by the version its row now shows.
+            if (!report.Failed)
+                foreach (var id in modIds) _pendingUpdates.Remove(id);
         }
         catch (Exception e)
         {
@@ -2209,8 +2281,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+
+            // Rebuilds the rows, and puts back whatever is still on offer for them.
             ReloadMods();
-            OnPropertyChanged(nameof(AnyUpdates));
         }
     }
 

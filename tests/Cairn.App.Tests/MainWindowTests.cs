@@ -3015,6 +3015,124 @@ public class MainWindowTests : IDisposable
         Assert.Equal("→ 1.4.0", row.UpdateNote);
     }
 
+    /// <summary>
+    /// A zip with a modinfo.json in it, which is the least the syncer will accept for a
+    /// downloaded mod. The timestamp is pinned so the same URL serves the same bytes twice
+    /// — see PackSyncPinningTests, where an unpinned one failed about one run in a hundred.
+    /// </summary>
+    private static byte[] ModZip(string modId, string version)
+    {
+        using var buffer = new MemoryStream();
+
+        using (var zip = new System.IO.Compression.ZipArchive(
+                   buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = zip.CreateEntry("modinfo.json");
+            entry.LastWriteTime = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write($$"""{"type":"content","modid":"{{modId}}","version":"{{version}}"}""");
+        }
+
+        return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// ModDB with a 2.0.0 waiting for both of the fixture pack's mods, and the zips behind
+    /// them, so a check finds two updates and taking one actually lands.
+    /// </summary>
+    private OfflineHandler TwoUpdatesWaiting()
+    {
+        var http = new OfflineHandler();
+
+        foreach (var (id, asset) in new[] { ("glassview", 2), ("unchisel", 3) })
+        {
+            http.ServeAlways($"/api/mod/{id}", $$$"""
+                {"statuscode":"200","mod":{
+                  "modid":{{{asset}}},"assetid":{{{asset}}},"name":"{{{id}}}","urlalias":"{{{id}}}","side":"client",
+                  "releases":[
+                    {"releaseid":2,"fileid":2,"modidstr":"{{{id}}}","modversion":"2.0.0",
+                     "filename":"{{{id}}}_2.0.0.zip",
+                     "mainfile":"https://moddbcdn.vintagestory.at/{{{id}}}_2.0.0.zip",
+                     "tags":["1.22.5"]}
+                  ]
+                }}
+                """);
+
+            http.ServeBytes($"/{id}_2.0.0.zip", ModZip(id, "2.0.0"));
+        }
+
+        // What is installed now, which is what makes the 2.0.0 an update rather than the
+        // first install of a mod the pack has never had.
+        new PackLock
+        {
+            GameVersion = "1.22.5",
+            Mods =
+            [
+                new LockedMod { ModId = "glassview", Version = "1.0.0" },
+                new LockedMod { ModId = "unchisel", Version = "1.0.0" },
+            ],
+        }.Save(Path.Combine(_home, "packs", "anego", "pack.lock.json"));
+
+        return http;
+    }
+
+    /// <summary>
+    /// The point of checking for updates on a pack of any size: work through them one at a
+    /// time. Taking one used to rebuild the rows and take every other offer down with them,
+    /// so the only way back was to spend the whole check again — one ModDB request per
+    /// unpinned mod — to be told what was already on screen a second earlier.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Taking_one_update_leaves_the_rest_on_offer()
+    {
+        var (_, vm) = Show(TwoUpdatesWaiting());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, detail.Mods.Count(m => m.HasUpdate));
+        Assert.Equal("2 updates available.", detail.UpdateSummary);
+
+        detail.Mods.Single(m => m.ModId == "glassview").UpdateCommand.Execute(null);
+
+        await WaitFor(() => !detail.IsBusy
+                            && detail.Mods.Single(m => m.ModId == "glassview").InstalledVersion == "2.0.0");
+
+        // The one taken is done and no longer offered — worked out from the version its row
+        // now shows, not from a second check.
+        Assert.False(detail.Mods.Single(m => m.ModId == "glassview").HasUpdate);
+
+        // And the one not taken is exactly where the check left it.
+        var waiting = detail.Mods.Single(m => m.ModId == "unchisel");
+        Assert.True(waiting.HasUpdate);
+        Assert.Equal("2.0.0", waiting.UpdateAvailable);
+        Assert.True(detail.AnyUpdates);
+
+        // Recounted rather than left saying two, or cleared as it used to be.
+        Assert.Equal("1 update available.", detail.UpdateSummary);
+    }
+
+    /// <summary>
+    /// Nothing is left over once the last one is taken, so the pane does not go on offering
+    /// an update to a pack that has none.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Taking_the_last_one_clears_the_count()
+    {
+        var (_, vm) = Show(TwoUpdatesWaiting());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+        await detail.UpdateAllCommand.ExecuteAsync(null);
+
+        Assert.False(detail.AnyUpdates);
+        Assert.Null(detail.UpdateSummary);
+        Assert.False(detail.HasUpdateSummary);
+    }
+
     [AvaloniaFact]
     public void Unpinned_now_reads_as_latest_rather_than_newest()
     {

@@ -58,6 +58,13 @@ touching the network at all. Updating is something you ask for:
 **Check for updates** offers each one per row, with an **Update all**. A mod pinned to an
 exact version is never offered one, because a pin is an instruction to stay put.
 
+What a check found is held on the pack rather than on the rows, which is what makes taking
+them one at a time worth doing. Every edit to a pack rebuilds the rows, so an offer that
+lived only on a row was destroyed by installing any other mod — and the way back was the
+whole check again, one ModDB request per unpinned mod, for an answer that was on screen a
+moment earlier. An offer is now dropped when the lockfile shows the version it was offering,
+so one that landed goes and one that failed stays.
+
 `launch` syncs and then starts the game with the pack stacked on:
 
 ```
