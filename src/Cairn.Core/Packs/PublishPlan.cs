@@ -3,11 +3,21 @@ using Cairn.Core.ModDb;
 namespace Cairn.Core.Packs;
 
 /// <summary>One mod as it would be published.</summary>
-public sealed record PublishMod(string ModId, string? Version, bool Pinned, bool OnModDb)
+/// <param name="Url">
+/// Where it is fetched from when that is not ModDB. Named on the share screen because it
+/// is the one thing about a mod list a recipient cannot see from the mod ids: their copy
+/// will fetch code from this host, on the author's say-so.
+/// </param>
+public sealed record PublishMod(string ModId, string? Version, bool Pinned, bool OnModDb, string? Url = null)
 {
-    /// <summary>"glassview 1.3.0" or "unchisel 1.2.0 (pinned)".</summary>
-    public string Describe() =>
-        Version is null ? ModId : $"{ModId} {Version}{(Pinned ? " " + Lang.Get("share-pinned-suffix") : "")}";
+    /// <summary>"glassview 1.3.0", "unchisel 1.2.0 (pinned)" or "anegotweaks 1.0.0 (from example.com)".</summary>
+    public string Describe()
+    {
+        var text = string.IsNullOrWhiteSpace(Version) ? ModId : $"{ModId} {Version}";
+        if (Pinned) text += " " + Lang.Get("share-pinned-suffix");
+        if (Url is not null) text += " " + Lang.Get("share-from-url-suffix", ModUrl.Host(Url));
+        return text;
+    }
 }
 
 /// <summary>
@@ -121,8 +131,10 @@ public sealed record PublishPlan(
             var installed = locked?.Mods.FirstOrDefault(
                 m => string.Equals(m.ModId, want.ModId, StringComparison.OrdinalIgnoreCase));
 
+            // A mod with an address is not looked for on ModDB, because it is not there —
+            // that is why it has an address — and it resolves on every machine the same way.
             var onModDb = true;
-            if (moddb is not null)
+            if (moddb is not null && !want.IsFromUrl)
             {
                 try
                 {
@@ -136,7 +148,8 @@ public sealed record PublishPlan(
             }
 
             mods.Add(new PublishMod(
-                want.ModId, installed?.Version ?? want.Version, want.Version is not null, onModDb));
+                want.ModId, installed?.Version ?? want.Version, want.Version is not null, onModDb,
+                want.IsFromUrl ? want.Url : null));
         }
 
         var (covers, problem) = Coverage(manifest, locked, syncFailures);

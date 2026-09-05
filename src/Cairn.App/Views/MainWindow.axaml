@@ -415,7 +415,12 @@
                                          what leaves the box a plain filter there: nothing on
                                          a locked pack may add a mod, so offering to go and
                                          find one would be offering a dead end. -->
-                                    <Button Content="{l:Tr mods-search}"
+                                    <!-- The label follows the box: with a link in it the
+                                         button adds a mod by address rather than
+                                         searching, and says so. One button, because a
+                                         second one for the rare case sat there on every
+                                         pack for the sake of a thing done once. -->
+                                    <Button Content="{Binding Detail.SearchLabel}"
                                             IsVisible="{Binding Detail.CanEditMods}"
                                             Command="{Binding Detail.SearchCommand}"
                                             IsDefault="True" />
@@ -545,6 +550,15 @@
                                                                Margin="0,0,8,0"
                                                                FontSize="11" Opacity="0.75"
                                                                VerticalAlignment="Center" />
+                                                    <!-- Where it comes from, for a mod that
+                                                         is not on ModDB. Every row draws
+                                                         alike otherwise, and this is the one
+                                                         fact about such a mod worth a glance. -->
+                                                    <TextBlock Text="{Binding SourceNote}"
+                                                               IsVisible="{Binding IsFromUrl}"
+                                                               Margin="0,0,8,0"
+                                                               FontSize="11" Opacity="0.75"
+                                                               VerticalAlignment="Center" />
                                                     <!-- Both warnings before the caption that
                                                          merely repeats the row above, so the
                                                          line that wraps away is the one worth
@@ -597,7 +611,7 @@
                                                 -->
                                                 <Button Grid.Column="3" x:Name="PinButton"
                                                         Padding="10,4"
-                                                        IsVisible="{Binding CanChange}"
+                                                        IsVisible="{Binding CanPin}"
                                                         Command="{Binding TogglePinCommand}"
                                                         ToolTip.Tip="{Binding PinTip}"
                                                         VerticalAlignment="Center">
@@ -633,7 +647,20 @@
                                                     </StackPanel>
                                                 </Button>
 
+                                                                <!-- The address, in the pin's column: for a mod
+                                                     fetched from one it is what a pin is for
+                                                     the others, the thing that names which
+                                                     file. -->
+                                                <Button Grid.Column="3" x:Name="AddressButton"
+                                                        Padding="10,4"
+                                                        Content="{l:Tr mods-address}"
+                                                        IsVisible="{Binding CanChangeUrl}"
+                                                        Command="{Binding ChangeUrlCommand}"
+                                                        ToolTip.Tip="{Binding ChangeUrlTip}"
+                                                        VerticalAlignment="Center" />
+
                                                 <Button Grid.Column="4" Content="{l:Tr mods-view}" Padding="10,4"
+                                                        IsVisible="{Binding HasPage}"
                                                         Command="{Binding OpenPageCommand}"
                                                         VerticalAlignment="Center" />
                                                 <!-- Removing a dependency while the mod that

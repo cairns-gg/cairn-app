@@ -8,8 +8,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Cairn.App.ViewModels;
 
 /// <summary>One mod the pack would bring, as a row.</summary>
+/// <param name="url">
+/// Where the pack fetches it from when that is not ModDB. Named here above everything else
+/// about the row, because this is the screen where a pack is approved and a mod fetched
+/// from somebody's own host is the one thing in the list the mod ids do not disclose.
+/// </param>
 public sealed class ImportModViewModel(
-    string modId, string? version, bool fromLock, bool dependency = false)
+    string modId, string? version, bool fromLock, bool dependency = false, string? url = null)
 {
     public string ModId { get; } = modId;
 
@@ -21,7 +26,10 @@ public sealed class ImportModViewModel(
     /// <summary>In the lock but not the manifest: something a mod asked for in turn.</summary>
     public bool Dependency { get; } = dependency;
 
+    public bool FromUrl { get; } = !string.IsNullOrWhiteSpace(url);
+
     public string Note => Dependency ? Lang.Get("import-note-dependency")
+        : FromUrl ? Lang.Get("import-note-from-url", ModUrl.Host(url))
         : Exact ? ""
         : Version.Length > 0 ? Lang.Get("import-note-asked-for") : Lang.Get("import-note-newest");
 }
@@ -90,8 +98,8 @@ public sealed partial class ImportViewModel : ViewModelBase
 
         Mods = manifest.Mods
             .Select(m => locked is not null && locked.TryGetValue(m.ModId, out var exact)
-                ? new ImportModViewModel(m.ModId, exact, fromLock: true)
-                : new ImportModViewModel(m.ModId, m.Version, fromLock: false))
+                ? new ImportModViewModel(m.ModId, exact, fromLock: true, url: m.Url)
+                : new ImportModViewModel(m.ModId, m.Version, fromLock: false, url: m.Url))
             .Concat((bundle.Lock?.Mods ?? [])
                 .Where(l => !asked.Contains(l.ModId))
                 .Select(l => new ImportModViewModel(l.ModId, l.Version, fromLock: true, dependency: true)))

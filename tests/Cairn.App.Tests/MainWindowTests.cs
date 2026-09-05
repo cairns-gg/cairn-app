@@ -3297,7 +3297,7 @@ public class MainWindowTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         var detail = vm.Detail!;
-        Assert.Equal("Filter this pack, or search ModDB…", detail.SearchPlaceholder);
+        Assert.Equal("Filter this pack, search ModDB, or paste a link to a mod zip…", detail.SearchPlaceholder);
 
         // Opening the pack sends its rows off for names and icons; nothing after that is
         // this test's doing, so the count is the baseline rather than zero.

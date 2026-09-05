@@ -128,6 +128,17 @@ public static class GameVersionChange
             var installed = locked?.Mods.FirstOrDefault(
                 m => string.Equals(m.ModId, want.ModId, StringComparison.OrdinalIgnoreCase))?.Version;
 
+            // Nothing to resolve: the address serves one file whatever the game version,
+            // and whether that file runs on the target is something only its author knows.
+            // Reported as staying put rather than left out, so the preview still lists every
+            // mod the pack has.
+            if (want.IsFromUrl)
+            {
+                verdicts.Add(new ModVerdict(want.ModId, installed, installed, ModOutcome.Unchanged,
+                    Lang.Get("versionchange-from-url", ModUrl.Host(want.Url))));
+                continue;
+            }
+
             ResolvedRelease? release;
             try
             {

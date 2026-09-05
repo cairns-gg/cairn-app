@@ -76,7 +76,7 @@ internal static class Program
                 "diagnostics" => Diagnostics(store, games, args),
                 "list" => List(store),
                 "init" => Init(store, args),
-                "add" => Add(store, args),
+                "add" => await Add(store, moddb, http, args),
                 "search" => await Search(moddb, args),
                 "remove" => Remove(store, args),
                 "delete" => Delete(store, args),
@@ -121,6 +121,7 @@ internal static class Program
               cairn-cli list                          list packs
               cairn-cli init <name> [--id <id>] [--game <version>] [--connect host:port]
               cairn-cli add <id> <modid> [version] [--accept-unmarked]  add a mod to a pack
+              cairn-cli add <id> <https://…/mod.zip>  add a mod ModDB does not carry, by address
               cairn-cli remove <id> <modid>           remove a mod from a pack
               cairn-cli delete <id>                   delete a pack and its mods
               cairn-cli export <id> [-o file] [--no-lock]   write a shareable pack file
@@ -500,13 +501,18 @@ internal static class Program
         return 0;
     }
 
-    private static int Add(PackStore store, string[] args)
+    private static async Task<int> Add(PackStore store, ModDbClient moddb, HttpClient http, string[] args)
     {
         if (args.Length < 3)
-            return Fail("usage: cairn-cli add <id> <modid> [version] [--accept-unmarked]");
+            return Fail("usage: cairn-cli add <id> <modid> [version] [--accept-unmarked]\n"
+                        + "       cairn-cli add <id> <https://…/mod.zip>");
 
         var id = args[1];
         var manifest = store.Load(id);
+
+        if (ModUrl.LooksLikeUrl(args[2]))
+            return await AddFromUrl(store, moddb, http, manifest, args[2].Trim());
+
         var modId = args[2];
         var version = args.Length > 3 && !args[3].StartsWith('-') ? args[3] : null;
 
@@ -538,6 +544,59 @@ internal static class Program
             if (version is null)
                 Console.WriteLine("  consider naming the version you tested: an unpinned mod "
                                   + "can move to another release nobody has tried");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Adds a mod by the address of its zip. The mod id comes out of the zip, which is
+    /// fetched once here to read it and again by the sync that installs it; the address
+    /// goes into the manifest and the first sync records the checksum. See PackMod.Url.
+    /// </summary>
+    private static async Task<int> AddFromUrl(
+        PackStore store, ModDbClient moddb, HttpClient http, PackManifest manifest, string url)
+    {
+        if (ModUrl.Problem(url) is { } problem)
+            return Fail($"that address {problem}");
+
+        ModUrlInspection mod;
+        try
+        {
+            mod = await ModUrl.InspectAsync(http, url, moddb: moddb);
+        }
+        catch (HttpRequestException e)
+        {
+            return Fail($"could not fetch {url}: {e.Message}");
+        }
+
+        if (!mod.IsMod)
+            return Fail($"the file at {ModUrl.Host(url)} is not a mod: {mod.Problem}");
+
+        if (manifest.Mods.Any(m => string.Equals(m.ModId, mod.ModId, StringComparison.OrdinalIgnoreCase)))
+            return Fail($"'{mod.ModId}' is already in pack '{manifest.Id}'");
+
+        // An address, or a pinned ModDB entry when the link is one of ModDB's own for a
+        // release it lists. Core decides which — see ModUrlInspection.ToManifestEntry —
+        // and this says which it was, because they are different things to have added.
+        var entry = mod.ToManifestEntry(url);
+        manifest.Mods.Add(entry);
+        store.Save(manifest);
+
+        if (entry.IsFromUrl)
+        {
+            Console.WriteLine($"added {mod.ModId} ({mod.Describe()}) from {ModUrl.Host(url)} to '{manifest.Id}'");
+            Console.WriteLine("  the first sync records its checksum; a file that changes at that address is "
+                              + "refused until you run `update` for it");
+
+            if (mod.Listing == ModDbListing.Unlisted)
+                Console.WriteLine("  on ModDB but not listed yet: `update --check` will say when it has been, "
+                                  + "and `update` then follows it from ModDB");
+        }
+        else
+        {
+            Console.WriteLine($"added {mod.ModId} {entry.Version} to '{manifest.Id}' — ModDB lists this "
+                              + "release, so it is added as a ModDB mod pinned to it");
         }
 
         return 0;
@@ -691,6 +750,23 @@ internal static class Program
         var wanted = named.Count == 0
             ? updates.Select(u => u.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : named;
+
+        // A mod listed on ModDB since it was added by link is followed from there from
+        // now on: the address comes off its entry, and the sync resolves it like any other
+        // unpinned mod. The manifest is the CLI's to write, not the sync's.
+        var listed = updates.Where(u => u.NowListedOnModDb && wanted.Contains(u.ModId))
+            .Select(u => u.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (listed.Count > 0)
+        {
+            foreach (var mod in manifest.Mods.Where(m => m.IsFromUrl && listed.Contains(m.ModId)))
+            {
+                mod.Url = null;
+                Console.WriteLine($"  {mod.ModId} is now listed on ModDB — following it from there");
+            }
+
+            store.Save(manifest);
+        }
 
         Console.WriteLine();
         var report = await syncer.SyncAsync(

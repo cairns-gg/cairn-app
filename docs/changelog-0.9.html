@@ -2,6 +2,22 @@
 
 <p>Everything since the 0.8 series. Nothing here needs anything from you unless it says so &mdash; see <strong>Upgrading</strong> at the end.</p>
 
+<h2>A mod that is not on ModDB, by address</h2>
+
+<p><strong>0.9.8.</strong> A private mod &mdash; one written for your own server, or not ready to publish &mdash; had no way into a pack except dropping the zip into the pack's <code>Mods</code> folder by hand, on every machine, where nothing kept track of it and a shared pack could not carry it. A pack can now name one by the address of its zip. Paste the link into the box on the <strong>Mods</strong> tab, where the button beside it becomes <strong>Add from link</strong>, or:</p>
+
+<pre>cairn-cli add mypack https://files.example/anegotweaks.zip</pre>
+
+<p>Cairn fetches the zip once to read its own <code>modinfo.json</code>, so the mod id and name come from the mod and not from you &mdash; <em>Anego Tweaks 1.0.0 from files.example</em> &mdash; and adds it on your say-so: the host is one nobody moderates, and whether you trust it is your call. What it writes into the pack is the address:</p>
+
+<pre>{ "modid": "anegotweaks", "url": "https://files.example/anegotweaks.zip" }</pre>
+
+<p><strong>The address says where; the lockfile says what.</strong> The first sync records the file's checksum, and every sync after that refuses a file that has changed at that address &mdash; the same promise every ModDB mod already gets. Taking the author's new build is an update, like any other: <strong>Check for mod updates</strong> fetches the file and reports it as changed, and <strong>Update</strong> records the new checksum. Nothing moves underneath a save on its own. When the author moves the file, <strong>Address&hellip;</strong> on the row &mdash; where a ModDB mod has its pin &mdash; takes the new address, after checking that it serves the same mod.</p>
+
+<p><strong>A ModDB download link is the case this is mostly for.</strong> A mod uploaded to ModDB and not yet listed has a working download link &mdash; the one its Download button gives &mdash; while the site's API does not know it yet. Paste that link and Cairn asks ModDB: a release it already lists is added as an ordinary ModDB mod pinned to that release, and the window says so; one it does not list yet is fetched from the link, and <strong>Check for mod updates</strong> says when that changes &mdash; <em>0.1.1 &rarr; 0.1.1 (now listed on ModDB)</em> &mdash; so that taking the update follows the mod from ModDB from then on, for everyone who takes the revision.</p>
+
+<p>The row says <strong>from files.example</strong>, and so does the import dialog when the pack is somebody else's &mdash; their copy will fetch code from that host, and that is worth reading on the same screen that names the server the pack joins. Addresses must be https; a pin beside an address is refused, since an address serves one file; and a zip that turns out not to be a mod &mdash; a sign-in page, say &mdash; is refused rather than handed to the game.</p>
+
 <h2>Mod updates you can take one at a time</h2>
 
 <p><strong>0.9.7.</strong> <strong>Check for mod updates</strong> finds everything waiting, and taking one used to throw the rest away: install a single mod and every other <strong>&rarr; 2.0.0</strong> button vanished with it. The only way back was to run the whole check again &mdash; one request to ModDB for every unpinned mod in the pack &mdash; to be told what had been on screen a second earlier. On a pack big enough to want to work through its updates one at a time, that made doing so the most expensive way to do it.</p>

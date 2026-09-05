@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         vm.RunOptimumBuild = RunOptimumBuildAsync;
         vm.PickClientFolder = PickClientFolderAsync;
         vm.ChoosePinnedVersion = ChoosePinnedVersionAsync;
+        vm.ChooseModUrl = ChooseModUrlAsync;
         vm.CopyToClipboard = CopyToClipboardAsync;
     }
 
@@ -137,6 +138,9 @@ public partial class MainWindow : Window
 
     private Task<bool> ChoosePinnedVersionAsync(PinVersionViewModel choice) =>
         new PinVersionWindow { DataContext = choice }.ShowDialog<bool>(this);
+
+    private Task<bool> ChooseModUrlAsync(ModUrlViewModel choice) =>
+        new ModUrlWindow { DataContext = choice }.ShowDialog<bool>(this);
 
     private Task<bool> RunOptimumBuildAsync(OptimumBuildViewModel build) =>
         new OptimumBuildWindow { DataContext = build }.ShowDialog<bool>(this);

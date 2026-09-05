@@ -109,7 +109,7 @@ public sealed class PackStore
         if (!string.Equals(mine.GameVersion, upstream.GameVersion, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        static string Key(PackMod m) => $"{m.ModId.ToLowerInvariant()}={m.Version ?? ""}";
+        static string Key(PackMod m) => $"{m.ModId.ToLowerInvariant()}={m.Version ?? ""}@{m.Url ?? ""}";
 
         return mine.Mods.Select(Key).Order().SequenceEqual(upstream.Mods.Select(Key).Order());
     }

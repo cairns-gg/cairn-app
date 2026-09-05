@@ -363,13 +363,13 @@ public sealed class PackUpdatePlan
         // own manifest at least means an unedited follower merges perfectly, and an edited
         // one is told the base was missing.
         var basis = (@base ?? mine).Mods.ToDictionary(
-            m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
+            m => m.ModId, m => m, StringComparer.OrdinalIgnoreCase);
 
         var local = mine.Mods.ToDictionary(
-            m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
+            m => m.ModId, m => m, StringComparer.OrdinalIgnoreCase);
 
         var author = theirs.Mods.ToDictionary(
-            m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
+            m => m.ModId, m => m, StringComparer.OrdinalIgnoreCase);
 
         // Indexed rather than ToDictionary: a lockfile is generated, but it is also a file
         // on somebody else's disk that arrived over the network, and a duplicate modid in
@@ -390,11 +390,30 @@ public sealed class PackUpdatePlan
         var changes = new List<ModChange>();
         var declined = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // What a manifest entry asks for, beyond the mod's id: a version pin, and for a mod
+        // fetched from an address, the address. Two entries agree when both agree. The
+        // address is part of the ask for the same reason a pin is — it is the author
+        // naming which file — and an author who moves their private mod to a new address
+        // has changed their pack as surely as one who moved a pin, even though the lock
+        // versions on either side may read the same.
+        static bool SameAsk(PackMod? a, PackMod? b) =>
+            string.Equals(a?.Version, b?.Version, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a?.Url, b?.Url, StringComparison.OrdinalIgnoreCase);
+
         foreach (var id in ids.Order(StringComparer.OrdinalIgnoreCase))
         {
-            var inBase = basis.TryGetValue(id, out var wasPin);
-            var inMine = local.TryGetValue(id, out var myPin);
-            var inTheirs = author.TryGetValue(id, out var theirPin);
+            var inBase = basis.TryGetValue(id, out var was);
+            var inMine = local.TryGetValue(id, out var my);
+            var inTheirs = author.TryGetValue(id, out var their);
+
+            var myPin = my?.Version;
+            var theirPin = their?.Version;
+
+            // What to show for each side. The pin when there is one; for a mod fetched from
+            // an address, which names no version, the version the lock says that address
+            // served — so a moved address reads "1.1.0 → 1.2.0" rather than as two blanks.
+            var myShown = myPin ?? (my?.IsFromUrl == true ? myVersions.GetValueOrDefault(id) : null);
+            var theirShown = theirPin ?? (their?.IsFromUrl == true ? theirVersions.GetValueOrDefault(id) : null);
 
             switch (inMine, inTheirs)
             {
@@ -428,12 +447,12 @@ public sealed class PackUpdatePlan
                     continue;
             }
 
-            // Both have it, and the pins agree — which includes both of them naming
+            // Both have it, and the asks agree — which includes both of them naming
             // nothing, the ordinary case. Agreeing on no pin is not agreeing on a mod:
             // sync installs what the lock says whenever the manifest asks for no
             // particular version, so the author's lock is the whole of what a mod update
             // to their pack consists of.
-            if (string.Equals(myPin, theirPin, StringComparison.OrdinalIgnoreCase))
+            if (SameAsk(my, their))
             {
                 // A pin outranks either lock at install time — PackSyncer stops believing
                 // a lock entry the moment it disagrees with the version asked for — so two
@@ -457,16 +476,16 @@ public sealed class PackUpdatePlan
             }
 
             // You never touched it, so this is simply their change.
-            if (inBase && string.Equals(myPin, wasPin, StringComparison.OrdinalIgnoreCase))
+            if (inBase && SameAsk(my, was))
             {
-                changes.Add(new ModChange(id, ModChangeKind.Repinned, myPin, theirPin) { Take = true });
+                changes.Add(new ModChange(id, ModChangeKind.Repinned, myShown, theirShown) { Take = true });
                 continue;
             }
 
             // You chose a version. A pin is an instruction to stay put — Cairn never offers
             // a pinned mod an update anywhere else — so the default keeps yours, and the
             // question is put rather than answered.
-            changes.Add(new ModChange(id, ModChangeKind.PinConflict, myPin, theirPin) { Take = false });
+            changes.Add(new ModChange(id, ModChangeKind.PinConflict, myShown, theirShown) { Take = false });
         }
 
         return new PackUpdatePlan(
@@ -514,13 +533,14 @@ public sealed class PackUpdatePlan
         // so the questions are not consulted rather than being answered their way.
         if (Reset)
         {
-            foreach (var mod in _theirs.Mods)
-                merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });
+            foreach (var mod in _theirs.Mods) merged.Mods.Add(Copy(mod));
 
             return merged;
         }
 
         var decided = Changes.ToDictionary(c => c.ModId, StringComparer.OrdinalIgnoreCase);
+
+        var mineById = _mine.Mods.ToDictionary(m => m.ModId, StringComparer.OrdinalIgnoreCase);
 
         // Walk the author's list first so their order survives, then append what is yours.
         foreach (var mod in _theirs.Mods)
@@ -531,7 +551,7 @@ public sealed class PackUpdatePlan
 
             if (!decided.TryGetValue(mod.ModId, out var change))
             {
-                merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });
+                merged.Mods.Add(Copy(mod));
                 continue;
             }
 
@@ -540,12 +560,14 @@ public sealed class PackUpdatePlan
                 case ModChangeKind.DroppedByYou when !change.Take:
                     continue;   // stays out, as you left it
 
+                // Yours, whole: keeping your pin means keeping your entry, address and
+                // all, rather than their entry with your version written over it.
                 case ModChangeKind.PinConflict when !change.Take:
-                    merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = change.Mine });
+                    merged.Mods.Add(Copy(mineById.GetValueOrDefault(mod.ModId) ?? mod));
                     continue;
 
                 default:
-                    merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });
+                    merged.Mods.Add(Copy(mod));
                     continue;
             }
         }
@@ -561,11 +583,27 @@ public sealed class PackUpdatePlan
             if (decided.TryGetValue(mod.ModId, out var change)
                 && change.Kind == ModChangeKind.Removed && change.Take) continue;
 
-            merged.Mods.Add(new PackMod { ModId = mod.ModId, Version = mod.Version });
+            merged.Mods.Add(Copy(mod));
         }
 
         return merged;
     }
+
+    /// <summary>
+    /// A manifest entry as the merge writes it: every field, not the two the merge reasons
+    /// about. This used to copy the id and the version and drop the rest, which is how an
+    /// update silently threw away an author's acceptance of an unmarked mod — the next sync
+    /// then failed a mod that had been fine — and would have thrown away an address the
+    /// same way. One place to copy an entry, so the next field added to one is not lost by
+    /// the same route.
+    /// </summary>
+    private static PackMod Copy(PackMod mod) => new()
+    {
+        ModId = mod.ModId,
+        Version = mod.Version,
+        Url = mod.Url,
+        AcceptedFor = mod.AcceptedFor,
+    };
 
     /// <summary>
     /// The hotkeys this update would leave behind.

@@ -95,4 +95,26 @@ public class ModDbUrlsTests
     [InlineData("")]
     public void The_predicate_and_the_reason_always_agree(string url) =>
         Assert.Equal(ModDbUrls.IsKnownDownloadHost(url), ModDbUrls.DownloadProblem(url) is null);
+
+    [Theory]
+    [InlineData("https://mods.vintagestory.at/download/118768/augur_0.1.1.zip", 118768, "augur_0.1.1.zip")]
+    [InlineData("https://mods.vintagestory.at/download/5/a%20mod.zip", 5, "a mod.zip")]
+    public void A_ModDB_download_link_yields_its_file_id_and_name(string url, int fileId, string name)
+    {
+        Assert.True(ModDbUrls.TryParseDownload(url, out var id, out var file));
+        Assert.Equal(fileId, id);
+        Assert.Equal(name, file);
+    }
+
+    [Theory]
+    [InlineData("https://moddbcdn.vintagestory.at/augur_0.1.1.zip")]      // the CDN, not the site
+    [InlineData("http://mods.vintagestory.at/download/118768/augur.zip")]  // in the clear
+    [InlineData("https://mods.vintagestory.at/show/mod/118768")]           // a page
+    [InlineData("https://mods.vintagestory.at/download/x/augur.zip")]
+    [InlineData("https://mods.vintagestory.at/download/118768")]
+    [InlineData("https://files.example/download/118768/augur.zip")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Anything_else_is_not_a_download_link(string? url) =>
+        Assert.False(ModDbUrls.TryParseDownload(url, out _, out _));
 }

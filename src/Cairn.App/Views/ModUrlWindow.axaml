@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Cairn.App"
+        xmlns:vm="using:Cairn.App.ViewModels"
+        x:Class="Cairn.App.Views.ModUrlWindow"
+        x:DataType="vm:ModUrlViewModel"
+        Title="{Binding Title}"
+        Width="520" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource VsWindowBrush}">
+
+    <DockPanel Margin="18" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
+            <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Hint}" FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    Spacing="8" Margin="0,14,0,0">
+            <!-- Off until the address on screen is the one that was fetched. The window
+                 is the confirmation, so it cannot confirm something it has not seen. -->
+            <Button Name="ConfirmButton" Content="{Binding ConfirmLabel}" Classes="accent" Padding="16,5"
+                    IsEnabled="{Binding CanConfirm}"
+                    Click="OnConfirm" />
+            <Button Name="CancelButton" Content="{l:Tr common-cancel}" Padding="16,5"
+                    Click="OnCancel" IsCancel="True" />
+        </StackPanel>
+
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <TextBox Grid.Column="0" Name="AddressBox"
+                         Text="{Binding Address}"
+                         Watermark="https://…/mod.zip" />
+                <!-- Enter fetches rather than confirms, because fetching is the step that
+                     finds out whether there is anything to confirm. -->
+                <Button Grid.Column="1" Name="CheckButton" Content="{l:Tr modurl-check}" Padding="14,4"
+                        Command="{Binding CheckCommand}" IsDefault="True" />
+            </Grid>
+
+            <TextBlock Text="{l:Tr modurl-checking}" FontSize="12" Opacity="0.6"
+                       IsVisible="{Binding Checking}" />
+
+            <TextBlock Name="ProblemNote" Text="{Binding Problem}"
+                       IsVisible="{Binding HasProblem}"
+                       FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsWarningBrush}" />
+
+            <StackPanel Spacing="2" IsVisible="{Binding HasFound}">
+                <TextBlock Name="FoundNote" Text="{Binding FoundNote}" FontSize="12"
+                           FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding TrustNote}" FontSize="11" Opacity="0.7"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </StackPanel>
+    </DockPanel>
+</Window>

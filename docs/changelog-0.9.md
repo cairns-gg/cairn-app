@@ -3,6 +3,49 @@
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
 
+## A mod that is not on ModDB, by address
+
+**0.9.8.** A private mod — one written for your own server, or not ready to publish — had no
+way into a pack except dropping the zip into the pack's `Mods` folder by hand, on every
+machine, where nothing kept track of it and a shared pack could not carry it. A pack can now
+name one by the address of its zip. Paste the link into the box on the **Mods** tab, where the
+button beside it becomes **Add from link**, or:
+
+```
+cairn-cli add mypack https://files.example/anegotweaks.zip
+```
+
+Cairn fetches the zip once to read its own `modinfo.json`, so the mod id and name come from
+the mod and not from you — *Anego Tweaks 1.0.0 from files.example* — and adds it on your
+say-so: the host is one nobody moderates, and whether you trust it is your call. What it
+writes into the pack is the address:
+
+```json
+{ "modid": "anegotweaks", "url": "https://files.example/anegotweaks.zip" }
+```
+
+**The address says where; the lockfile says what.** The first sync records the file's
+checksum, and every sync after that refuses a file that has changed at that address — the
+same promise every ModDB mod already gets. Taking the author's new build is an update, like
+any other: **Check for mod updates** fetches the file and reports it as changed, and
+**Update** records the new checksum. Nothing moves underneath a save on its own. When the
+author moves the file, **Address…** on the row — where a ModDB mod has its pin — takes the
+new address, after checking that it serves the same mod.
+
+**A ModDB download link is the case this is mostly for.** A mod uploaded to ModDB and not yet
+listed has a working download link — the one its Download button gives — while the site's API
+does not know it yet. Paste that link and Cairn asks ModDB: a release it already lists is added
+as an ordinary ModDB mod pinned to that release, and the window says so; one it does not list
+yet is fetched from the link, and **Check for mod updates** says when that changes — *0.1.1 →
+0.1.1 (now listed on ModDB)* — so that taking the update follows the mod from ModDB from then
+on, for everyone who takes the revision.
+
+The row says **from files.example**, and so does the import dialog when the pack is
+somebody else's — their copy will fetch code from that host, and that is worth reading on the
+same screen that names the server the pack joins. Addresses must be https; a pin beside an
+address is refused, since an address serves one file; and a zip that turns out not to be a
+mod — a sign-in page, say — is refused rather than handed to the game.
+
 ## Mod updates you can take one at a time
 
 **0.9.7.** **Check for mod updates** finds everything waiting, and taking one used to throw the

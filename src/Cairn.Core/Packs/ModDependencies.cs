@@ -71,6 +71,10 @@ public static class ModDependencies
     /// Raw, in declaration order, with the versions kept and <c>game</c> left in. Sync
     /// strips those because it cannot install them; a reader wants to see them.
     /// </param>
+    /// <param name="Side">
+    /// Which side the mod declares it runs on, as written: "client", "server" or
+    /// "universal". Read for a mod fetched from a URL, which has no ModDB entry to say so.
+    /// </param>
     public sealed record ModInfoSummary(
         string? ModId,
         string? Name,
@@ -78,7 +82,8 @@ public static class ModDependencies
         string? Type,
         IReadOnlyList<string> Authors,
         IReadOnlyList<KeyValuePair<string, string?>> Requires,
-        string? Problem)
+        string? Problem,
+        string? Side = null)
     {
         /// <summary>"genelib 3.2.0 'Genelib' by sekelsta", or whatever survives.</summary>
         public string Describe()
@@ -187,7 +192,8 @@ public static class ModDependencies
                 Text(root, "type"),
                 Strings(root, "authors"),
                 Pairs(root, "dependencies"),
-                null);
+                null,
+                Text(root, "side"));
         }
         catch (JsonException e)
         {

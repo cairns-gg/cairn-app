@@ -1544,7 +1544,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             openPage: OpenModPage,
             armed: DisarmOtherRows,
             update: UpdateOne,
-            editable: CanEditMods);
+            editable: CanEditMods,
+            changeUrl: ChangeUrlAsync);
 
         RefreshLock();
 
@@ -1568,6 +1569,22 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// The name a URL mod's own zip gives it, or null when nothing is installed yet. The
+    /// lock's filename is combined with the pack's directory only after the same check the
+    /// sync made before writing it — a lock is a document, and this is the app reading one.
+    /// </summary>
+    private string? NameFromZip(ModRowViewModel row)
+    {
+        if (row.Locked?.FileName is not { Length: > 0 } file || ModFileName.Safe(file) is null) return null;
+
+        var path = Path.Combine(_store.ModsDir(Id), file);
+        if (!File.Exists(path)) return null;
+
+        var info = ModDependencies.Describe(path);
+        return string.IsNullOrWhiteSpace(info.Name) ? null : info.Name;
+    }
+
+    /// <summary>
     /// Fills in each pack row's name and icon. Two layers of cache make this quiet after
     /// the first time: the mod's details, and the image itself.
     /// </summary>
@@ -1581,6 +1598,20 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             try
             {
                 if (generation != _modIconGeneration) return;
+
+                // Not on ModDB, so not asked of it. The zip on disk is the only thing that
+                // knows the mod's name, and it is already here once the sync has run.
+                if (row.IsFromUrl)
+                {
+                    var name = NameFromZip(row);
+                    if (name is null || generation != _modIconGeneration) return;
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (generation == _modIconGeneration) row.Name = name;
+                    });
+                    return;
+                }
 
                 var info = await _modInfo.GetAsync(row.ModId).ConfigureAwait(false);
                 if (info is null || generation != _modIconGeneration) return;
@@ -2004,6 +2035,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanSearch))]
     private async Task Search()
     {
+        // The one box takes an address as well as a name, because a mod that is not on
+        // ModDB has nowhere else on this screen to arrive from. An address is never a
+        // search: nothing on ModDB is called "https://".
+        if (ModUrl.LooksLikeUrl(SearchText))
+        {
+            await AddByAddressAsync();
+            return;
+        }
+
         IsBusy = true;
         SearchHits.Clear();
 
@@ -2047,9 +2087,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     private bool CanSearch => !IsBusy && !string.IsNullOrWhiteSpace(SearchText);
 
+    /// <summary>What the button beside the box will do with what is in it.</summary>
+    public string SearchLabel => ModUrl.LooksLikeUrl(SearchText)
+        ? Lang.Get("mods-add-from-link")
+        : Lang.Get("mods-search");
+
     partial void OnSearchTextChanged(string value)
     {
         SearchCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(SearchLabel));
 
         // The free half of what the box does, done on the way past. Nothing is fetched and
         // nothing is decided — the pack is already in memory.
@@ -2057,6 +2103,86 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsNarrowed));
         OnPropertyChanged(nameof(CanClearSearch));
         RefreshModFilter();
+    }
+
+    /// <summary>Opens the address window; the front-end supplies it, like the pin window.</summary>
+    public Func<ModUrlViewModel, Task<bool>>? ChooseModUrl { get; set; }
+
+    private Task<ModUrlInspection> FetchModAsync(string url, CancellationToken ct) =>
+        ModUrl.InspectAsync(_http, url, ct, _moddb);
+
+    /// <summary>
+    /// Adds a mod by the address of its zip, through a window that fetches it first and
+    /// says what it found. The rule is Core's — <see cref="ModUrl"/> — and the CLI's
+    /// <c>add</c> makes the same call; what the window adds is the look before the leap,
+    /// because the host is one nobody moderates and the person pasting the address is the
+    /// only one who can say whether it is trusted.
+    ///
+    /// Reached from the search box, which is the one place on the screen a mod is added
+    /// from: a link pasted there is this, and the button says so before it is pressed.
+    /// </summary>
+    private async Task AddByAddressAsync()
+    {
+        if (ChooseModUrl is null) return;
+
+        var prefill = SearchText.Trim();
+        var choice = new ModUrlViewModel(FetchModAsync, prefill);
+
+        if (!await ChooseModUrl(choice) || choice.Result is not { } url || choice.Found is not { } found)
+            return;
+
+        var modId = found.ModId!;
+
+        if (Manifest.Mods.Any(m => string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase)))
+        {
+            Error = Lang.Get("mods-already-in-pack", modId);
+            return;
+        }
+
+        // An address, or a pinned ModDB entry when the link turned out to be one of
+        // ModDB's own for a release it lists. Core decides which; see ToManifestEntry.
+        Manifest.Mods.Add(found.ToManifestEntry(url));
+        Persist();
+
+        Error = null;
+        SearchText = "";
+        _log(Lang.Get("mods-added", modId));
+
+        ReloadMods();
+
+        var added = Mods.FirstOrDefault(
+            m => string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase));
+        if (added is not null) added.Downloading = true;
+
+        _ = SyncAfterEditAsync();
+    }
+
+    /// <summary>
+    /// Changes where a mod is fetched from, for an author who has moved it. The window
+    /// refuses an address serving some other mod — see <see cref="ModUrlViewModel"/> —
+    /// and a new address is a new instruction to the sync, which fetches the file there
+    /// without holding it to the old checksum.
+    /// </summary>
+    private async Task ChangeUrlAsync(ModRowViewModel row)
+    {
+        if (ChooseModUrl is null) return;
+
+        var choice = new ModUrlViewModel(FetchModAsync, row.Mod.Url, row.ModId, row.Title);
+
+        if (!await ChooseModUrl(choice) || choice.Result is not { } url) return;
+        if (string.Equals(url, row.Mod.Url, StringComparison.Ordinal)) return;
+
+        row.Mod.Url = url;
+        Persist();
+        _log(Lang.Get("mods-address-changed", row.ModId, ModUrl.Host(url)));
+
+        ReloadMods();
+
+        var changed = Mods.FirstOrDefault(
+            m => string.Equals(m.ModId, row.ModId, StringComparison.OrdinalIgnoreCase));
+        if (changed is not null) changed.Downloading = true;
+
+        _ = SyncAfterEditAsync();
     }
 
     /// <summary>
@@ -2292,6 +2418,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// The offers among <see cref="_pendingUpdates"/> that are a mod being listed on ModDB
+    /// after it was added by link. Taking one edits the manifest as well as the lock — the
+    /// address comes off and the mod is followed from ModDB — which the sync cannot do for
+    /// itself. See <see cref="ModUpdate.NowListedOnModDb"/>.
+    /// </summary>
+    private readonly HashSet<string> _nowListed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Puts the outstanding offers back onto freshly built rows.
     ///
     /// An offer is dropped when the lockfile now shows the version it was offering, which
@@ -2372,7 +2506,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 Manifest, _store.LockPath(Id), progress, cache: new ModUpdateCache());
 
             _pendingUpdates.Clear();
-            foreach (var u in updates) _pendingUpdates[u.ModId] = u.To;
+            _nowListed.Clear();
+            foreach (var u in updates)
+            {
+                _pendingUpdates[u.ModId] = u.To;
+                if (u.NowListedOnModDb) _nowListed.Add(u.ModId);
+            }
 
             foreach (var row in Mods)
                 row.UpdateAvailable = _pendingUpdates.GetValueOrDefault(row.ModId);
@@ -2425,6 +2564,22 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         try
         {
+            // A mod listed on ModDB since it was added by link is followed from there
+            // from now on: the address comes off its entry before the sync, which then
+            // resolves it on ModDB like any other unpinned mod.
+            var listed = false;
+            foreach (var mod in Manifest.Mods)
+            {
+                if (!mod.IsFromUrl || !modIds.Contains(mod.ModId, StringComparer.OrdinalIgnoreCase)
+                    || !_nowListed.Contains(mod.ModId)) continue;
+
+                mod.Url = null;
+                listed = true;
+                _log(Lang.Get("mods-now-listed", mod.ModId));
+            }
+
+            if (listed) Persist();
+
             var syncer = new PackSyncer(_moddb, _http);
             var progress = new Progress<SyncStep>(s => _log(Format(s)));
 
@@ -2441,7 +2596,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // an offer somebody has to go and find again. A mod that did land inside a run
             // that failed elsewhere is dropped anyway, by the version its row now shows.
             if (!report.Failed)
-                foreach (var id in modIds) _pendingUpdates.Remove(id);
+                foreach (var id in modIds)
+                {
+                    _pendingUpdates.Remove(id);
+                    _nowListed.Remove(id);
+                }
         }
         catch (Exception e)
         {

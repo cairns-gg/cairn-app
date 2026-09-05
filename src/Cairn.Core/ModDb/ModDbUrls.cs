@@ -30,6 +30,38 @@ public static class ModDbUrls
 
     public static string? Page(ModDbMod mod) => Page(mod.AssetId, mod.UrlAlias);
 
+    /// <summary>
+    /// Reads the file id and name out of a ModDB download link —
+    /// <c>https://mods.vintagestory.at/download/118768/augur_0.1.1.zip</c> — which is the
+    /// form the site's own Download button hands out, and the form an author pastes into
+    /// a pack for a mod they have uploaded but not yet listed.
+    ///
+    /// That is the whole reason to recognise it. The API answers 404 for an unlisted mod,
+    /// so nothing can be looked up from here; what the link does say is that the file
+    /// sits on ModDB, which is enough to record its file id in the lock and, later, to ask
+    /// whether the mod has been listed since.
+    /// </summary>
+    public static bool TryParseDownload(string? url, out int fileId, out string fileName)
+    {
+        fileId = 0;
+        fileName = "";
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !string.Equals(uri.Host, "mods.vintagestory.at", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // /download/<id>/<name>
+        var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 3 || !string.Equals(parts[0], "download", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!int.TryParse(parts[1], out fileId) || fileId <= 0) return false;
+
+        fileName = Uri.UnescapeDataString(parts[2]);
+        return fileName.Length > 0;
+    }
+
     /// <summary>Hosts ModDB is known to serve mod downloads from.</summary>
     private static readonly string[] DownloadHosts =
     [

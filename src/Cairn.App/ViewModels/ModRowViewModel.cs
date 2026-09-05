@@ -23,6 +23,7 @@ public partial class ModRowViewModel : ViewModelBase
     private readonly Action<ModRowViewModel>? _openPage;
     private readonly Action<ModRowViewModel>? _armed;
     private readonly Action<ModRowViewModel>? _update;
+    private readonly Func<ModRowViewModel, Task>? _changeUrl;
 
     /// <summary>Tells "the list was refilled" apart from "the user chose something".</summary>
     private bool _settingProgrammatically;
@@ -36,7 +37,8 @@ public partial class ModRowViewModel : ViewModelBase
         Action<ModRowViewModel>? openPage = null,
         Action<ModRowViewModel>? armed = null,
         Action<ModRowViewModel>? update = null,
-        bool editable = true)
+        bool editable = true,
+        Func<ModRowViewModel, Task>? changeUrl = null)
     {
         Editable = editable;
         Mod = mod;
@@ -47,7 +49,7 @@ public partial class ModRowViewModel : ViewModelBase
         _openPage = openPage;
         _armed = armed;
         _update = update;
-
+        _changeUrl = changeUrl;
     }
 
     public PackMod Mod { get; }
@@ -111,6 +113,9 @@ public partial class ModRowViewModel : ViewModelBase
             _editable = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanChange));
+            OnPropertyChanged(nameof(CanPin));
+            OnPropertyChanged(nameof(CanChangeUrl));
+            ChangeUrlCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -201,6 +206,41 @@ public partial class ModRowViewModel : ViewModelBase
     public string UpdateNote => $"→ {UpdateAvailable}";
 
     public string SideDisplay => Locked?.Side ?? "";
+
+    // ---- mods fetched from an address rather than ModDB ----
+
+    /// <summary>
+    /// True for a mod the manifest points at by address. Said on the row, because a mod
+    /// that ModDB has never seen is a different kind of thing to be running and a list that
+    /// draws it like the others hides the one fact about it that matters.
+    /// </summary>
+    public bool IsFromUrl => Mod.IsFromUrl;
+
+    /// <summary>"from example.com" — the host, and not the whole address.</summary>
+    public string SourceNote => IsFromUrl ? Lang.Get("mods-from-url", ModUrl.Host(Mod.Url)) : "";
+
+    /// <summary>
+    /// Whether there is a ModDB page to open. There is not for a mod fetched from an
+    /// address, and opening the address itself would download the zip into a browser.
+    /// </summary>
+    public bool HasPage => !IsFromUrl;
+
+    /// <summary>
+    /// Whether a pin makes sense. An address serves one file, so there is no version to
+    /// choose and nothing to pin — the address is the pin.
+    /// </summary>
+    public bool CanPin => CanChange && !IsFromUrl;
+
+    /// <summary>The address is this row's version of a pin, and gets the same column.</summary>
+    public bool CanChangeUrl => CanChange && IsFromUrl;
+
+    public string ChangeUrlTip => Lang.Get("mods-address-tip", ModUrl.Host(Mod.Url));
+
+    [RelayCommand(CanExecute = nameof(CanChangeUrl))]
+    private async Task ChangeUrl()
+    {
+        if (_changeUrl is not null) await _changeUrl(this);
+    }
 
     /// <summary>
     /// Arrives after the row is drawn. A pack knows only mod ids, so finding an icon

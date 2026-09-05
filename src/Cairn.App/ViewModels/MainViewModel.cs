@@ -656,6 +656,7 @@ public partial class MainViewModel : ViewModelBase
         Detail.RunOptimumBuild = b => RunOptimumBuild?.Invoke(b) ?? Task.FromResult(false);
         Detail.PickClientFolder = () => PickClientFolder?.Invoke() ?? Task.FromResult<string?>(null);
         Detail.ChoosePinnedVersion = c => ChoosePinnedVersion?.Invoke(c) ?? Task.FromResult(false);
+        Detail.ChooseModUrl = c => ChooseModUrl?.Invoke(c) ?? Task.FromResult(false);
         Detail.ChooseWorlds = c => ChooseWorlds?.Invoke(c) ?? Task.FromResult(false);
 
         // Fills the version picker in the background; the pane is usable before it arrives.
@@ -1207,6 +1208,9 @@ public partial class MainViewModel : ViewModelBase
     /// for a question to be missing.
     /// </summary>
     public Func<PinVersionViewModel, Task<bool>>? ChoosePinnedVersion { get; set; }
+
+    /// <summary>Opens the window that names where a mod is fetched from. See ModUrlViewModel.</summary>
+    public Func<ModUrlViewModel, Task<bool>>? ChooseModUrl { get; set; }
 
     /// <summary>Set by the view; same arrangement as ConfirmVersionChange above.</summary>
     public Func<ShareViewModel, Task<bool>>? ConfirmPublish

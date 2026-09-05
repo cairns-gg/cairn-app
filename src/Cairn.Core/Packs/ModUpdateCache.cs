@@ -71,7 +71,8 @@ public sealed class ModUpdateCache
         text.Append(manifest.GameVersion).Append('\n');
 
         foreach (var mod in manifest.Mods.OrderBy(m => m.ModId, StringComparer.OrdinalIgnoreCase))
-            text.Append(mod.ModId).Append('@').Append(mod.Version ?? "*").Append('\n');
+            text.Append(mod.ModId).Append('@').Append(mod.Version ?? "*")
+                .Append(mod.Url is null ? "" : " " + mod.Url).Append('\n');
 
         text.Append("--\n");
 

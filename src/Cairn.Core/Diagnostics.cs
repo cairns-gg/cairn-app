@@ -177,13 +177,19 @@ public static class Diagnostics
         text.AppendLine();
 
         var declared = pack.Mods.ToDictionary(
-            m => m.ModId, m => m.Version, StringComparer.OrdinalIgnoreCase);
+            m => m.ModId, m => m, StringComparer.OrdinalIgnoreCase);
 
         foreach (var mod in locked.Mods.OrderBy(m => m.ModId, StringComparer.OrdinalIgnoreCase))
         {
+            var asked = declared.GetValueOrDefault(mod.ModId);
+
+            // The host and not the address: a private mod's URL is the kind of thing a
+            // share token lives in, and this is text people paste into a public issue.
             var why = mod.RequiredBy is { Count: > 0 } wanters
                 ? $"required by {string.Join(", ", wanters)}"
-                : declared.TryGetValue(mod.ModId, out var pin) && pin is not null
+                : asked?.IsFromUrl == true
+                    ? $"fetched from {Packs.ModUrl.Host(asked.Url)}"
+                : asked?.Version is { } pin
                     ? $"pinned to {pin}"
                     : "asked for by this pack";
 

@@ -13,6 +13,33 @@ public sealed class PackMod
     [JsonPropertyName("version")] public string? Version { get; set; }
 
     /// <summary>
+    /// Where to fetch this mod from instead of ModDB. Null for the ordinary mod.
+    ///
+    /// A private mod — one written for a single server, or not yet fit to publish — has
+    /// nowhere on ModDB to be resolved from, and until this existed the only way to run one
+    /// from a pack was to drop the zip into <c>Mods/</c> by hand on every machine, where
+    /// nothing tracked it and a shared pack could not carry it. A URL is the least the pack
+    /// can say that lets every copy fetch the same file.
+    ///
+    /// The URL says where; the lock's SHA-256 says what. The first sync records the hash of
+    /// what it fetched, and every sync after that refuses a file whose bytes have moved —
+    /// the same promise ModDB mods get, made about a host nobody moderates. Taking a new
+    /// build is an update, asked for like any other. See <see cref="ModUrl"/> for what an
+    /// address may look like and <see cref="PackSyncer"/> for how one is installed.
+    ///
+    /// In the manifest rather than the lock because it is intent: the author chose it and a
+    /// recipient reads it before importing, on the same screen that names the server the
+    /// pack joins. A lock never gets to say where bytes come from —
+    /// <see cref="PackLock.ClearResolvedLocations"/> — and this is what makes that rule
+    /// survive the feature: the location a follower fetches from is one their author wrote
+    /// into the document they were shown, not one a lock carried in beside it.
+    /// </summary>
+    [JsonPropertyName("url")] public string? Url { get; set; }
+
+    /// <summary>Whether this mod is fetched from <see cref="Url"/> rather than ModDB.</summary>
+    [JsonIgnore] public bool IsFromUrl => !string.IsNullOrWhiteSpace(Url);
+
+    /// <summary>
     /// The game version this pack targeted when somebody accepted that this mod publishes
     /// nothing marked for it. Null for the ordinary mod, which needs no such thing.
     ///
@@ -240,6 +267,19 @@ public sealed class PackManifest
 
             if (m.Version is not null && !GameVersions.IsPlausibleVersion(m.Version))
                 yield return (m, Lang.Get("pack-mod-bad-pin", m.Version));
+
+            if (!m.IsFromUrl) continue;
+
+            // Refused here, at the edge, rather than at download time: a manifest arrives
+            // from somebody else, and an address that would be fetched in the clear is a
+            // fault in the document rather than in the network it is opened on.
+            if (ModUrl.Problem(m.Url) is { } problem)
+                yield return (m, Lang.Get("pack-mod-bad-url", problem));
+
+            // A pin names a release to look for on ModDB, and there is no ModDB in this
+            // entry to look on. Rather than pick which of the two to believe, say so.
+            else if (m.Version is not null)
+                yield return (m, Lang.Get("pack-mod-url-and-pin"));
         }
     }
 
@@ -275,6 +315,21 @@ public sealed class LockedMod
 
     /// <summary>Computed by Cairn on first download; ModDB publishes no hash.</summary>
     [JsonPropertyName("sha256")] public string Sha256 { get; set; } = "";
+
+    /// <summary>
+    /// Whether this was fetched from the manifest's own URL rather than resolved on ModDB.
+    ///
+    /// Recorded because the two kinds of entry mean different things to the next sync and
+    /// nothing else tells them apart once <see cref="PackLock.ClearResolvedLocations"/> has
+    /// run: an imported entry of either kind is a mod id, a version and a hash. The sync
+    /// treats a lock entry as binding only when the manifest still asks for the mod the same
+    /// way — a mod moved from a URL onto ModDB must not be pinned to a version ModDB never
+    /// published, and one moved the other way must not be held to a hash of a different
+    /// file. Absent, rather than false, for every ordinary mod.
+    /// </summary>
+    [JsonPropertyName("fromUrl")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool FromUrl { get; set; }
 
     [JsonPropertyName("side")] public string? Side { get; set; }
 
@@ -327,6 +382,12 @@ public sealed class PackLock
     /// Modid, version and sha256 stay, and so do side and markedFor. Those are the
     /// author's to claim, and they are what makes a shared pack reproduce rather than
     /// merely resemble.
+    ///
+    /// A mod fetched from a URL loses its URL here too, and keeps <see cref="LockedMod.FromUrl"/>.
+    /// The address it is fetched from is the manifest's — the document the recipient was
+    /// shown — and the sync reads it from there and nowhere else, so a lock naming somewhere
+    /// different was never going to be believed. Clearing it keeps the invariant simple:
+    /// an imported lock carries no locations at all, whatever kind of entry it is.
     /// </summary>
     public void ClearResolvedLocations()
     {

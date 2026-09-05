@@ -254,7 +254,7 @@ public class PackLockedModsTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.True(Showing(window, "Search"));
-        Assert.Equal("Filter this pack, or search ModDB…", vm.Detail.SearchPlaceholder);
+        Assert.Equal("Filter this pack, search ModDB, or paste a link to a mod zip…", vm.Detail.SearchPlaceholder);
     }
 
     private static bool Showing(Visual root, string label) =>

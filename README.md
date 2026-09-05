@@ -51,6 +51,10 @@ no choice: a mod never installed, a pin that has moved, or a pack retargeted at 
 game version. It records the exact version and SHA-256, and deletes zips no longer part
 of the pack. Mods stay zipped — the game loads zip archives directly.
 
+A mod that is not on ModDB can be named by address instead — `{ "modid": "anegotweaks",
+"url": "https://files.example/anegotweaks.zip" }` — and is fetched from there. See
+[a mod that is not on ModDB](#a-mod-that-is-not-on-moddb-added-by-address).
+
 That makes launching safe. Sync runs on every **Play**, and mods break saves, so a launch
 must not be able to move a pack's mods underneath it — a settled pack syncs without
 touching the network at all. Updating is something you ask for:
@@ -216,7 +220,8 @@ required:
   took a URL or a pack and guessed which — and which had no way at all to offer the first.
 - **Mods** tab — what the pack contains, what is pinned, and what is actually installed.
   Remove a mod, or fetch its compatible releases and pin an exact version.
-- **Add mods** tab — search ModDB and add a result to the pack.
+- **Add mods** tab — search ModDB and add a result to the pack, or paste the link to a mod
+  zip ModDB does not carry.
 - **Settings** tab — rename, write a description, change or clear the server, export, or
   delete the pack. The description travels with the pack, so it is what a recipient reads
   in the import dialog and on a published pack's page; capped at 280 characters, with the
@@ -334,6 +339,78 @@ copied, never moved, and refused rather than overwritten if the pack already has
 
 [docs/importing.md](docs/importing.md) has the reasoning — why ModDB is asked about mods
 that are already on disk, and why the lock entries start with no checksum.
+
+### A mod that is not on ModDB, added by address
+
+A private mod — written for one server, or not yet fit to publish — has nowhere on ModDB to
+be resolved from, and the only way to run one from a pack was to drop the zip into `Mods/`
+by hand on every machine, where nothing tracked it and a shared pack could not carry it.
+A pack can name one by address instead:
+
+```
+cairn-cli add mypack https://files.example/anegotweaks.zip
+```
+
+or paste the link into the box on the Mods tab, where the button beside it turns into **Add
+from link** and opens a window that fetches the zip, says what it found — *Anego Tweaks 1.0.0
+from files.example* — and adds it on your say-so. Either way the zip is read for its own
+`modinfo.json` — the mod id comes from the zip, not from whoever is typing — and what gets
+written is the address:
+
+```json
+{ "modid": "anegotweaks", "url": "https://files.example/anegotweaks.zip" }
+```
+
+**The address says where; the lock says what.** The first sync records the SHA-256 of the
+file it fetched, and every sync after that refuses a file whose bytes have moved — the same
+promise every ModDB mod gets, made about a host nobody moderates:
+
+```
+x anegotweaks   the file at files.example is no longer the one the lock describes — refusing it; update anegotweaks to take the new file
+```
+
+Taking the new build is an update, asked for like any other: **Check for updates** fetches
+the file and reports it as changed (by version, or as *rebuilt* when the author did not bump
+one), and **Update** or `cairn-cli update mypack anegotweaks` records the new hash. Moving
+the address — **Address…** on the row, where a ModDB mod has its pin, or editing the manifest
+— takes the new file without an update, since a new address is a new instruction. The window
+refuses an address that serves a different mod.
+
+Some things follow from putting the address in the manifest rather than the lock:
+
+- **It travels with the pack**, so a follower's copy fetches the same file from the same
+  place, and the import dialog says so on the mod's row: *fetched from files.example*. That
+  is the one fact the mod ids do not disclose — their copy will run code from that host on
+  the author's say-so — and it is shown on the same screen as the server the pack joins.
+- **A lock still never says where bytes come from.** An imported lock has its locations
+  cleared, as it always did; for a mod named by address the sync reads the address from the
+  manifest the recipient was shown and checks the file against the author's hash.
+- **https, or loopback.** An address fetched in the clear across a network is refused by
+  the manifest, before anything is fetched: the hash is no defence on the first sync, which
+  is the one that writes it.
+- **A pin makes no sense beside an address** — an address serves one file — and the manifest
+  refuses the pair rather than choosing which to believe. A game version change leaves such
+  a mod where it is: whether it runs on the new version is something only its author knows.
+- **The zip has to be a mod.** A sign-in page, or a zip with no `modinfo.json`, is refused
+  and not left in the directory; a zip declaring a different mod id is installed with a
+  warning. Dependencies it declares are resolved on ModDB as any mod's are.
+
+**ModDB's own download links are the case this is mostly for.** A mod uploaded to ModDB
+and not yet listed has a working download link — `https://mods.vintagestory.at/download/118768/augur_0.1.1.zip`,
+the form the site's Download button hands out — while the API answers 404 for it. Paste
+that link and Cairn asks ModDB what it knows:
+
+- **Listed, and the file is one of its releases:** the link was only how you found it, so
+  the mod is added as an ordinary ModDB mod pinned to that release, and the window says so.
+  Unpin it to follow updates.
+- **Not listed yet:** it is added by address, the file id from the link goes into the lock,
+  and **Check for mod updates** asks ModDB each time whether that has changed. Once the mod
+  is listed the check offers it — *0.1.1 → 0.1.1 (now listed on ModDB)* — and taking that
+  update drops the address from the entry, so the mod is followed from ModDB from then on,
+  on every copy of the pack that takes the revision.
+
+That check is the only time ModDB is asked about such a mod. The sync that runs at every
+launch does not ask, because a settled pack syncs with no network at all.
 
 ### A mod that has not caught up, added on purpose
 
