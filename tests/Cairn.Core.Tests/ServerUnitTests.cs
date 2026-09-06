@@ -33,6 +33,21 @@ public class ServerUnitTests
         Scope = UnitScope.User,
     };
 
+    /// <summary>
+    /// A failed start is retried, and retried more slowly each time. The flat ten seconds
+    /// this used to be was a request to ModDB every ten seconds, from a box nobody was
+    /// watching, for a week — over a mod ModDB was never going to list again.
+    /// </summary>
+    [Fact]
+    public void A_failing_server_backs_off_rather_than_polling()
+    {
+        var unit = System().Render();
+
+        Assert.Contains("Restart=on-failure", unit);
+        Assert.Contains("RestartSteps=10", unit);
+        Assert.Contains("RestartMaxDelaySec=600", unit);
+    }
+
     [Fact]
     public void One_template_serves_every_pack_on_the_box()
     {

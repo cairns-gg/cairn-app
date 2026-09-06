@@ -217,6 +217,37 @@ public sealed class PackStore
             foreach (var entry in mine?.Mods ?? [])
                 if (wanted.Contains(entry.ModId) && !covered.Contains(entry.ModId))
                     next.Mods.Add(entry);
+
+            // Their entry, and where this machine already got it from. Clearing the
+            // author's locations is right — see above — but it also cleared what this copy
+            // had found out for itself, so every update sent every unchanged mod back to
+            // ModDB to be told the address it had already recorded. Cheap while ModDB
+            // answers, and fatal for a mod ModDB has since unlisted: the same bytes, on
+            // disk, hash matching, and a sync that could not install them because it was
+            // not allowed to know where they were.
+            //
+            // The author's hash is the whole safeguard. A location is taken back only when
+            // their entry names the same version and the same bytes this copy already has,
+            // and the location was written by this copy's own resolve rather than by their
+            // document — so an entry an attacker rewrote does not match, and gets the fresh
+            // resolve it always did. Provenance has to agree too: a mod that moved between
+            // ModDB and an address has a hash of a different file, whatever the version says.
+            foreach (var entry in next.Mods)
+            {
+                var known = mine?.Mods.FirstOrDefault(m =>
+                    string.Equals(m.ModId, entry.ModId, StringComparison.OrdinalIgnoreCase));
+
+                if (known is null || known.FromUrl != entry.FromUrl) continue;
+                if (!string.Equals(known.Version, entry.Version, StringComparison.OrdinalIgnoreCase)) continue;
+                if (known.Sha256.Length == 0
+                    || !string.Equals(known.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase)) continue;
+                if (entry.Url.Length > 0 || entry.FileName.Length > 0) continue;
+
+                entry.Url = known.Url;
+                entry.FileName = known.FileName;
+                entry.ReleaseId = known.ReleaseId;
+                entry.FileId = known.FileId;
+            }
         }
 
         next.Save(LockPath(id));

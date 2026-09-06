@@ -314,11 +314,14 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)
                 {
                     Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, e.Message)));
+                    KeepPrior(prior);
                     return null;
                 }
 
                 if (release is null)
                 {
+                    KeepPrior(prior);
+
                     // Named separately when an acceptance exists but is for another minor:
                     // "no release marked for 1.23.0" is true and says nothing about the
                     // note sitting in the manifest that used to make this work.
@@ -579,6 +582,27 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 : Lang.Get("sync-from-url", $"{prior.Version} -> {locked.Version}", ModUrl.Host(url));
             Record(new SyncStep(action, want.ModId, detail));
             return target;
+        }
+
+        // A resolve that failed says nothing about the file already here. Dropping the
+        // entry did two things, both wrong: it handed the zip to the sweep, which deletes
+        // whatever the previous lock named and the new one does not; and it threw away the
+        // hash, which is the one fact that could let the next sync install the mod without
+        // asking ModDB again. A mod that was unlisted from ModDB is the case that found
+        // this — the zip was on disk with the right hash, ModDB answered 404, and the lock
+        // was one entry shorter after every attempt, so no later attempt could do better.
+        //
+        // Not across a game version change: the entry describes a file chosen for the old
+        // version, and a lock that matches on game version is read as "installed for
+        // this one". PackStore.MergeLock drops such entries for the same reason.
+        void KeepPrior(LockedMod? prior)
+        {
+            if (prior is null) return;
+
+            if (!string.Equals(previous!.GameVersion, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            newLock.Mods.Add(prior);
         }
 
         // A mod nobody asked for, failing by its id alone, is a puzzle: the user has never

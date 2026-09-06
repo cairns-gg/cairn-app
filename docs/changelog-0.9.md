@@ -3,6 +3,27 @@
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
 
+## A mod that ModDB dropped no longer takes a server down with it
+
+**0.9.9.** When a mod is unpublished from ModDB, a pack that already has it should not
+notice: the zip is on disk, and the lockfile says what it is. It noticed. A copy that had
+just taken an update went back to ModDB for every mod, was told the mod did not exist, and
+dropped it from the lockfile — so the next attempt had less to go on than the last, and a
+dedicated server sat restarting every ten seconds until somebody stripped the mod out by
+hand. Three things are different now.
+
+A sync that cannot resolve a mod **leaves the lockfile entry and the zip alone**, rather
+than deleting both on its way out. An update whose entry names the same bytes you already
+have **keeps the address your copy already found**, so the next sync installs it without
+asking ModDB. And the server unit **backs off** — ten seconds, then longer each time, up
+to ten minutes — instead of asking ModDB every ten seconds for as long as nobody is looking.
+
+Nothing to do for a launcher. For a server, `cairn-server unit <pack> --write` again to
+pick up the back-off; the unit file is written once and kept. Separately, **cairns.gg was
+dropping the address of a mod added by link** from every pack it published, which is what
+turned a private mod into a mod ModDB had never heard of. That is fixed on the site; a pack
+published before 6 September that names a mod by address needs publishing once more.
+
 ## A mod that is not on ModDB, by address
 
 **0.9.8.** A private mod — one written for your own server, or not ready to publish — had no

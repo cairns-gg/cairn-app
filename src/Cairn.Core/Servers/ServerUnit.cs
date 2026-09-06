@@ -98,6 +98,17 @@ public sealed record ServerUnit
             "Restart=on-failure",
             "RestartSec=10",
 
+            // Ten seconds, then longer each time, up to ten minutes. A sync that fails
+            // fails the same way on the next attempt — a mod ModDB no longer lists is
+            // not going to be listed ten seconds later — and every attempt is a request
+            // to ModDB from a machine nobody is watching, for as long as nobody looks.
+            // Still on-failure and still forever, because the other reason a sync fails
+            // is ModDB being down, and a server that gave up after five tries at 3 a.m.
+            // is down until somebody notices. On a systemd older than 254 these two are
+            // unknown, warned about once, and ignored: the flat ten seconds it always was.
+            "RestartSteps=10",
+            "RestartMaxDelaySec=600",
+
             // The server is asked to stop, not killed: see the summary above.
             "KillSignal=SIGTERM",
             "TimeoutStopSec=300",
