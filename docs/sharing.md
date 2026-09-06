@@ -497,6 +497,16 @@ with nothing to show for it in the document. That is also why the window still o
 unchanged pack: those choices are the reason to come back to one. `PublishRecord.WouldChange`
 is the whole rule, and both front-ends ask it.
 
+**And both let you overrule it**, because it can be wrong in one direction. The fingerprint
+is of what this machine *sent*, and nothing checks that the site kept it: a server that
+altered the document on the way in — cairns.gg once dropped the address of every mod added
+by link — leaves the record and the pack agreeing about a revision that is not what is
+served, and the only repair is the publish the check refuses. Holding **Shift** in the
+Share window turns the dim button into **Force publish**; `cairn-cli publish --force` is the
+same thing headless. A held key rather than a checkbox, because it is not a setting — there
+is nothing to leave switched on, and no way to press it without meaning to. The lock check
+above it cannot be forced: that one is a fact about this disk, not a guess about the site.
+
 **The address is fixed once published.** On cairns the URL *is* the pack, so publishing the
 same one under a different slug does not move it — it creates a second pack and leaves the
 first live under the same name, which is how you end up with two identical-looking packs

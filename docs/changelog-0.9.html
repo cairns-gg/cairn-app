@@ -10,6 +10,8 @@
 
 <p>Nothing to do for a launcher. For a server, <code>cairn-server unit &lt;pack&gt; --write</code> again to pick up the back-off; the unit file is written once and kept. Separately, <strong>cairns.gg was dropping the address of a mod added by link</strong> from every pack it published, which is what turned a private mod into a mod ModDB had never heard of. That is fixed on the site; a pack published before 6 September that names a mod by address needs publishing once more.</p>
 
+<p>Which the Share window would have refused, since as far as it knew nothing had changed &mdash; Cairn remembers what it sent, not what the site kept. So there is now a way to overrule it: <strong>hold Shift</strong> and the dim button becomes <strong>Force publish</strong>. The note under it says so. On the command line it is <code>cairn-cli publish --force</code>. Neither is for everyday use; a forced publish of a pack that really is unchanged tells every follower about an update that has nothing in it.</p>
+
 <h2>A mod that is not on ModDB, by address</h2>
 
 <p><strong>0.9.8.</strong> A private mod &mdash; one written for your own server, or not ready to publish &mdash; had no way into a pack except dropping the zip into the pack's <code>Mods</code> folder by hand, on every machine, where nothing kept track of it and a shared pack could not carry it. A pack can now name one by the address of its zip. Paste the link into the box on the <strong>Mods</strong> tab, where the button beside it becomes <strong>Add from link</strong>, or:</p>

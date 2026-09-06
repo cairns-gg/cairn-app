@@ -24,6 +24,13 @@ dropping the address of a mod added by link** from every pack it published, whic
 turned a private mod into a mod ModDB had never heard of. That is fixed on the site; a pack
 published before 6 September that names a mod by address needs publishing once more.
 
+Which the Share window would have refused, since as far as it knew nothing had changed —
+Cairn remembers what it sent, not what the site kept. So there is now a way to overrule it:
+**hold Shift** and the dim button becomes **Force publish**. The note under it says so. On
+the command line it is `cairn-cli publish --force`. Neither is for everyday use; a forced
+publish of a pack that really is unchanged tells every follower about an update that has
+nothing in it.
+
 ## A mod that is not on ModDB, by address
 
 **0.9.8.** A private mod — one written for your own server, or not ready to publish — had no

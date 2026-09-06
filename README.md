@@ -776,8 +776,10 @@ the link keeps it attributed, and keeps whoever you sent it to getting the autho
 
 Publishing an unchanged pack does nothing and says so, rather than minting a revision
 nobody asked for — what counts as a change is the manifest and the lock, not the moment you
-pressed the button. [docs/sharing.md](docs/sharing.md) covers the whole model: what a
-revision is, what a withdrawn pack keeps, and why the button's label carries the state.
+pressed the button. Holding Shift turns the button into **Force publish** (`--force` on the
+CLI) for the one case the check gets wrong: a site that altered what it was sent.
+[docs/sharing.md](docs/sharing.md) covers the whole model: what a revision is, what a
+withdrawn pack keeps, and why the button's label carries the state.
 
 ## Licence
 

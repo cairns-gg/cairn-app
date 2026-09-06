@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
@@ -219,6 +221,71 @@ public class ShareWindowTests
         Assert.False(vm.CanPublish);
         Assert.False(Find(window, "PublishButton").IsEnabled);
         Assert.Contains("revision 3", vm.UnchangedNote);
+    }
+
+    /// <summary>
+    /// The check compares against what this machine sent, and a site that altered the
+    /// document on the way in leaves the two agreeing about a revision that is not what is
+    /// served. Shift is the way past it: held, the dim button becomes Force publish;
+    /// released, the refusal is back. A key rather than a checkbox, so there is nothing to
+    /// leave switched on.
+    /// </summary>
+    [AvaloniaFact]
+    public void Holding_Shift_turns_the_refusal_into_Force_publish()
+    {
+        var (link, documentFor) = AlreadyPublished();
+        var (window, vm) = Show(Plan(), link, documentFor: documentFor);
+
+        var button = Find(window, "PublishButton");
+        Assert.False(button.IsEnabled);
+        Assert.Contains("Hold Shift", vm.UnchangedNote);
+
+        window.KeyPress(Key.LeftShift, RawInputModifiers.Shift, PhysicalKey.ShiftLeft, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.Forcing);
+        Assert.True(button.IsEnabled);
+        Assert.Equal("Force publish", button.Content);
+
+        window.KeyRelease(Key.LeftShift, RawInputModifiers.None, PhysicalKey.ShiftLeft, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.Forcing);
+        Assert.False(button.IsEnabled);
+        Assert.Equal("Publish changes", button.Content);
+    }
+
+    /// <summary>
+    /// Shift over a pack that has changed forces nothing, and the button says so by not
+    /// changing — "Force publish" on an ordinary publish would be a claim about the pack.
+    /// </summary>
+    [AvaloniaFact]
+    public void Shift_over_a_changed_pack_changes_nothing()
+    {
+        var (link, _) = AlreadyPublished();
+        var (window, vm) = Show(Plan(), link, documentFor: _ => """{"pack":"edited since"}""");
+
+        window.KeyPress(Key.LeftShift, RawInputModifiers.Shift, PhysicalKey.ShiftLeft, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.Forcing);
+        Assert.Equal("Publish changes", Find(window, "PublishButton").Content);
+    }
+
+    /// <summary>
+    /// The lock check is a fact about this disk, not a guess about the site, so Shift does
+    /// not get past it.
+    /// </summary>
+    [AvaloniaFact]
+    public void Shift_does_not_get_past_a_stale_lock()
+    {
+        var (window, vm) = Show(Plan(lockProblem: "Sync the pack first."));
+
+        window.KeyPress(Key.LeftShift, RawInputModifiers.Shift, PhysicalKey.ShiftLeft, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.CanPublish);
+        Assert.False(Find(window, "PublishButton").IsEnabled);
     }
 
     [AvaloniaFact]

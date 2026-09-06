@@ -125,11 +125,40 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     partial void OnStripConnectChanged(bool value) => RecheckWhetherAnythingChanged();
 
+    /// <summary>
+    /// Whether Shift is down. Set by the window, which is the only thing with a keyboard.
+    ///
+    /// The way past the unchanged check, for the case it gets wrong. The publish record
+    /// keeps a hash of what this machine <em>sent</em>, and the refusal compares against
+    /// that — so a site that altered the document on the way in (cairns.gg once dropped
+    /// every mod's address) leaves the two agreeing about a revision that is not what is
+    /// served, and the only fix is a publish the window will not allow. A held key rather
+    /// than a checkbox because it is not a setting: nothing to leave switched on, and no
+    /// way to press it without meaning to.
+    /// </summary>
+    [ObservableProperty] public partial bool ForceHeld { get; set; }
+
+    partial void OnForceHeldChanged(bool value)
+    {
+        OnPropertyChanged(nameof(Forcing));
+        OnPropertyChanged(nameof(CanPublish));
+        OnPropertyChanged(nameof(PublishLabel));
+    }
+
+    /// <summary>
+    /// True when pressing the button would publish a pack the check says is unchanged.
+    /// Shift held over a pack that has changed forces nothing, and the button says so by
+    /// not changing.
+    /// </summary>
+    public bool Forcing => ForceHeld && NothingToPublish;
+
     private void RecheckWhetherAnythingChanged()
     {
         OnPropertyChanged(nameof(NothingToPublish));
         OnPropertyChanged(nameof(UnchangedNote));
+        OnPropertyChanged(nameof(Forcing));
         OnPropertyChanged(nameof(CanPublish));
+        OnPropertyChanged(nameof(PublishLabel));
         OnPropertyChanged(nameof(DeltaLine));
         OnPropertyChanged(nameof(ShowDelta));
     }
@@ -150,8 +179,13 @@ public sealed partial class ShareViewModel : ViewModelBase
         && Slug == _publishedSlug
         && !_published.WouldChange(_documentFor(StripConnect), IsPublic, StripConnect);
 
+    /// <summary>
+    /// Says why the button is dim, and how to press it anyway. The hint is the whole of
+    /// how somebody finds out Shift does anything, so it lives beside the button it
+    /// changes rather than in a manual.
+    /// </summary>
     public string UnchangedNote => NothingToPublish
-        ? Lang.Get("share-unchanged", Revision)
+        ? Lang.Get("share-unchanged", Revision) + " " + Lang.Get("share-force-hint")
         : "";
 
     /// <summary>
@@ -235,7 +269,9 @@ public sealed partial class ShareViewModel : ViewModelBase
         }
     }
 
-    public string PublishLabel => AlreadyPublished ? Lang.Get("share-publish-changes") : Lang.Get("share-publish");
+    public string PublishLabel => Forcing ? Lang.Get("share-force-publish")
+        : AlreadyPublished ? Lang.Get("share-publish-changes")
+        : Lang.Get("share-publish");
 
     public bool HasConnect => Plan.HasConnect;
 
@@ -252,9 +288,11 @@ public sealed partial class ShareViewModel : ViewModelBase
     /// <summary>
     /// False while the lockfile does not cover the manifest — publishing a pack whose lock
     /// is stale would advertise reproducibility it cannot deliver, so that refuses rather
-    /// than warns — and false when this would send a revision identical to the last.
+    /// than warns — and false when this would send a revision identical to the last,
+    /// unless Shift is held. Only the second refusal can be forced: it is a guess about
+    /// what the site holds, and the first is a fact about this disk.
     /// </summary>
-    public bool CanPublish => Plan.CanPublish && !NothingToPublish;
+    public bool CanPublish => Plan.CanPublish && (!NothingToPublish || ForceHeld);
 
     /// <param name="delta">
     /// What this publish would change about the revision on the site, or null when there is

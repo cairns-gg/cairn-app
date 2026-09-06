@@ -532,6 +532,8 @@
   "share-include": "L'inclure",
   "share-slug-fixed": "L'adresse est figée une fois publiée — des liens vers elle circulent déjà.",
   "share-unchanged": "Rien n'a changé depuis la révision {0}.",
+  "share-force-hint": "Maintenez Maj pour publier quand même.",
+  "share-force-publish": "Forcer la publication",
   "share-connect-warning": "Ce pack contient l'adresse de serveur {0}.",
   "share-imported-from": "importé depuis {0} — c'est à son auteur de le publier",
   "share-withdrawn-note": "retiré — {0} est à vous jusqu'à ce que vous y publiiez de nouveau",

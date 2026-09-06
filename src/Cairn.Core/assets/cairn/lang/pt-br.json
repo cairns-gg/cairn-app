@@ -404,6 +404,8 @@
   "share-include": "Incluir",
   "share-slug-fixed": "O endereço fica fixo depois de publicado — já tem links para ele por aí.",
   "share-unchanged": "Nada mudou desde a revisão {0}.",
+  "share-force-hint": "Segure Shift para publicar mesmo assim.",
+  "share-force-publish": "Forçar publicação",
   "share-connect-warning": "Este pacote leva o endereço de servidor {0}.",
   "share-imported-from": "importado de {0} — publicar continua sendo com o autor",
   "share-withdrawn-note": "retirado — {0} é seu até você publicar lá de novo",

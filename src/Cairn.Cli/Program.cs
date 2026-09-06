@@ -151,7 +151,8 @@ internal static class Program
               cairn-cli login [--no-browser]          sign in to cairns.gg
               cairn-cli logout                        forget this machine's token
               cairn-cli whoami                        who this machine is signed in as
-              cairn-cli publish <id> [--slug x] [--unlisted] [--keep-server]  share a pack
+              cairn-cli publish <id> [--slug x] [--unlisted] [--keep-server] [--force]
+                                                     share a pack
               cairn-cli unpublish <id>                withdraw a published pack
 
             Packs live under $CAIRN_HOME, then whatever `home set` recorded, then
@@ -1668,7 +1669,7 @@ internal static class Program
     private static async Task<int> Publish(
         PackStore store, ModDbClient moddb, HttpClient http, string[] args)
     {
-        if (args.Length < 2) return Fail("usage: cairn-cli publish <id> [--slug x] [--unlisted]");
+        if (args.Length < 2) return Fail("usage: cairn-cli publish <id> [--slug x] [--unlisted] [--keep-server] [--force]");
 
         var id = args[1];
         if (!store.Exists(id)) return Fail($"no pack '{id}'");
@@ -1754,17 +1755,26 @@ internal static class Program
         // A revision differing from its predecessor in nothing but its number tells every
         // follower there is an update and then has none for them. Visibility and the
         // server address count as changes; the bytes alone are not the whole question.
+        //
+        // --force is the same override as Shift in the Share window, for the same case:
+        // the fingerprint is of what was sent, and a site that altered it on the way in
+        // is only repaired by the publish this would refuse. See PublishRecord.WouldChange.
         if (link is { Published: { } last }
             && !last.WouldChange(document, isPublic, strip))
         {
+            if (args.Contains("--force"))
+                Console.WriteLine($"  publishing anyway — revision {link.Revision} has the same contents");
+
             // Unless it is not up any more. A withdrawal made on the site never reaches
             // this machine, so this refusal can be defending a pack that stopped being
             // served — and republishing it unchanged is exactly how it comes back.
-            if (!await client.IsWithdrawnAsync(session.Username, slug))
-                return Fail($"'{id}' has not changed since revision {link.Revision}");
-
-            store.MarkWithdrawn(id);
-            Console.WriteLine($"  {link.Url} was withdrawn — publishing brings it back");
+            else if (!await client.IsWithdrawnAsync(session.Username, slug))
+                return Fail($"'{id}' has not changed since revision {link.Revision} — publish --force to send it anyway");
+            else
+            {
+                store.MarkWithdrawn(id);
+                Console.WriteLine($"  {link.Url} was withdrawn — publishing brings it back");
+            }
         }
         var result = await client.PublishAsync(session, document, slug, isPublic);
 

@@ -60,6 +60,13 @@ public sealed class PublishRecord
     /// but flipped from unlisted to public is a real change; one with the same document
     /// and the same choices is a revision differing from its predecessor in nothing but
     /// its number — and every follower is told there is an update that isn't one.
+    ///
+    /// Both front-ends let a person overrule this — Shift in the Share window, --force on
+    /// the CLI — because the fingerprint is of what this machine sent, not of what the site
+    /// serves. A site that altered the document on the way in (cairns.gg once dropped every
+    /// mod's address) leaves the two agreeing about a revision that is not what is up, and
+    /// the only repair is the publish this refuses. The override is explicit on both so
+    /// that the ordinary press stays refused; it is not a way to make the check advisory.
     /// </summary>
     public bool WouldChange(string publishedJson, bool @public, bool strip) =>
         !string.Equals(Fingerprint, PackLink.Fingerprint(publishedJson),

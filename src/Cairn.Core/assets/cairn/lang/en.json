@@ -243,6 +243,8 @@
   "share-signed-in-as": "Signed in as {0}",
   "share-slug-fixed": "The address is fixed once published — links to it are already out there.",
   "share-unchanged": "Nothing has changed since revision {0}.",
+  "share-force-hint": "Hold Shift to publish it anyway.",
+  "share-force-publish": "Force publish",
   "share-title": "Share \"{0}\"",
   "share-publish-changes": "Publish changes",
   "share-publish": "Publish",
