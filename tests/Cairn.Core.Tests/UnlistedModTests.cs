@@ -113,6 +113,10 @@ public class UnlistedModTests : IDisposable
         }.Save(LockPath);
     }
 
+    /// <summary>
+    /// And, the file being the one the lock names, it counts as installed: a Failed step is
+    /// one a dedicated server will not start over. See LockedModTests for the rest.
+    /// </summary>
     [Fact]
     public async Task A_resolve_that_fails_keeps_the_lock_entry_and_the_file()
     {
@@ -122,7 +126,8 @@ public class UnlistedModTests : IDisposable
 
         var report = await syncer.SyncAsync(Pack(), ModsDir, LockPath);
 
-        Assert.True(report.Failed);
+        Assert.False(report.Failed);
+        Assert.Contains(report.Steps, s => s is { Action: SyncAction.Warned, ModId: "augur" });
 
         var entry = Assert.Single(PackLock.Load(LockPath)!.Mods);
         Assert.Equal("augur", entry.ModId);

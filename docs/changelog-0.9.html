@@ -2,6 +2,16 @@
 
 <p>Everything since the 0.8 series. Nothing here needs anything from you unless it says so &mdash; see <strong>Upgrading</strong> at the end.</p>
 
+<h2>A mod ModDB stops showing, carried on by its download link</h2>
+
+<p><strong>0.9.9.</strong> A mod can disappear from ModDB without its files going anywhere &mdash; unpublished by its author, or locked by a moderator. xSkills Fork and the XLib Fork it needs are both like that at the moment: ModDB says it has never heard of them, and their download links work as well as ever. A pack naming either could not be installed by anybody who did not already have them, and a server that took an update with them in it would not start.</p>
+
+<p><strong>Publishing now carries such a mod by its download link.</strong> When you publish, Cairn asks ModDB about every mod in the pack, including the ones only there because another mod needs them. One it no longer lists is moved onto ModDB&rsquo;s download link for the exact file you have installed, the same as if you had added it by link yourself, and the Share window says which moved before anything is sent. The change is to your own pack, so the Mods tab shows <strong>from mods.vintagestory.at</strong> on those rows. Everyone who takes the revision gets exactly your file or refuses it. If ModDB lists the mod again, <strong>Check for mod updates</strong> says so and <strong>Update</strong> goes back to following it from there.</p>
+
+<p><strong>And a copy that already has the file keeps going.</strong> If ModDB cannot say anything about a mod but the file you already have is the one the lockfile names, Cairn uses it and warns you, instead of refusing to play or to start the server. The mods it depends on stay put too: they used to be tidied away as &ldquo;no longer in pack&rdquo;. A copy with no such file is told what will fix it: the pack&rsquo;s author publishing again with 0.9.9.</p>
+
+<p>If you publish a pack, publish it once more after updating. Nothing else to do.</p>
+
 <h2>A mod that ModDB dropped no longer takes a server down with it</h2>
 
 <p><strong>0.9.9.</strong> When a mod is unpublished from ModDB, a pack that already has it should not notice: the zip is on disk, and the lockfile says what it is. It noticed. A copy that had just taken an update went back to ModDB for every mod, was told the mod did not exist, and dropped it from the lockfile &mdash; so the next attempt had less to go on than the last, and a dedicated server sat restarting every ten seconds until somebody stripped the mod out by hand. Three things are different now.</p>

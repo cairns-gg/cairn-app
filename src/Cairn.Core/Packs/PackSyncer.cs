@@ -87,6 +87,9 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         var previous = PackLock.Load(lockPath);
         var newLock = new PackLock { GameVersion = manifest.GameVersion };
 
+        // See FindByHashAsync.
+        var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+
         void Record(SyncStep step)
         {
             steps.Add(step);
@@ -313,15 +316,27 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 // them and dies in the same place on every retry.
                 catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)
                 {
-                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, e.Message)));
+                    var notListed = e is ModDbException { NotListed: true };
+
+                    if (await KeepWhatIsHereAsync(want, prior,
+                                notListed ? Lang.Get("sync-not-listed") : e.Message)
+                            .ConfigureAwait(false) is { } here)
+                        return here;
+
+                    // Said as what to do about it when the lock knew the mod and ModDB no
+                    // longer does: nothing on this machine can fix that, and a bare 404
+                    // reads as Cairn's fault. See UnlistedMods for the other end.
+                    var why = notListed && prior is { Sha256.Length: > 0 }
+                        ? Lang.Get("sync-unlisted-no-copy", want.ModId)
+                        : e.Message;
+
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, why)));
                     KeepPrior(prior);
                     return null;
                 }
 
                 if (release is null)
                 {
-                    KeepPrior(prior);
-
                     // Named separately when an acceptance exists but is for another minor:
                     // "no release marked for 1.23.0" is true and says nothing about the
                     // note sitting in the manifest that used to make this work.
@@ -329,8 +344,13 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                         ? Lang.Get("sync-stale-acceptance", want.AcceptedFor)
                                                 : "";
 
-                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want,
-                        Lang.Get("sync-no-release-marked", manifest.GameVersion, stale))));
+                    var why = Lang.Get("sync-no-release-marked", manifest.GameVersion, stale);
+
+                    if (await KeepWhatIsHereAsync(want, prior, why).ConfigureAwait(false) is { } here)
+                        return here;
+
+                    KeepPrior(prior);
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, why)));
                     return null;
                 }
             }
@@ -603,6 +623,76 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 return;
 
             newLock.Mods.Add(prior);
+        }
+
+        // A resolve that failed, for a mod whose file is already here: installed, not failed.
+        //
+        // KeepPrior on its own was not enough. It saved the entry and the zip, but the step
+        // was still Failed — and a Failed step is one cairn-server will not start a server
+        // over and Play will not launch over, so a mod a moderator locked took down every
+        // copy that had to ask ModDB about it, with the right bytes sitting on disk. And it
+        // returned no path, so the mod's dependencies were never read: they fell out of the
+        // lock and the sweep deleted them, a library locked alongside its mod included.
+        //
+        // The lock's hash is what makes this safe. It is the author's word about which bytes
+        // they had, a file with those bytes is that file however it came to be here, and
+        // nothing is fetched. Only while the entry still describes what is wanted — the
+        // same game version, and the same version when the manifest pins one — because
+        // otherwise the file here is the one somebody has just asked to move away from.
+        async Task<string?> KeepWhatIsHereAsync(PendingMod want, LockedMod? prior, string reason)
+        {
+            if (prior is not { Sha256.Length: > 0 }) return null;
+
+            if (!string.Equals(previous!.GameVersion, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (want.Version is not null && want.Version != prior.Version) return null;
+
+            if (await FindByHashAsync(prior).ConfigureAwait(false) is not { } name) return null;
+
+            // Named, so the sweep leaves it and the next sync finds it without a search. An
+            // entry that arrived with somebody else's pack has had its filename cleared,
+            // and this is the name the file actually has here.
+            prior.FileName = name;
+            newLock.Mods.Add(prior);
+
+            Record(new SyncStep(SyncAction.Warned, want.ModId,
+                Explain(want, Lang.Get("sync-kept-copy", reason, prior.Version))));
+
+            return Path.Combine(modsDir, name);
+        }
+
+        // The file in Mods whose bytes are the ones the entry names, or null. Its own
+        // filename first; failing that, every file there, because an imported entry has no
+        // filename to go by — the case that matters, since a copy that resolved the mod for
+        // itself keeps its address and never gets this far. Hashed at most once per sync,
+        // and only ever on this path, so a pack whose mods all resolve pays nothing.
+        async Task<string?> FindByHashAsync(LockedMod entry)
+        {
+            if (entry.FileName.Length > 0
+                && ModFileName.Problem(entry.FileName) is null
+                && await HashOfAsync(Path.Combine(modsDir, entry.FileName)).ConfigureAwait(false) is { } own
+                && string.Equals(own, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                return entry.FileName;
+
+            foreach (var path in Directory.EnumerateFiles(modsDir))
+            {
+                if (path.EndsWith(".partial", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (string.Equals(await HashOfAsync(path).ConfigureAwait(false), entry.Sha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    return Path.GetFileName(path);
+            }
+
+            return null;
+        }
+
+        async Task<string?> HashOfAsync(string path)
+        {
+            if (hashes.TryGetValue(path, out var known)) return known;
+            if (!File.Exists(path)) return null;
+
+            return hashes[path] = await Sha256Async(path, ct).ConfigureAwait(false);
         }
 
         // A mod nobody asked for, failing by its id alone, is a puzzle: the user has never

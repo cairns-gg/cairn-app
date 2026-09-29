@@ -178,6 +178,41 @@ public class ShareWindowTests
         Assert.Contains("homegrown", vm.UnresolvableWarning);
     }
 
+    /// <summary>
+    /// Publishing has just rewritten the author's pack file on the way to this window, and
+    /// nobody asked it to: the one place that can say so before anything is sent is here.
+    /// </summary>
+    [AvaloniaFact]
+    public void Mods_moved_off_ModDB_by_publishing_are_named()
+    {
+        var plan = Plan() with
+        {
+            Readdressed =
+            [
+                new ReaddressedMod("xskillsfork", "1.1.6",
+                    "https://mods.vintagestory.at/download/124380/xSkills%20Fork%20v1.1.6.zip", false),
+            ],
+        };
+
+        var (window, _) = Show(plan);
+
+        var text = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "ReaddressedText");
+
+        Assert.True(text.IsEffectivelyVisible);
+        Assert.Contains("xskillsfork", text.Text);
+        Assert.Contains("no longer listed on ModDB", text.Text);
+    }
+
+    [AvaloniaFact]
+    public void And_says_nothing_when_nothing_moved()
+    {
+        var (window, _) = Show(Plan());
+
+        Assert.False(window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "ReaddressedText").IsVisible);
+    }
+
     [AvaloniaFact]
     public void The_url_preview_follows_the_slug()
     {

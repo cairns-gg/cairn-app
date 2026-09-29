@@ -73,7 +73,16 @@ public sealed record ResolvedRelease(
         GameVersions is null ? null : ModDbClient.Classify(GameVersions, gameVersion);
 }
 
-public sealed class ModDbException(string message) : Exception(message);
+/// <param name="notListed">
+/// ModDB answered, and has no mod by that id — as opposed to an answer that could not be
+/// read, or a mod that is there without the release asked for. A mod that was unpublished
+/// or locked by a moderator reads exactly like one that never existed, and it is the case
+/// where the file this copy already has is worth more than anything ModDB can say.
+/// </param>
+public sealed class ModDbException(string message, bool notListed = false) : Exception(message)
+{
+    public bool NotListed { get; } = notListed;
+}
 
 /// <summary>
 /// A search result, and whether it has a release the pack's game version can use.
@@ -179,7 +188,7 @@ public sealed class ModDbClient(HttpClient http, Func<DateTimeOffset>? now = nul
                    ?? throw new ModDbException(Lang.Get("moddb-no-body", modId));
 
         if (resp.Mod is null)
-            throw new ModDbException(Lang.Get("moddb-no-such-mod", modId, resp.StatusCode));
+            throw new ModDbException(Lang.Get("moddb-no-such-mod", modId, resp.StatusCode), notListed: true);
 
         Remember(modId, resp.Mod);
 

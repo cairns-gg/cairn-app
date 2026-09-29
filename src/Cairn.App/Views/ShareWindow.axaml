@@ -94,6 +94,11 @@
                        FontSize="11" TextWrapping="Wrap"
                        Foreground="{DynamicResource VsWarningBrush}" />
 
+            <TextBlock Name="ReaddressedText"
+                       Text="{Binding ReaddressedWarning}" IsVisible="{Binding AnythingReaddressed}"
+                       FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource VsWarningBrush}" />
+
             <TextBlock Text="{Binding LockProblem}" IsVisible="{Binding CannotPublish}"
                        FontSize="11" TextWrapping="Wrap"
                        Foreground="{DynamicResource VsErrorBrush}" />

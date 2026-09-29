@@ -281,6 +281,10 @@ public sealed partial class ShareViewModel : ViewModelBase
 
     public string UnresolvableWarning => Plan.UnresolvableWarning();
 
+    public bool AnythingReaddressed => Plan.AnythingReaddressed;
+
+    public string ReaddressedWarning => Plan.ReaddressedWarning();
+
     public bool CannotPublish => !Plan.CanPublish;
 
     public string LockProblem => Plan.LockProblem ?? "";

@@ -1713,12 +1713,19 @@ internal static class Program
             syncFailures = report.Steps;
         }
 
+        // Before the plan, so the plan and the document are of the pack as it will go up.
+        var readdressed = await UnlistedMods.ReaddressAsync(store, manifest, moddb);
+
         // The same plan the launcher's Share window shows, so both front-ends refuse the
         // same packs for the same reasons.
         var plan = await PublishPlan.PrepareAsync(
-            manifest, store.LoadLock(id), moddb, syncFailures: syncFailures);
+            manifest, store.LoadLock(id), moddb, syncFailures: syncFailures, readdressed: readdressed);
 
         if (!plan.CanPublish) return Fail(plan.LockProblem ?? "this pack cannot be published");
+
+        foreach (var mod in readdressed)
+            Console.WriteLine($"  ! {mod.ModId} {mod.Version} is no longer listed on ModDB — "
+                              + $"now fetched from {mod.Url}{(mod.WasDependency ? " (was a dependency)" : "")}");
 
         foreach (var mod in plan.Unresolvable)
             Console.WriteLine($"  ! {mod.ModId} is not on ModDB — recipients cannot install it");

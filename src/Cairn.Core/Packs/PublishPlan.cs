@@ -32,6 +32,11 @@ public sealed record PublishMod(string ModId, string? Version, bool Pinned, bool
 /// How many mod settings the pack carries, counted across every file it names.
 /// </param>
 /// <param name="Keybinds">How many hotkeys it carries.</param>
+/// <param name="Readdressed">
+/// Mods ModDB stopped listing, which publishing has just moved onto their download links
+/// in the author's own manifest — see <see cref="UnlistedMods"/>. Named on the screen
+/// because the author's pack file changed on the way to this dialog, and nobody asked it to.
+/// </param>
 public sealed record PublishPlan(
     string PackId,
     IReadOnlyList<PublishMod> Mods,
@@ -39,8 +44,20 @@ public sealed record PublishPlan(
     bool LockCovers,
     string? LockProblem,
     int ModConfigValues = 0,
-    int Keybinds = 0)
+    int Keybinds = 0,
+    IReadOnlyList<ReaddressedMod>? Readdressed = null)
 {
+    public bool AnythingReaddressed => Readdressed is { Count: > 0 };
+
+    public string ReaddressedWarning()
+    {
+        var n = Readdressed?.Count ?? 0;
+        return n == 0
+            ? ""
+            : Lang.Plural("share-readdressed", n, n,
+                string.Join(", ", Readdressed!.Take(3).Select(m => m.ModId)) + (n > 3 ? ", …" : ""));
+    }
+
     /// <summary>
     /// Mods with nothing on ModDB. They resolve on the author's machine and are a dead
     /// entry on everyone else's, which is the most likely way a shared pack disappoints
@@ -119,7 +136,8 @@ public sealed record PublishPlan(
         ModDbClient? moddb = null,
         IProgress<string>? progress = null,
         CancellationToken ct = default,
-        IReadOnlyList<SyncStep>? syncFailures = null)
+        IReadOnlyList<SyncStep>? syncFailures = null,
+        IReadOnlyList<ReaddressedMod>? readdressed = null)
     {
         var mods = new List<PublishMod>();
 
@@ -156,7 +174,7 @@ public sealed record PublishPlan(
 
         return new PublishPlan(
             manifest.Id, mods, manifest.Connect, covers, problem,
-            CountValues(manifest.ModConfig), manifest.Keybinds?.Count ?? 0);
+            CountValues(manifest.ModConfig), manifest.Keybinds?.Count ?? 0, readdressed);
     }
 
     /// <summary>

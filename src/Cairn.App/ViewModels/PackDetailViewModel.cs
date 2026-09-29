@@ -2740,11 +2740,21 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 IsBusy = true;
             }
 
+            // Before the plan, so the window and the document are of the pack as it will go
+            // up. The rows are redrawn because the manifest under them has just changed.
+            var readdressed = await UnlistedMods.ReaddressAsync(_store, Manifest, _moddb);
+            if (readdressed.Count > 0)
+            {
+                ReloadMods();
+                _onChanged();
+            }
+
             // The one sweep, over the lock as it now stands. The sync above resolved every
             // mod it touched, so on that path this asks ModDB almost nothing — see
             // ModDbClient.ExistsAsync.
             var plan = await PublishPlan.PrepareAsync(
-                Manifest, _store.LoadLock(Id), _moddb, progress, syncFailures: sync?.Steps);
+                Manifest, _store.LoadLock(Id), _moddb, progress, syncFailures: sync?.Steps,
+                readdressed: readdressed);
 
             // Before the window is built, because the window is what would refuse. A
             // withdrawal made on the site never reaches this machine, so the publish

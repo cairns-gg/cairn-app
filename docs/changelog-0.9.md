@@ -3,6 +3,31 @@
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
 
+## A mod ModDB stops showing, carried on by its download link
+
+**0.9.9.** A mod can disappear from ModDB without its files going anywhere — unpublished by its
+author, or locked by a moderator. xSkills Fork and the XLib Fork it needs are both like that
+at the moment: ModDB says it has never heard of them, and their download links work as well
+as ever. A pack naming either could not be installed by anybody who did not already have
+them, and a server that took an update with them in it would not start.
+
+**Publishing now carries such a mod by its download link.** When you publish, Cairn asks
+ModDB about every mod in the pack, including the ones only there because another mod needs
+them. One it no longer lists is moved onto ModDB's download link for the exact file you have
+installed, the same as if you had added it by link yourself, and the Share window says which
+moved before anything is sent. The change is to your own pack, so the Mods tab shows **from
+mods.vintagestory.at** on those rows. Everyone who takes the revision gets exactly your file
+or refuses it. If ModDB lists the mod again, **Check for mod updates** says so and **Update**
+goes back to following it from there.
+
+**And a copy that already has the file keeps going.** If ModDB cannot say anything about a
+mod but the file you already have is the one the lockfile names, Cairn uses it and warns
+you, instead of refusing to play or to start the server. The mods it depends on stay put too:
+they used to be tidied away as "no longer in pack". A copy with no such file is told what
+will fix it: the pack's author publishing again with 0.9.9.
+
+If you publish a pack, publish it once more after updating. Nothing else to do.
+
 ## A mod that ModDB dropped no longer takes a server down with it
 
 **0.9.9.** When a mod is unpublished from ModDB, a pack that already has it should not
