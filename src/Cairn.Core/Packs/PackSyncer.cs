@@ -330,6 +330,11 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                         ? Lang.Get("sync-unlisted-no-copy", want.ModId)
                         : e.Message;
 
+                    // A mod ModDB does not list has no release to accept, so asking again
+                    // with acceptUnmarked would only repeat the 404.
+                    if (!notListed)
+                        why = await UnacceptedAsync(want, wanted, accepted).ConfigureAwait(false) ?? why;
+
                     Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, why)));
                     KeepPrior(prior);
                     return null;
@@ -350,7 +355,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                         return here;
 
                     KeepPrior(prior);
-                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, why)));
+                    Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want,
+                        await UnacceptedAsync(want, wanted, accepted).ConfigureAwait(false) ?? why)));
                     return null;
                 }
             }
@@ -699,6 +705,35 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // heard of it. Naming who wanted it turns the message into something actionable.
         string Explain(PendingMod want, string message) =>
             want.RequiredBy is null ? message : $"{message} (required by {want.RequiredBy})";
+
+        // The failure for a mod that would install if the pack accepted it, saying how.
+        //
+        // Without this the refusal was a dead end — "1.0.1 exists but is not marked for game
+        // 1.22.7" — and somebody keeping pack.json by hand had no way to learn from it that
+        // acceptedFor exists; they dropped a mod they had run and knew worked. Only offered
+        // when it is true: a mod with nothing installable, a dependency (already taken on
+        // the requiring mod's word) and a stale acceptance (which has its own explanation)
+        // all keep the message they had. Asked of the document the failed resolve just
+        // fetched, so it costs no request.
+        async Task<string?> UnacceptedAsync(PendingMod want, string? wanted, bool accepted)
+        {
+            if (accepted || want.RequiredBy is not null || !string.IsNullOrWhiteSpace(want.AcceptedFor))
+                return null;
+
+            try
+            {
+                var release = await moddb.ResolveAsync(
+                        want.ModId, manifest.GameVersion, wanted, ct, acceptUnmarked: true)
+                    .ConfigureAwait(false);
+
+                return release is null ? null : Lang.Get("sync-not-accepted", release.ModVersion,
+                    DescribeVersions(release.GameVersions), manifest.GameVersion);
+            }
+            catch (Exception e) when (e is ModDbException or HttpRequestException or JsonException)
+            {
+                return null;
+            }
+        }
     }
 
     /// <summary>

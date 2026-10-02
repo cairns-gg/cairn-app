@@ -796,6 +796,7 @@
   "sync-not-listed": "ModDB no longer lists this mod",
   "sync-kept-copy": "{0} — kept the {1} already here, which matches the lock",
   "sync-unlisted-no-copy": "ModDB no longer lists {0}, and there is no copy here to fall back on — the pack's author needs to publish it again with Cairn 0.9.9 or later",
+  "sync-not-accepted": "{0} is marked for {1}, not {2}. If you have run it on {2} and it works, the pack can accept it: add \"acceptedFor\": \"{2}\" to this mod in pack.json, or remove it and add it again with Add anyway in the launcher",
   "sync-same-minor": "{0} is not marked for {1} exactly, only for another release in that minor series",
   "sync-unmarked": "{0} is marked for {1}, not {2} — installed because the pack accepts it, and it may misbehave",
   "sync-unmarked-dependency": "{0} is marked for {1}, not {2} — installed because {3} requires it, and it may misbehave",

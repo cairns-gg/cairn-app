@@ -424,6 +424,13 @@ on running it.
 
 ## Smaller things
 
+- **A mod refused for your game version says how to take it anyway.** **0.9.9.** A pack can
+  carry a mod ModDB does not mark for its game version once somebody says they have run it —
+  **Add anyway** in the launcher writes that down — but a pack whose `pack.json` you keep by
+  hand had no way to find that out. Sync now says so where it refuses the mod: *"1.0.1 is
+  marked for 1.20.0, 1.20.1, not 1.22.7. If you have run it on 1.22.7 and it works, the pack
+  can accept it: add `"acceptedFor": "1.22.7"` to this mod in pack.json…"*. It only says so
+  when accepting would actually install something. Nothing to do.
 - **Buttons to the folders.** **0.9.7.** Pack settings now has an **Open folder** button
   beside each of the two paths it prints: the pack's `Mods` folder, for dropping in a zip ModDB
   does not carry, and its data folder, where its worlds and settings live. And in **Mod

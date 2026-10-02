@@ -688,6 +688,7 @@
   "sync-no-longer-in-pack": "já não está no pack",
   "sync-stale-acceptance": "; foi aceite para o jogo {0}, e este pack passou entretanto para outra série de versões",
   "sync-no-release-marked": "não há nenhuma versão marcada para o jogo {0}{1}",
+  "sync-not-accepted": "O {0} está marcado para {1}, não para {2}. Se já o correu em {2} e funciona, o pack pode aceitá-lo: acrescente \"acceptedFor\": \"{2}\" a este mod no pack.json, ou remova-o e volte a adicioná-lo com Adicionar mesmo assim no iniciador",
   "sync-same-minor": "O {0} não está marcado exatamente para {1}, apenas para outra versão dessa série menor",
   "sync-unmarked": "O {0} está marcado para {1}, não para {2} — instalado porque o pack o aceita, e pode portar-se mal",
   "sync-unmarked-dependency": "O {0} está marcado para {1}, não para {2} — instalado porque o {3} o exige, e pode portar-se mal",

@@ -58,8 +58,12 @@ public class UnmarkedModTests : IDisposable
 
     // ---- the sync ----
 
-    /// <summary>Serves one mod whose only release is marked for 1.21.4, and its zip.</summary>
-    private sealed class Stub : HttpMessageHandler
+    /// <summary>
+    /// Serves one mod whose only release is marked for 1.21.4, and its zip — or, with
+    /// <paramref name="installable"/> off, that release with its file gone, the way ModDB
+    /// keeps the row for a deleted upload.
+    /// </summary>
+    private sealed class Stub(bool installable = true) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
@@ -71,9 +75,11 @@ public class UnmarkedModTests : IDisposable
                   "side":"both",
                   "releases":[{"releaseid":1,"fileid":1,"modidstr":"oreveintracers",
                     "modversion":"1.2.3","filename":"oreveintracers_1.2.3.zip",
-                    "mainfile":"https://moddbcdn.vintagestory.at/oreveintracers_1.2.3.zip",
+                    "mainfile":"MAINFILE",
                     "tags":["1.21.4"]}]}}
-                """;
+                """.Replace("MAINFILE", installable
+                    ? "https://moddbcdn.vintagestory.at/oreveintracers_1.2.3.zip"
+                    : "");
 
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -100,14 +106,15 @@ public class UnmarkedModTests : IDisposable
         }
     }
 
-    private async Task<SyncReport> SyncAsync(string gameVersion, string? acceptedFor)
+    private async Task<SyncReport> SyncAsync(
+        string gameVersion, string? acceptedFor, string? version = null, bool installable = true)
     {
-        var http = new HttpClient(new Stub());
+        var http = new HttpClient(new Stub(installable));
         var manifest = new PackManifest
         {
             Id = "p",
             GameVersion = gameVersion,
-            Mods = [new PackMod { ModId = "oreveintracers", AcceptedFor = acceptedFor }],
+            Mods = [new PackMod { ModId = "oreveintracers", Version = version, AcceptedFor = acceptedFor }],
         };
 
         return await new PackSyncer(new ModDbClient(http), http)
@@ -121,7 +128,7 @@ public class UnmarkedModTests : IDisposable
 
         Assert.True(report.Failed);
         Assert.Contains(report.Steps, s =>
-            s.Action == SyncAction.Failed && s.Detail.Contains("no release marked for game 1.22.6"));
+            s.Action == SyncAction.Failed && s.Detail.Contains("not 1.22.6"));
         Assert.Empty(report.Lock.Mods);
     }
 
@@ -166,5 +173,61 @@ public class UnmarkedModTests : IDisposable
         var failure = Assert.Single(report.Steps, s => s.Action == SyncAction.Failed);
         Assert.Contains("no release marked for game 1.23.0", failure.Detail);
         Assert.Contains("accepted for game 1.22.6", failure.Detail);
+    }
+
+    // ---- the way out, named by the failure ----
+    //
+    // Refusal used to be a dead end. Somebody keeping pack.json by hand was told "1.2.3 exists
+    // but is not marked for game 1.22.7", found nothing in it about acceptedFor, and dropped
+    // a mod they had run and knew worked.
+
+    [Theory]
+    [InlineData(null)]       // follows the newest release
+    [InlineData("1.2.3")]    // pinned, which used to fail with a different message
+    public async Task Without_an_acceptance_the_failure_says_how_to_give_one(string? version)
+    {
+        var report = await SyncAsync("1.22.7", acceptedFor: null, version: version);
+
+        Assert.True(report.Failed);
+
+        var failure = Assert.Single(report.Steps, s => s.Action == SyncAction.Failed);
+        Assert.Equal("oreveintracers", failure.ModId);
+        Assert.Contains("1.2.3 is marked for 1.21.4, not 1.22.7", failure.Detail);
+        Assert.Contains("\"acceptedFor\": \"1.22.7\"", failure.Detail);
+
+        // The step already names the mod; the old pinned message named it again.
+        Assert.DoesNotContain("oreveintracers", failure.Detail);
+    }
+
+    [Fact]
+    public async Task A_pinned_release_installs_once_accepted()
+    {
+        var report = await SyncAsync("1.22.7", acceptedFor: "1.22.7", version: "1.2.3");
+
+        Assert.False(report.Failed);
+        Assert.Equal("1.2.3", Assert.Single(report.Lock.Mods).Version);
+        Assert.Contains(report.Warnings, w => w.ModId == "oreveintracers");
+    }
+
+    [Fact]
+    public async Task Nothing_to_accept_means_no_offer_to_accept_it()
+    {
+        // The only release has no file. Accepting it would install nothing, so saying how
+        // to would send somebody to edit pack.json for no result.
+        var report = await SyncAsync("1.22.7", acceptedFor: null, installable: false);
+
+        var failure = Assert.Single(report.Steps, s => s.Action == SyncAction.Failed);
+        Assert.Contains("no release marked for game 1.22.7", failure.Detail);
+        Assert.DoesNotContain("acceptedFor", failure.Detail);
+    }
+
+    [Fact]
+    public async Task A_stale_acceptance_keeps_its_own_explanation()
+    {
+        var report = await SyncAsync("1.23.0", acceptedFor: "1.22.6");
+
+        var failure = Assert.Single(report.Steps, s => s.Action == SyncAction.Failed);
+        Assert.Contains("accepted for game 1.22.6", failure.Detail);
+        Assert.DoesNotContain("\"acceptedFor\"", failure.Detail);
     }
 }
