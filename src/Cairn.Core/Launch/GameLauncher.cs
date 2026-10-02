@@ -71,10 +71,17 @@ public sealed class GameLauncher(GameInstall install)
             args.Add(options.DataPath);
         }
 
-        foreach (var modPath in options.ModPaths)
+        // One flag followed by every path, never the flag repeated. The option is an
+        // IEnumerable<string> under CommandLineParser, which takes a sequence after a single
+        // flag and treats a second occurrence as an error unless AllowMultiInstance is set —
+        // and neither the client's parser nor the server's sets it. The parse then fails,
+        // ParserResult.Value is null, and the game dies with a NullReferenceException in its
+        // own constructor before writing a log. Harmless while every launch had one path;
+        // the local mods folder is the second.
+        if (options.ModPaths.Count > 0)
         {
             args.Add("--addModPath");
-            args.Add(modPath);
+            args.AddRange(options.ModPaths);
         }
 
         // Checked here as well as in the manifest, because this is the boundary rather

@@ -124,6 +124,31 @@
 
                         <TextBlock Classes="hint" Text="{l:Tr prefs-language-explain}" />
                     </StackPanel>
+
+                    <Separator Margin="0,4" />
+
+                    <!--
+                        Here rather than on a pack, because it applies to every pack: it is
+                        somebody's work in progress, not anything a pack is about. See LocalMods.
+                    -->
+                    <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Left">
+                        <TextBlock Classes="label" Text="{l:Tr prefs-local-mods}" />
+
+                        <TextBlock Name="LocalModsText" Classes="value" TextWrapping="Wrap"
+                                   Text="{Binding LocalModsDisplay}" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Name="ChooseLocalModsButton" Padding="12,4"
+                                    Content="{l:Tr prefs-local-mods-choose}"
+                                    Command="{Binding ChooseLocalModsCommand}" />
+                            <Button Name="ClearLocalModsButton" Padding="12,4"
+                                    Content="{l:Tr prefs-local-mods-clear}"
+                                    IsVisible="{Binding HasLocalMods}"
+                                    Command="{Binding ClearLocalModsCommand}" />
+                        </StackPanel>
+
+                        <TextBlock Classes="hint" Text="{l:Tr prefs-local-mods-explain}" />
+                    </StackPanel>
                 </StackPanel>
                 </ScrollViewer>
             </TabItem>

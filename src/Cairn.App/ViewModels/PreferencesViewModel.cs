@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cairn.Core;
 using Cairn.Core.Games;
+using Cairn.Core.Launch;
 using Cairn.Core.ModDb;
 using Cairn.Core.Runtime;
 using Cairn.Core.Packs;
@@ -79,6 +80,46 @@ public partial class PreferencesViewModel : ViewModelBase
     /// The language row, in a type of its own — see <see cref="LanguageSettingViewModel"/>.
     /// </summary>
     public LanguageSettingViewModel Language { get; } = new();
+
+    // ---- a folder of mods loaded with every pack ----
+
+    /// <summary>The folder, or null when none is set. See <see cref="LocalMods"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLocalMods), nameof(LocalModsDisplay))]
+    public partial string? LocalModsFolder { get; set; } = CairnSettings.Load().LocalModsPath;
+
+    public bool HasLocalMods => !string.IsNullOrWhiteSpace(LocalModsFolder);
+
+    public string LocalModsDisplay => HasLocalMods ? LocalModsFolder! : Lang.Get("prefs-local-mods-none");
+
+    /// <summary>
+    /// Asks for the local mods folder, starting from <paramref name="start"/> when there is
+    /// one. Its own delegate rather than <see cref="PickFolder"/>, whose dialog is titled and
+    /// placed for moving Cairn's home.
+    /// </summary>
+    public Func<string?, Task<string?>>? PickLocalModsFolder { get; set; }
+
+    /// <summary>
+    /// Stored as chosen, without looking inside. An empty folder is the ordinary state
+    /// before the first build, and one that later goes missing is said at launch — which is
+    /// when it matters, rather than here, when it has not happened yet.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseLocalMods()
+    {
+        if (PickLocalModsFolder is null) return;
+        if (await PickLocalModsFolder(LocalModsFolder) is not { } chosen) return;
+
+        CairnSettings.Update(s => s.LocalModsPath = chosen);
+        LocalModsFolder = chosen;
+    }
+
+    [RelayCommand]
+    private void ClearLocalMods()
+    {
+        CairnSettings.Update(s => s.LocalModsPath = null);
+        LocalModsFolder = null;
+    }
 
     /// <summary>
     /// Which version this is. Read from the assembly rather than held in a constant, so a

@@ -54,6 +54,24 @@ public partial class PreferencesWindow : Window
 
         vm.Confirm = ConfirmAsync;
         vm.PickFolder = PickFolderAsync;
+        vm.PickLocalModsFolder = PickLocalModsFolderAsync;
+    }
+
+    /// <summary>Opens on the folder already chosen, when it is still there to open on.</summary>
+    private async Task<string?> PickLocalModsFolderAsync(string? current)
+    {
+        var start = !string.IsNullOrWhiteSpace(current) && Directory.Exists(current)
+            ? await StorageProvider.TryGetFolderFromPathAsync(current)
+            : null;
+
+        var picked = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = Lang.Get("prefs-local-mods-pick"),
+            AllowMultiple = false,
+            SuggestedStartLocation = start,
+        });
+
+        return picked.Count == 0 ? null : picked[0].TryGetLocalPath();
     }
 
     private Task<bool> ConfirmAsync(ConfirmViewModel confirm) =>

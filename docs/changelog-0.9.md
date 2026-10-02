@@ -56,6 +56,27 @@ the command line it is `cairn-cli publish --force`. Neither is for everyday use;
 publish of a pack that really is unchanged tells every follower about an update that has
 nothing in it.
 
+## Testing the mods you are making
+
+**0.9.9.** **Preferences → Overview** has a new setting: a **local mods folder**. Point it at
+the folder your mod's build writes to, and every pack you play loads what is in it alongside
+its own mods — zips, or unpacked mod folders straight out of a build, with no copying and no
+re-adding after each rebuild. It belongs to your copy of Cairn alone: nothing in it goes into
+a pack, so nothing in it is ever published or shared.
+
+Where a pack already has the same mod, **the game keeps whichever copy has the higher
+version**, wherever each came from. That is the game's rule, not Cairn's, and it is easy to
+fall foul of: a rebuild left at the same version may not load, and `1.2.0-dev` counts as
+*older* than `1.2.0`. So the launch log says, every time, what is going to happen:
+
+```
+loading mymod 1.2.1-dev from your local mods folder in place of the pack's 1.2.0
+mymod 1.2.0-dev in your local mods folder will not load — the game ranks a -dev, -pre or -rc version below the release it leads to, so the pack's 1.2.0 wins. Give the local one a higher version to use it
+```
+
+Nothing changes unless you set it. Mods that your mod needs are not added to the pack for
+you — add them to the pack as usual.
+
 ## A mod that is not on ModDB, by address
 
 **0.9.8.** A private mod — one written for your own server, or not ready to publish — had no

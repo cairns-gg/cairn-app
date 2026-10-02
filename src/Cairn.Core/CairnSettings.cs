@@ -77,6 +77,16 @@ public sealed class CairnSettings
     public string? GameDataPath { get; set; }
 
     /// <summary>
+    /// A folder of mods loaded alongside every pack, for somebody testing mods they are
+    /// writing. Null means none. See <see cref="Cairn.Core.Launch.LocalMods"/>.
+    ///
+    /// An application setting rather than a pack's, because what it holds is the author's
+    /// work in progress rather than anything a pack is about — and because a pack's own
+    /// files are the ones that get shared, and a path on this disk means nothing on another.
+    /// </summary>
+    public string? LocalModsPath { get; set; }
+
+    /// <summary>
     /// Anything in the file this build does not know about, kept so it survives a write.
     ///
     /// The same failure this type was created to fix, one version along: somebody runs a

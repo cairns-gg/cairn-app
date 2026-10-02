@@ -46,20 +46,21 @@ public class GameLauncherTests : IDisposable
 
         Assert.Equal(
             ["--dataPath", "/data",
-             "--addModPath", "/packs/a/Mods",
-             "--addModPath", "/packs/b/Mods",
+             "--addModPath", "/packs/a/Mods", "/packs/b/Mods",
              "--connect", "host:42420"],
             args);
     }
 
     [Fact]
-    public void Mod_paths_repeat_the_flag_rather_than_joining_them()
+    public void Mod_paths_follow_one_flag_as_separate_arguments()
     {
+        // Repeating the flag is a parse error to the game — its CommandLineParser does not
+        // allow multiple instances — and it crashes before writing a log. Joining them into
+        // one argument is no better: nothing on the other end splits it.
         var args = new GameLauncher(Install())
             .BuildArguments(new LaunchOptions { ModPaths = { "/a", "/b", "/c" } });
 
-        Assert.Equal(3, args.Count(a => a == "--addModPath"));
-        Assert.DoesNotContain(args, a => a.Contains(':') || a.Contains(','));
+        Assert.Equal(["--addModPath", "/a", "/b", "/c"], args);
     }
 
     [Fact]

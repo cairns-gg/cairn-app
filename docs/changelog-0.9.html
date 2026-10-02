@@ -22,6 +22,17 @@
 
 <p>Which the Share window would have refused, since as far as it knew nothing had changed &mdash; Cairn remembers what it sent, not what the site kept. So there is now a way to overrule it: <strong>hold Shift</strong> and the dim button becomes <strong>Force publish</strong>. The note under it says so. On the command line it is <code>cairn-cli publish --force</code>. Neither is for everyday use; a forced publish of a pack that really is unchanged tells every follower about an update that has nothing in it.</p>
 
+<h2>Testing the mods you are making</h2>
+
+<p><strong>0.9.9.</strong> <strong>Preferences &rarr; Overview</strong> has a new setting: a <strong>local mods folder</strong>. Point it at the folder your mod's build writes to, and every pack you play loads what is in it alongside its own mods &mdash; zips, or unpacked mod folders straight out of a build, with no copying and no re-adding after each rebuild. It belongs to your copy of Cairn alone: nothing in it goes into a pack, so nothing in it is ever published or shared.</p>
+
+<p>Where a pack already has the same mod, <strong>the game keeps whichever copy has the higher version</strong>, wherever each came from. That is the game's rule, not Cairn's, and it is easy to fall foul of: a rebuild left at the same version may not load, and <code>1.2.0-dev</code> counts as <em>older</em> than <code>1.2.0</code>. So the launch log says, every time, what is going to happen:</p>
+
+<pre>loading mymod 1.2.1-dev from your local mods folder in place of the pack's 1.2.0
+mymod 1.2.0-dev in your local mods folder will not load &mdash; the game ranks a -dev, -pre or -rc version below the release it leads to, so the pack's 1.2.0 wins. Give the local one a higher version to use it</pre>
+
+<p>Nothing changes unless you set it. Mods that your mod needs are not added to the pack for you &mdash; add them to the pack as usual.</p>
+
 <h2>A mod that is not on ModDB, by address</h2>
 
 <p><strong>0.9.8.</strong> A private mod &mdash; one written for your own server, or not ready to publish &mdash; had no way into a pack except dropping the zip into the pack's <code>Mods</code> folder by hand, on every machine, where nothing kept track of it and a shared pack could not carry it. A pack can now name one by the address of its zip. Paste the link into the box on the <strong>Mods</strong> tab, where the button beside it becomes <strong>Add from link</strong>, or:</p>

@@ -3222,6 +3222,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // copy does. Worded by Core so the CLI says the same thing.
             foreach (var change in config) _log(change.Describe());
 
+            // Every launch says so while a local mods folder is set, not only when one of
+            // its mods collides with the pack's: a setting that changes what every pack runs
+            // is the kind somebody forgets is on.
+            var local = LocalMods.Plan(CairnSettings.Load().LocalModsPath, _store.ModsDir(Id));
+            foreach (var line in local.Lines) _log(line.Text);
+
             var options = new LaunchOptions
             {
                 DataPath = _packData.DataPathFor(Id),
@@ -3229,6 +3235,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 Connect = Manifest.Connect,
                 PreferredDotnetRoot = _runtimes.RootFor(install),
             };
+
+            if (local.ModPath is { } localPath) options.ModPaths.Add(localPath);
 
             var runtime = launcher.ResolveRuntime(options);
             if (!runtime.Resolved)

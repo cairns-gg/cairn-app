@@ -955,6 +955,12 @@ internal static class Program
             PreferredDotnetRoot = managedRoot,
         };
 
+        // Before the dry-run exit, so it shows what the local folder would do — which is
+        // the question somebody runs a dry run to answer.
+        var local = LocalMods.Plan(CairnSettings.Load().LocalModsPath, store.ModsDir(id));
+        foreach (var line in local.Lines) Console.WriteLine(line.Text);
+        if (local.ModPath is { } localPath) options.ModPaths.Add(localPath);
+
         Console.WriteLine($"launching: {install.Executable} {string.Join(' ', launcher.BuildArguments(options))}");
 
         if (args.Contains("--dry-run"))

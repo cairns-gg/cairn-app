@@ -136,9 +136,15 @@ public static class ModDependencies
     /// Reads the whole of a mod's <c>modinfo.json</c>. The one place that knows how to open
     /// a mod zip, so <see cref="Read"/> and a diagnostics report cannot disagree about
     /// whether a given file is readable.
+    ///
+    /// Also an unpacked folder, which the game loads as readily as a zip. A pack never
+    /// installs one, but a local mods folder is mostly made of them — it is what a mod
+    /// project's build writes before anything zips it — so the same bounds apply to both.
     /// </summary>
     public static ModInfoSummary Describe(string path)
     {
+        if (Directory.Exists(path)) return DescribeFolder(path);
+
         try
         {
             using var zip = ZipFile.OpenRead(path);
@@ -166,34 +172,7 @@ public static class ModDependencies
             // and lands in the JsonException path below — asserted in ModInfoSizeTests,
             // because it is a framework guarantee this leans on rather than anything here.
             // Counting anyway costs nothing and is what would hold if that ever changed.
-            // Reading one byte past the cap distinguishes "exactly at the limit" from
-            // "more than we will take", and bounds the allocation either way.
-            var bytes = BoundedRead.AtMost(stream, MaxModInfoBytes + 1);
-
-            if (bytes.Length > MaxModInfoBytes) return Empty(TooBig(null));
-
-            // Parsed from a stream over the bytes already in hand rather than from the
-            // decompressor, so the bound above is what limits memory. Still a Stream and
-            // not the ReadOnlyMemory overload: that one rejects a UTF-8 BOM, and mod
-            // authors on Windows write plenty of them.
-            using var bounded = new MemoryStream(bytes, writable: false);
-            using var doc = JsonDocument.Parse(bounded, new JsonDocumentOptions
-            {
-                AllowTrailingCommas = true,
-                CommentHandling = JsonCommentHandling.Skip,
-            });
-
-            var root = doc.RootElement;
-
-            return new ModInfoSummary(
-                Text(root, "modid"),
-                Text(root, "name"),
-                Text(root, "version"),
-                Text(root, "type"),
-                Strings(root, "authors"),
-                Pairs(root, "dependencies"),
-                null,
-                Text(root, "side"));
+            return FromStream(stream);
         }
         catch (JsonException e)
         {
@@ -206,16 +185,76 @@ public static class ModDependencies
         {
             return Empty(Lang.Get("deps-zip-unopenable", e.Message));
         }
-
-        static ModInfoSummary Empty(string? problem) => new(null, null, null, null, [], [], problem);
-
-        // Phrased like the other problems here: what was not read, and what that costs.
-        // The declared size is quoted when there is one, because "declares 1.1 GB" and
-        // "kept coming" are different things to whoever has to look at the mod.
-        static string TooBig(long? declared) => declared is { } n
-            ? Lang.Get("deps-modinfo-too-big-size", Bytes.Human(n))
-            : Lang.Get("deps-modinfo-too-big");
     }
+
+    private static ModInfoSummary DescribeFolder(string dir)
+    {
+        try
+        {
+            // Matched the way the zip's entry is, for the same reason: the spelling varies.
+            var file = Directory.EnumerateFiles(dir).FirstOrDefault(f => string.Equals(
+                Path.GetFileName(f), "modinfo.json", StringComparison.OrdinalIgnoreCase));
+
+            if (file is null) return Empty(null);
+
+            var length = new FileInfo(file).Length;
+            if (length > MaxModInfoBytes) return Empty(TooBig(length));
+
+            using var stream = File.OpenRead(file);
+            return FromStream(stream);
+        }
+        catch (JsonException e)
+        {
+            return Empty(Lang.Get("deps-modinfo-unreadable", e.Message));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return Empty(Lang.Get("deps-folder-unopenable", e.Message));
+        }
+    }
+
+    /// <exception cref="JsonException">The file is there and is not JSON this can read.</exception>
+    private static ModInfoSummary FromStream(Stream stream)
+    {
+        // Reading one byte past the cap distinguishes "exactly at the limit" from "more than
+        // we will take", and bounds the allocation either way — even where the size was
+        // already checked, because a file can grow between being measured and being read.
+        var bytes = BoundedRead.AtMost(stream, MaxModInfoBytes + 1);
+
+        if (bytes.Length > MaxModInfoBytes) return Empty(TooBig(null));
+
+        // Parsed from a stream over the bytes already in hand rather than from the
+        // decompressor, so the bound above is what limits memory. Still a Stream and
+        // not the ReadOnlyMemory overload: that one rejects a UTF-8 BOM, and mod
+        // authors on Windows write plenty of them.
+        using var bounded = new MemoryStream(bytes, writable: false);
+        using var doc = JsonDocument.Parse(bounded, new JsonDocumentOptions
+        {
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip,
+        });
+
+        var root = doc.RootElement;
+
+        return new ModInfoSummary(
+            Text(root, "modid"),
+            Text(root, "name"),
+            Text(root, "version"),
+            Text(root, "type"),
+            Strings(root, "authors"),
+            Pairs(root, "dependencies"),
+            null,
+            Text(root, "side"));
+    }
+
+    private static ModInfoSummary Empty(string? problem) => new(null, null, null, null, [], [], problem);
+
+    // Phrased like the other problems here: what was not read, and what that costs.
+    // The declared size is quoted when there is one, because "declares 1.1 GB" and
+    // "kept coming" are different things to whoever has to look at the mod.
+    private static string TooBig(long? declared) => declared is { } n
+        ? Lang.Get("deps-modinfo-too-big-size", Bytes.Human(n))
+        : Lang.Get("deps-modinfo-too-big");
 
 
     /// <summary>A string property, whatever case the author wrote it in.</summary>

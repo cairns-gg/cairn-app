@@ -412,6 +412,45 @@ that link and Cairn asks ModDB what it knows:
 That check is the only time ModDB is asked about such a mod. The sync that runs at every
 launch does not ask, because a settled pack syncs with no network at all.
 
+### A mod you are writing, from a local folder
+
+An address is the wrong tool for a mod still being written: the lock pins the bytes, so
+every rebuild is refused until it is taken as an update, and the address goes into a
+manifest that gets shared. **Preferences → Local mods folder** is the other tool. Every
+launch hands that folder to the game as a second `--addModPath`, after the pack's own `Mods`,
+and that is all — nothing is copied, nothing reaches the manifest or the lock, and nothing is
+published. It holds whatever the game itself loads: zips, unpacked mod folders (what a build
+writes) and loose `.cs`/`.dll` files. It applies to every pack, being the author's work in
+progress rather than anything a pack is about; `cairn-server` does not read it.
+
+**Which copy loads is the game's decision, and Cairn predicts it rather than making it.**
+When two mods share an id, `ModLoader.CheckDuplicateModIDMods` keeps the highest version by
+`GameVersion.IsNewerVersionThan` and disables the rest, whichever directory each came from.
+Overriding that outright would mean keeping the pack's zip away from the game for the launch —
+a directory of links rebuilt every time, and .NET has no portable hard link to build it with —
+so the rule stands, and the launch log says what it will do before the game does it:
+
+```
+loading other 2.0.1 from your local mods folder in place of the pack's 2.0.0
+mymod 1.0.0-dev in your local mods folder will not load — the game ranks a -dev, -pre or -rc version below the release it leads to, so the pack's 1.0.0 wins. Give the local one a higher version to use it
+```
+
+That second line is the trap worth naming: the game ranks a `-dev`/`-pre`/`-rc` suffix
+*below* the release it leads to, so the version an author reaches for while testing is the one
+that silently loses. The comparison is `GameVersions`, the game's own comparator ported and
+held to it by the conformance suite, and the predictions were checked against a running
+1.22.7 server. The same version on both sides is reported as a toss-up, because it is one:
+the game then keeps whichever its sort met first, which comes down to filenames.
+
+The mods a local mod requires are not resolved into the pack. The folder is global, and
+writing its dependencies into every pack's manifest that happened to be launched would be
+exactly the drift a lockfile exists to prevent. Add them to the pack the ordinary way.
+
+Two paths also found a latent bug: the game's `--addModPath` is a sequence option under
+CommandLineParser without multi-instance enabled, so `--addModPath A --addModPath B` fails
+the parse and the game dies in its constructor before writing a log. Cairn passes
+`--addModPath A B`.
+
 ### A mod that has not caught up, added on purpose
 
 Small mods stop being updated while the game moves on, and a lot of them still run. ModDB
