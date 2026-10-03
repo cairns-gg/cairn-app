@@ -33,20 +33,4 @@ public static class PackOrder
         var rest = present.Except(placed, StringComparer.OrdinalIgnoreCase);
         return [.. placed, .. rest];
     }
-
-    /// <summary>
-    /// <paramref name="order"/> with <paramref name="id"/> moved to <paramref name="index"/>,
-    /// clamped to the list. Unchanged when the id is not in it.
-    /// </summary>
-    public static IReadOnlyList<string> Move(IReadOnlyList<string> order, string id, int index)
-    {
-        var list = order.ToList();
-        var from = list.FindIndex(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
-        if (from < 0) return list;
-
-        var moving = list[from];
-        list.RemoveAt(from);
-        list.Insert(Math.Clamp(index, 0, list.Count), moving);
-        return list;
-    }
 }

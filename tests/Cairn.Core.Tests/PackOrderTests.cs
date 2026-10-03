@@ -33,12 +33,4 @@ public class PackOrderTests
         Assert.Equal(["vanilla-qol", "anego", "old-pack"],
             PackOrder.Arrange(OnDisk, ["deleted-long-ago", "VANILLA-QOL", "anego", "anego"]));
     }
-
-    [Theory]
-    [InlineData("vanilla-qol", 0, new[] { "vanilla-qol", "anego", "old-pack" })]
-    [InlineData("anego", 2, new[] { "old-pack", "vanilla-qol", "anego" })]
-    [InlineData("anego", 99, new[] { "old-pack", "vanilla-qol", "anego" })]   // clamped
-    [InlineData("missing", 0, new[] { "anego", "old-pack", "vanilla-qol" })]   // unchanged
-    public void Moving_puts_the_pack_at_the_place_asked_for(string id, int index, string[] expected) =>
-        Assert.Equal(expected, PackOrder.Move(OnDisk, id, index));
 }
