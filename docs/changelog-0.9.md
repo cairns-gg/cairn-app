@@ -1,4 +1,4 @@
-# What's new in Cairn 0.9.9
+# What's new in Cairn 0.9.10
 
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
@@ -58,7 +58,7 @@ nothing in it.
 
 ## Testing the mods you are making
 
-**0.9.9.** **Preferences → Overview** has a new setting: a **local mods folder**. Point it at
+**0.9.10.** **Preferences → Overview** has a new setting: a **local mods folder**. Point it at
 the folder your mod's build writes to, and every pack you play loads what is in it alongside
 its own mods — zips, or unpacked mod folders straight out of a build, with no copying and no
 re-adding after each rebuild. It belongs to your copy of Cairn alone: nothing in it goes into
@@ -445,42 +445,42 @@ on running it.
 
 ## Smaller things
 
-- **Cairn will not move its folder out from under a running game.** **0.9.9.** Moving
+- **Cairn will not move its folder out from under a running game.** **0.9.10.** Moving
   Cairn's folder (Preferences → Move…) while Vintage Story was still open let the game go on
   saving into the old folder — which the move then deleted, leaving the moved copy as it was
   before you last saved. Cairn now refuses while a game is running, a game version is
   downloading or a pack is being changed, and says which; and while the move runs, nothing
   can start that would write into the folder being moved. Nothing to do.
-- **One change to a pack at a time, wherever you click.** **0.9.9.** Pressing **Update** on two
+- **One change to a pack at a time, wherever you click.** **0.9.10.** Pressing **Update** on two
   mods in quick succession, or adding a mod and then clicking to another pack and back while
   it downloaded, could start a second round of installing over the first — and the two could
   each leave the pack's record of its mods half-written. Cairn now finishes one change to a
   pack before it starts the next: the buttons wait while something is under way, including
   after you click away and back, and an edit made in the meantime is installed once the pack
   is free. Nothing to do.
-- **Publishing right after changing a mod's version shares what you meant.** **0.9.9.** If
+- **Publishing right after changing a mod's version shares what you meant.** **0.9.10.** If
   you set a mod to a different version and published before pressing Play, Cairn shared the
   pack asking for the new version alongside a record of the old one, so the people who took
   it did not get the files you had. Publishing now brings the pack up to date first whenever
   a mod's version or source has changed since it was last installed. Nothing to do.
-- **Taking an author's update keeps the libraries they tested with.** **0.9.9.** Mods often
+- **Taking an author's update keeps the libraries they tested with.** **0.9.10.** Mods often
   need a library mod that the pack's list does not name, and a pack you follow records which
   version of it the author had. Taking any update — even one that only changed the pack's
   description — forgot that, so the next Play fetched the newest version of each library
   rather than the one the author tested, and could not install them at all offline. It now
   keeps them. Nothing to do.
-- **Two mods with the same file name both install.** **0.9.9.** Two mods added by their
+- **Two mods with the same file name both install.** **0.9.10.** Two mods added by their
   download links could share a file name — two different mods both published as
   `release.zip`, say — and the second quietly replaced the first in the pack's `Mods`
   folder, while Cairn went on believing both were installed. The second now gets its mod's
   name in front of its file instead. Nothing to do; a pack this happened to gets the missing
   mod back on its next Play.
-- **Windows and Linux are offered updates again.** **0.9.9.** The Windows and Linux
+- **Windows and Linux are offered updates again.** **0.9.10.** The Windows and Linux
   downloads were built without their version number, so Cairn on those systems believed
   it was a development build and never told you a new release was out. macOS was not
   affected. **If you are on Windows or Linux, download this release by hand once** from
   the releases page; from then on Cairn offers each new one as it should.
-- **A pack you host yourself can be updated in place.** **0.9.9.** A pack imported from an
+- **A pack you host yourself can be updated in place.** **0.9.10.** A pack imported from an
   address other than cairns.gg — an export you put on a website, or a raw file in a GitHub
   repository — arrived as a copy with no way back to where it came from, so trying a new
   version of your own pack meant backing up the world, deleting the pack and importing it
@@ -488,25 +488,25 @@ on running it.
   export to the same place and **Check for updates** brings it in, worlds untouched, and the
   button lights up on its own when the pack has changed. Packs you already imported this way
   need importing once more to pick this up.
-- **Saying no to a game version change gives you the picker back.** **0.9.9.** After you
+- **Saying no to a game version change gives you the picker back.** **0.9.10.** After you
   chose another game version in a pack's settings and then declined the change, the version
   picker stayed greyed out until you clicked away to another pack and back. It is usable
   again straight away. Nothing to do.
-- **Playing an old pack no longer signs you out of the others.** **0.9.9.** Launching a pack
+- **Playing an old pack no longer signs you out of the others.** **0.9.10.** Launching a pack
   you had not played since an earlier login could put that old login back in charge, and
   every pack then asked you to sign in again. Cairn now picks up your newest login before it
   touches anything in the pack. Nothing to do.
-- **A mod setting Cairn could not write is tried again.** **0.9.9.** If a pack's setting
+- **A mod setting Cairn could not write is tried again.** **0.9.10.** If a pack's setting
   could not be written into a mod's config file — the file read-only, say, or holding comments
   Cairn cannot keep — every launch after the file became writable treated the old value as
   one you had chosen, and left it alone for good. A read-only file was even reported in the
   launch log as set. Now nothing is recorded until a setting is actually written, and the
   next launch that can write it does. Nothing to do.
-- **A failed Optimum build no longer takes Cairn down with it.** **0.9.9.** When building
+- **A failed Optimum build no longer takes Cairn down with it.** **0.9.10.** When building
   Optimum stopped with an error, the last few lines of its log could arrive after the log
   file had been closed, and Cairn quit on the spot instead of showing you what went wrong.
   The build log is now written as each line arrives. Nothing to do.
-- **Looking at Mod config no longer throws away a pack's settings.** **0.9.9.** A pack can
+- **Looking at Mod config no longer throws away a pack's settings.** **0.9.10.** A pack can
   carry mod settings, written into each mod's config file when you play. Opening the **Mod
   config** tab before those files existed — which is every pack you import, until its first
   launch — quietly saved the pack as carrying nothing, and the settings never arrived. The
@@ -514,7 +514,7 @@ on running it.
   the tab as carried, and only unticking one removes it. A pack that already lost its
   settings this way does not get them back by itself: import it again from its link to have
   them.
-- **Mods an author removes now leave your copy too.** **0.9.9.** Taking an update to a pack
+- **Mods an author removes now leave your copy too.** **0.9.10.** Taking an update to a pack
   you follow removed the mod from the pack's list but left its file in the pack's `Mods`
   folder, where the game kept loading it — out of sight in the launcher, and in every game
   you played. The same happened to the old file when the author moved a mod to a new
@@ -523,14 +523,14 @@ on running it.
   are not on Cairn's record, so they stay: if a pack you follow behaves as though it has a
   mod it does not list, look in its `Mods` folder (Settings → Open folder) for a zip the
   launcher does not show, and delete it.
-- **A download that fails no longer costs you the mod you had.** **0.9.9.** If updating a
+- **A download that fails no longer costs you the mod you had.** **0.9.10.** If updating a
   mod failed part-way — ModDB's download server having a bad moment, say — Cairn removed
   the copy that was working, and the library it needed with it, and the next Play quietly
   installed the update that had just failed. And when a mod's file no longer matched the
   checksum the pack recorded, Cairn refused it once and then accepted it the next time.
   Now the mod you had stays installed until its replacement actually arrives, and a
   refused file stays refused. Nothing to do.
-- **Cairn keeps a log you can find after something goes wrong.** **0.9.9.** When Play
+- **Cairn keeps a log you can find after something goes wrong.** **0.9.10.** When Play
   refused to start it said only *"sync did not complete cleanly"* — over the top of the line
   that said which mod and why — and the Log tab, the one other place that said, is emptied
   every time Cairn closes. Play now says which mod stopped it and what was wrong with it, and
@@ -539,12 +539,12 @@ on running it.
   Log tab shows you the file, and **Copy diagnostics** now reads from it, so a report made
   after a restart still has the failure in it. Nothing to do; if you are reporting a problem,
   that file is the thing to attach.
-- **Clicking a pack gets you back out of New pack and Import.** **0.9.9.** With either form
+- **Clicking a pack gets you back out of New pack and Import.** **0.9.10.** With either form
   open, clicking a pack in the list moved the highlight and left the form where it was — and
   clicking the pack that was already highlighted, which with only one pack is the only one
   there is, did nothing at all. **Cancel** was the only way out. Clicking any pack now shows
   that pack, and **Cancel** goes back to the one you were looking at, as you left it. Nothing to do.
-- **A mod refused for your game version says how to take it anyway.** **0.9.9.** A pack can
+- **A mod refused for your game version says how to take it anyway.** **0.9.10.** A pack can
   carry a mod ModDB does not mark for its game version once somebody says they have run it —
   **Add anyway** in the launcher writes that down — but a pack whose `pack.json` you keep by
   hand had no way to find that out. Sync now says so where it refuses the mod: *"1.0.1 is
