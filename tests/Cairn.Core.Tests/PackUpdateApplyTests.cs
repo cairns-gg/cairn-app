@@ -1,3 +1,4 @@
+using Cairn.Core.ModDb;
 using Cairn.Core.Packs;
 using Xunit;
 
@@ -70,6 +71,87 @@ public class PackUpdateApplyTests : IDisposable
             sourceUrl: "https://cairns.gg/dizzyd/anego");
 
         return imported;
+    }
+
+    /// <summary>
+    /// A mod the author dropped leaves Mods at the next sync. The update replaced the lock
+    /// first, and the sweep removes only what the previous lock named — so the zip was out
+    /// of the lock, out of the launcher's sight, and still loaded by the game, for ever.
+    /// </summary>
+    [Fact]
+    public async Task A_mod_the_author_removed_is_swept_by_the_next_sync_and_a_hand_placed_one_is_not()
+    {
+        Follow(Pack("1.22.5", Mod("oldmod")));
+
+        // What a sync would have left: the zip, and a lock naming it. Beside it, a mod
+        // somebody put there by hand, which no lock has ever named.
+        var mods = _store.ModsDir("anego");
+        Directory.CreateDirectory(mods);
+        File.WriteAllText(Path.Combine(mods, "oldmod_1.0.0.zip"), "installed by a sync");
+        File.WriteAllText(Path.Combine(mods, "mine.zip"), "placed by hand");
+        Lock("1.22.5", ("oldmod", "1.0.0")).Save(_store.LockPath("anego"));
+
+        var theirs = Pack("1.22.5");
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), theirs, _store.LoadUpstream("anego"),
+            state: _store.LoadLocalState("anego"));
+
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, new PackLock { GameVersion = "1.22.5" }, revision: 2));
+
+        Assert.Empty(_store.Load("anego").Mods);
+        Assert.Equal(["oldmod_1.0.0.zip"], _store.LoadLock("anego")!.Retired!);
+
+        // Nothing left to install, so nothing is fetched.
+        var offline = new HttpClient(new Offline());
+        var report = await new PackSyncer(new ModDbClient(offline), offline)
+            .SyncAsync(_store.Load("anego"), mods, _store.LockPath("anego"));
+
+        Assert.False(report.Failed);
+        Assert.False(File.Exists(Path.Combine(mods, "oldmod_1.0.0.zip")));
+        Assert.True(File.Exists(Path.Combine(mods, "mine.zip")));
+        Assert.Null(_store.LoadLock("anego")!.Retired);
+    }
+
+    [Fact]
+    public void A_version_the_author_moved_off_is_retired_with_the_rest()
+    {
+        Follow(Pack("1.22.5", Mod("carryon")));
+        Lock("1.22.5", ("carryon", "1.0.0")).Save(_store.LockPath("anego"));
+
+        var theirs = Pack("1.22.5", Mod("carryon"));
+        var plan = PackUpdatePlan.Between(
+            _store.Load("anego"), theirs, _store.LoadUpstream("anego"),
+            state: _store.LoadLocalState("anego"));
+
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, Lock("1.22.5", ("carryon", "2.0.0")), revision: 2));
+
+        // Their entry has no filename of its own — an imported lock never does — so the
+        // file the old one named would otherwise have nothing left claiming it.
+        Assert.Equal(["carryon_1.0.0.zip"], _store.LoadLock("anego")!.Retired!);
+    }
+
+    [Fact]
+    public void What_this_machine_retired_never_travels_in_a_bundle()
+    {
+        // Out: a recipient has no use for the names of files on this disk.
+        var locked = Lock("1.22.5", ("carryon", "1.0.0"));
+        locked.Retired = ["carryon_0.9.0.zip"];
+
+        var json = PackBundle.Serialize(Pack("1.22.5", Mod("carryon")), locked);
+        Assert.DoesNotContain("retired", json);
+
+        // In: a lock from elsewhere naming somebody's own mod as Cairn's to delete.
+        var planted = json.Replace("\"gameVersion\": \"1.22.5\",",
+            "\"gameVersion\": \"1.22.5\", \"retired\": [\"mine.zip\"],");
+        Assert.Contains("mine.zip", planted);
+
+        Assert.Null(PackBundle.Parse(planted).Lock!.Retired);
+    }
+
+    private sealed class Offline : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) =>
+            throw new HttpRequestException("offline");
     }
 
     /// <summary>

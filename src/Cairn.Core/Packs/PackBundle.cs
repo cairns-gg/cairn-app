@@ -69,9 +69,17 @@ public sealed class PackBundle
         JsonNode.Parse(Serialize(Pack ?? new PackManifest(), Lock)),
         JsonNode.Parse(Serialize(other.Pack ?? new PackManifest(), other.Lock)));
 
+    /// <summary>
+    /// The lock goes without <see cref="PackLock.Retired"/>, which is only ever about the
+    /// files on this machine.
+    /// </summary>
     public static string Serialize(PackManifest manifest, PackLock? locked = null) =>
         JsonSerializer.Serialize(
-            new PackBundle { Pack = manifest, Lock = locked }, Options);
+            new PackBundle
+            {
+                Pack = manifest,
+                Lock = locked is null ? null : new PackLock { GameVersion = locked.GameVersion, Mods = locked.Mods },
+            }, Options);
 
     /// <exception cref="InvalidDataException">The text is not a usable pack bundle.</exception>
     public static PackBundle Parse(string json)
@@ -95,6 +103,9 @@ public sealed class PackBundle
         var problems = bundle.Pack.Validate().ToList();
         if (problems.Count > 0)
             throw new InvalidDataException(Lang.Get("bundle-invalid") + "\n  " + string.Join("\n  ", problems));
+
+        // Not ours to act on, whoever wrote it — see PackLock.Retired.
+        if (bundle.Lock is not null) bundle.Lock.Retired = null;
 
         return bundle;
     }

@@ -216,8 +216,12 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // lock's filename with modsDir. A lock is a document, and building a path out of
         // one is exactly what made Diagnostics an oracle for arbitrary files.
         var keep = newLock.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var ours = previous?.Mods.Select(m => m.FileName)
-                       .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        //
+        // Plus what the previous lock had already retired: files it stopped naming without a
+        // sync to sweep them, as taking an author's revision does. See PackLock.Retired.
+        var ours = (previous?.Mods.Select(m => m.FileName) ?? [])
+            .Concat(previous?.Retired ?? [])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var stray in Directory.EnumerateFiles(modsDir))
         {

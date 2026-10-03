@@ -445,6 +445,15 @@ on running it.
 
 ## Smaller things
 
+- **Mods an author removes now leave your copy too.** **0.9.9.** Taking an update to a pack
+  you follow removed the mod from the pack's list but left its file in the pack's `Mods`
+  folder, where the game kept loading it — out of sight in the launcher, and in every game
+  you played. The same happened to the old file when the author moved a mod to a new
+  version. The next Play now clears them out. Mods you put in that folder yourself are left
+  alone, as they always have been. Files left behind by updates you took before this one
+  are not on Cairn's record, so they stay: if a pack you follow behaves as though it has a
+  mod it does not list, look in its `Mods` folder (Settings → Open folder) for a zip the
+  launcher does not show, and delete it.
 - **A download that fails no longer costs you the mod you had.** **0.9.9.** If updating a
   mod failed part-way — ModDB's download server having a bad moment, say — Cairn removed
   the copy that was working, and the library it needed with it, and the next Play quietly

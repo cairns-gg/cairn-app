@@ -250,6 +250,17 @@ public sealed class PackStore
             }
         }
 
+        // Every file this copy installed that the new lock stops naming, so the sync after
+        // this one can still remove it. See PackLock.Retired.
+        var named = next.Mods.Select(m => m.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retired = (mine?.Mods.Select(m => m.FileName) ?? [])
+            .Concat(mine?.Retired ?? [])
+            .Where(name => name.Length > 0 && !named.Contains(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        next.Retired = retired.Count > 0 ? retired : null;
+
         next.Save(LockPath(id));
     }
 

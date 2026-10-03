@@ -363,6 +363,26 @@ public sealed class PackLock
     [JsonPropertyName("mods")] public List<LockedMod> Mods { get; set; } = [];
 
     /// <summary>
+    /// Files Cairn installed into Mods that this lock no longer describes, waiting for the
+    /// next sync to remove them. Null when there are none, which is nearly always.
+    ///
+    /// The sweep removes only what the previous lock named — that is what keeps it off the
+    /// mods people place by hand — so anything that rewrites the lock between two syncs
+    /// hides from it every file the rewrite stops naming. Taking an author's revision is
+    /// that rewrite: a mod they removed, or the old version of one they moved, stayed in
+    /// Mods for ever, out of the lock and the launcher's sight and loaded by the game all
+    /// the same. Written down rather than worked out at sync time because Cairn can close
+    /// between the two.
+    ///
+    /// This machine's own record, and never anybody else's: a lock arriving from elsewhere
+    /// could otherwise name a player's own mod as Cairn's to delete. PackBundle strips it on
+    /// the way out and drops it on the way in.
+    /// </summary>
+    [JsonPropertyName("retired")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Retired { get; set; }
+
+    /// <summary>
     /// Drops the parts of every entry that only ModDB is entitled to assert.
     ///
     /// A lock may say WHAT to install; it does not get to say WHERE the bytes come from.
