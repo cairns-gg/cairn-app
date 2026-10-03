@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using System.Net;
 using Cairn.App.ViewModels;
@@ -1817,6 +1819,80 @@ public class MainWindowTests : IDisposable
         // matters is that a sync ran at all.
         await WaitFor(() => Synced(detail.Log) && !detail.IsBusy);
         Assert.DoesNotContain("unchisel", new PackStore(Path.Combine(_home, "packs")).Load("anego").Mods.Select(m => m.ModId));
+    }
+
+    // ---- arranging the pack list (cairns-gg/cairn-app#7) ----
+
+    /// <summary>The middle of a pack's row, in the window's coordinates.</summary>
+    private static Point RowCentre(Window window, string packId)
+    {
+        var item = window.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(i => (i.DataContext as PackListItemViewModel)?.Id == packId);
+
+        return item.TranslatePoint(new Point(20, item.Bounds.Height / 2), window)!.Value;
+    }
+
+    private static string[] Order(MainViewModel vm) => [.. vm.Packs.Select(p => p.Id)];
+
+    [AvaloniaFact]
+    public void Dragging_a_pack_moves_it_and_the_order_is_kept_for_the_next_start()
+    {
+        var (window, vm) = Show();
+        Assert.Equal(["anego", "old-pack", "vanilla-qol"], Order(vm));
+
+        // vanilla-qol, dragged up onto anego's row.
+        var from = RowCentre(window, "vanilla-qol");
+        var to = RowCentre(window, "anego");
+
+        window.MouseDown(from, MouseButton.Left);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var pane = vm.Detail;   // the press selected it
+        window.MouseMove(new Point(from.X, from.Y - 10), RawInputModifiers.LeftMouseButton);
+        window.MouseMove(to, RawInputModifiers.LeftMouseButton);
+        window.MouseUp(to, MouseButton.Left);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(["vanilla-qol", "anego", "old-pack"], Order(vm));
+        Assert.Equal("vanilla-qol", vm.SelectedPack?.Id);
+
+        // Not rebuilt on the way: the list drops the selection when it moves a row, and the
+        // pane went with it, mid-drag.
+        Assert.Same(pane, vm.Detail);
+
+        // Written down, and the next launcher lists them that way.
+        Assert.Equal(["vanilla-qol", "anego", "old-pack"], Cairn.Core.CairnSettings.Load().PackOrder!);
+        Assert.Equal(["vanilla-qol", "anego", "old-pack"], Order(new MainViewModel(new OfflineHandler())));
+    }
+
+    [AvaloniaFact]
+    public void A_click_that_wobbles_selects_and_moves_nothing()
+    {
+        var (window, vm) = Show();
+        var at = RowCentre(window, "vanilla-qol");
+
+        window.MouseDown(at, MouseButton.Left);
+        window.MouseMove(new Point(at.X + 1, at.Y + 1), RawInputModifiers.LeftMouseButton);
+        window.MouseUp(at, MouseButton.Left);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("vanilla-qol", vm.SelectedPack?.Id);
+        Assert.Equal(["anego", "old-pack", "vanilla-qol"], Order(vm));
+        Assert.Null(Cairn.Core.CairnSettings.Load().PackOrder);
+    }
+
+    [AvaloniaFact]
+    public void The_row_menu_moves_a_pack_without_dragging()
+    {
+        var (_, vm) = Show();
+        var anego = vm.Packs.Single(p => p.Id == "anego");
+
+        anego.MoveDownCommand.Execute(null);
+        Assert.Equal(["old-pack", "anego", "vanilla-qol"], Order(vm));
+
+        anego.MoveUpCommand.Execute(null);
+        anego.MoveUpCommand.Execute(null);   // already at the top: stays there
+        Assert.Equal(["anego", "old-pack", "vanilla-qol"], Order(vm));
+        Assert.Equal(["anego", "old-pack", "vanilla-qol"], Cairn.Core.CairnSettings.Load().PackOrder!);
     }
 
     [AvaloniaFact]

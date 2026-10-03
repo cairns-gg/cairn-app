@@ -493,6 +493,8 @@
   "pack-working": "Working…",
   "pack-play": "Play",
   "pack-check-updates": "Check for updates",
+  "pack-move-up": "Move up",
+  "pack-move-down": "Move down",
   "share-imported-from": "imported from {0} — it stays theirs to publish",
   "packupdate-revision-available": "Revision {0} is available — you have {1}.",
   "pack-locked-note": "These mods are the author's. Unlock to add, remove or change versions in your copy.",

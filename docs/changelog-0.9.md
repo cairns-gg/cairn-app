@@ -445,6 +445,9 @@ on running it.
 
 ## Smaller things
 
+- **Put your packs in the order you want.** **0.9.10.** Drag a pack up or down the list on
+  the left to move it, or right-click it for **Move up** and **Move down**. Cairn remembers
+  the order. New packs join at the bottom.
 - **Cairn will not move its folder out from under a running game.** **0.9.10.** Moving
   Cairn's folder (Preferences → Move…) while Vintage Story was still open let the game go on
   saving into the old folder — which the move then deleted, leaving the moved copy as it was

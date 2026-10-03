@@ -24,7 +24,82 @@ public partial class MainWindow : Window
         // Space and Enter. Those two were unbindable, and the row sat on "Press a key…"
         // for ever, because the press it was waiting for never left the button.
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        // Tunnelling and taking handled events for the same reason: the list handles the
+        // press itself, to select the row, and a bubbling handler would never see it.
+        PackList.AddHandler(PointerPressedEvent, OnPackPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        PackList.AddHandler(PointerMovedEvent, OnPackDragged, RoutingStrategies.Tunnel, handledEventsToo: true);
+        PackList.AddHandler(PointerReleasedEvent, OnPackReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    // ---- dragging a pack to another place in the list ----
+
+    /// <summary>The row the left button went down on, while it is still down.</summary>
+    private PackListItemViewModel? _dragging;
+
+    private Point _dragFrom;
+
+    /// <summary>The pointer has gone far enough for this to be a drag rather than a click.</summary>
+    private bool _dragMoved;
+
+    /// <summary>
+    /// How far the pointer travels before a press on a row is a drag. Below it, a click that
+    /// wobbles is still a click: it selects the pack and moves nothing.
+    /// </summary>
+    private const double DragThreshold = 4;
+
+    /// <summary>
+    /// Pointer events on the list rather than the platform's drag and drop. Nothing leaves
+    /// the window — this is one list arranging itself — and moving the row under the pointer
+    /// as it goes is the whole of the feedback, with no drag image or drop target to draw.
+    /// </summary>
+    private void OnPackPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _dragMoved = false;
+        _dragging = e.GetCurrentPoint(PackList).Properties.IsLeftButtonPressed ? RowAt(e.Source) : null;
+        _dragFrom = e.GetPosition(PackList);
+    }
+
+    private void OnPackDragged(object? sender, PointerEventArgs e)
+    {
+        if (_dragging is null || DataContext is not MainViewModel vm) return;
+
+        if (!e.GetCurrentPoint(PackList).Properties.IsLeftButtonPressed)
+        {
+            _dragging = null;
+            return;
+        }
+
+        var at = e.GetPosition(PackList);
+        if (!_dragMoved)
+        {
+            var moved = at - _dragFrom;
+            if (Math.Abs(moved.X) < DragThreshold && Math.Abs(moved.Y) < DragThreshold) return;
+
+            _dragMoved = true;
+            e.Pointer.Capture(PackList);
+        }
+
+        // Whichever row is under the pointer now; the dragged one takes its place.
+        if (RowAt(PackList.InputHitTest(at)) is { } over && !ReferenceEquals(over, _dragging))
+            vm.MovePack(_dragging, vm.Packs.IndexOf(over));
+    }
+
+    private void OnPackReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_dragMoved && DataContext is MainViewModel vm) vm.SavePackOrder();
+
+        if (_dragMoved) e.Pointer.Capture(null);
+
+        _dragging = null;
+        _dragMoved = false;
+    }
+
+    /// <summary>The pack whose row this element is part of, or null.</summary>
+    private static PackListItemViewModel? RowAt(object? element) =>
+        (element as Visual)?.GetSelfAndVisualAncestors()
+            .OfType<ListBoxItem>()
+            .FirstOrDefault()?.DataContext as PackListItemViewModel;
 
     /// <summary>
     /// Hands the view model ways to open a window. Knowing how to show a window is the

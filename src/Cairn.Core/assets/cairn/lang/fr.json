@@ -30,6 +30,8 @@
   "pack-unlock": "Déverrouiller",
   "pack-lock-again": "Verrouiller à nouveau",
   "pack-check-updates": "Rechercher des mises à jour",
+  "pack-move-up": "Monter",
+  "pack-move-down": "Descendre",
 
   "main-no-packs": "Aucun pack pour l'instant — cliquez sur « Nouveau pack » pour en créer un.",
   "main-pack-count-one": "{0} pack",

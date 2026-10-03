@@ -15,6 +15,8 @@
   "pack-unlisted": "no listado", "pack-open-link": "Abrir", "pack-force-quit": "Forzar cierre…",
   "pack-unlock": "Desbloquear", "pack-lock-again": "Bloquear de nuevo",
   "pack-check-updates": "Buscar actualizaciones",
+  "pack-move-up": "Subir",
+  "pack-move-down": "Bajar",
 
   "main-no-packs": "Aún no hay packs — pulsa «Nuevo pack» para crear uno.",
   "main-pack-count-one": "{0} pack", "main-pack-count-other": "{0} packs",

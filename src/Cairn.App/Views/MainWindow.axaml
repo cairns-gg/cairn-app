@@ -60,10 +60,18 @@
                     </Grid>
                 </StackPanel>
 
-                <ListBox ItemsSource="{Binding Packs}" SelectedItem="{Binding SelectedPack}">
+                <!-- Dragged to reorder: see OnPackPressed in the code-behind. The row menu is the
+                     same thing for somebody who would rather not drag. -->
+                <ListBox x:Name="PackList" ItemsSource="{Binding Packs}" SelectedItem="{Binding SelectedPack}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:PackListItemViewModel">
-                            <StackPanel Spacing="2" Margin="0,4">
+                            <StackPanel Spacing="2" Margin="0,4" Background="Transparent">
+                                <StackPanel.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="{l:Tr pack-move-up}" Command="{Binding MoveUpCommand}" />
+                                        <MenuItem Header="{l:Tr pack-move-down}" Command="{Binding MoveDownCommand}" />
+                                    </ContextMenu>
+                                </StackPanel.ContextMenu>
                                 <!-- The dot sits beside the name rather than under it, so
                                      a glance down the list finds the pack with the game
                                      without reading any of the rows. -->

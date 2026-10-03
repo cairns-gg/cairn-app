@@ -21,9 +21,22 @@ using Cairn.Core.Updates;
 namespace Cairn.App.ViewModels;
 
 /// <summary>A pack as listed in the sidebar.</summary>
-public class PackListItemViewModel(PackManifest manifest) : ViewModelBase
+public partial class PackListItemViewModel(PackManifest manifest) : ViewModelBase
 {
     public PackManifest Manifest { get; } = manifest;
+
+    /// <summary>
+    /// Moves this row up or down the list by the given number of places: the row menu's
+    /// Move up and Move down, for arranging the list without dragging. Set by MainViewModel,
+    /// which owns the list.
+    /// </summary>
+    public Action<PackListItemViewModel, int>? Nudge { get; set; }
+
+    [RelayCommand]
+    private void MoveUp() => Nudge?.Invoke(this, -1);
+
+    [RelayCommand]
+    private void MoveDown() => Nudge?.Invoke(this, +1);
 
     public string Id => Manifest.Id;
     public string Display => Manifest.Name ?? Manifest.Id;
@@ -695,6 +708,63 @@ public partial class MainViewModel : ViewModelBase
                 row.PlayingChanged(Runs.IsLaunching(row.Id), Runs.IsRunning(row.Id));
     }
 
+    // ---- arranging the list ----
+
+    /// <summary>
+    /// Moves a pack to another place in the list, while it is being dragged there. Moved in
+    /// the collection rather than by reloading it, so the row keeps its selection and its
+    /// pane stays what it was; written down by <see cref="SavePackOrder"/> once it is dropped.
+    /// </summary>
+    public void MovePack(PackListItemViewModel pack, int index)
+    {
+        var from = Packs.IndexOf(pack);
+        if (from < 0) return;
+
+        var to = Math.Clamp(index, 0, Packs.Count - 1);
+        if (to == from) return;
+
+        // The list treats a move as a removal and an insertion, and removing the selected row
+        // clears the selection — which drops the pack's pane, mid-drag, for the pack being
+        // dragged. Put back, and the brief gap ignored, so the pane is never rebuilt for it.
+        var selected = SelectedPack;
+        _rearranging = true;
+
+        try
+        {
+            Packs.Move(from, to);
+            SelectedPack = selected;
+        }
+        finally
+        {
+            _rearranging = false;
+        }
+    }
+
+    /// <summary>A row is being moved, so a selection change is the list's, not anybody's choice.</summary>
+    private bool _rearranging;
+
+    /// <summary>The list's order as it now stands, kept for the next start.</summary>
+    public void SavePackOrder()
+    {
+        var order = Packs.Select(p => p.Id).ToList();
+        CairnSettings.Update(s => s.PackOrder = order);
+    }
+
+    /// <summary>
+    /// The same as dragging, for somebody who would rather not — from the row's menu. Written
+    /// straight away, since there is no drop to wait for.
+    /// </summary>
+    private void Nudge(PackListItemViewModel? pack, int by)
+    {
+        if (pack is null) return;
+
+        var from = Packs.IndexOf(pack);
+        if (from < 0) return;
+
+        MovePack(pack, from + by);
+        SavePackOrder();
+    }
+
     private void OnWorkChanged(string? packId)
     {
         // Null is every pack: a move of the home began or ended.
@@ -762,6 +832,8 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedPackChanged(PackListItemViewModel? oldValue, PackListItemViewModel? newValue)
     {
+        if (_rearranging) return;
+
         ConfirmingDelete = false;
         OnPropertyChanged(nameof(DeleteTargetName));
         OnPropertyChanged(nameof(CanDeleteSelected));
@@ -860,11 +932,11 @@ public partial class MainViewModel : ViewModelBase
 
         Packs.Clear();
 
-        foreach (var id in _store.ListIds())
+        foreach (var id in PackOrder.Arrange(_store.ListIds(), CairnSettings.Load().PackOrder))
         {
             try
             {
-                var row = new PackListItemViewModel(_store.Load(id));
+                var row = new PackListItemViewModel(_store.Load(id)) { Nudge = Nudge };
 
                 // The list is rebuilt for a pack created, imported or deleted, none of
                 // which stops a game that is already up.

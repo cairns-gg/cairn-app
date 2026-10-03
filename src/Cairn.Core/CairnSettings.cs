@@ -87,6 +87,12 @@ public sealed class CairnSettings
     public string? LocalModsPath { get; set; }
 
     /// <summary>
+    /// The order of the pack list, as somebody dragged it: pack ids, top first. Null until
+    /// it has been arranged. See <see cref="Packs.PackOrder"/>.
+    /// </summary>
+    public List<string>? PackOrder { get; set; }
+
+    /// <summary>
     /// Anything in the file this build does not know about, kept so it survives a write.
     ///
     /// The same failure this type was created to fix, one version along: somebody runs a
