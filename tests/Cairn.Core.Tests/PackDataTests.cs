@@ -69,6 +69,29 @@ public class PackDataTests : IDisposable
 
     private PackManifest NewPack(string id) => _store.Create(id, "1.22.5");
 
+    /// <summary>
+    /// The review's reproduction. A pack last played under an old login, with settings from
+    /// before mod paths were confined: launching it rewrote the file — which made it the
+    /// newest on the machine — and only then asked which login was newest. The stale one won
+    /// and was recorded over the fresh one.
+    /// </summary>
+    [Fact]
+    public void Preparing_a_launch_does_not_make_a_stale_login_look_newest()
+    {
+        NewPack("old");
+        var settings = SettingsIn(_store.DataDir("old"));
+        WriteSettings(_store.DataDir("old"), sessionKey: "stale");   // no modPaths: Confine will write
+        File.SetLastWriteTimeUtc(settings, DateTime.UtcNow.AddMinutes(-2));
+
+        new ClientSession { Values = { ["sessionkey"] = "fresh" } }.Save(SessionPath);
+        File.SetLastWriteTimeUtc(SessionPath, DateTime.UtcNow.AddMinutes(-1));
+
+        _data.BeforeLaunch("old");
+
+        Assert.Equal("fresh", ClientSession.Load(SessionPath).Values["sessionkey"]);
+        Assert.Equal("fresh", ReadSettings(_store.DataDir("old"))["stringSettings"]!["sessionkey"]!.GetValue<string>());
+    }
+
     // ---- which data path a pack launches with ----
 
     [Fact]

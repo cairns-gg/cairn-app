@@ -445,6 +445,10 @@ on running it.
 
 ## Smaller things
 
+- **Playing an old pack no longer signs you out of the others.** **0.9.9.** Launching a pack
+  you had not played since an earlier login could put that old login back in charge, and
+  every pack then asked you to sign in again. Cairn now picks up your newest login before it
+  touches anything in the pack. Nothing to do.
 - **A mod setting Cairn could not write is tried again.** **0.9.9.** If a pack's setting
   could not be written into a mod's config file — the file read-only, say — the launch log
   still said it had been set, and every launch after that treated the old value as one you

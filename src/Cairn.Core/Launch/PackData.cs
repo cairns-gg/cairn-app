@@ -126,17 +126,24 @@ public sealed class PackData(PackStore store, string? sessionPath = null, string
     public IReadOnlyList<string> BeforeLaunch(
         string id, ICollection<string>? bound = null, ICollection<ModConfigChange>? config = null)
     {
+        // Take the newest login on the machine first. The command line does not wait for
+        // the game to exit, so signing in inside one pack would otherwise never reach the
+        // others; this notices it on the next launch instead.
+        //
+        // First of all, before anything below writes a settings file. Newest is decided by
+        // file time, and Confine rewrites this pack's file while it still holds whatever
+        // login it had — so run after it, a pack last played under an old login became the
+        // newest file on the machine and its stale session was recorded over the fresh one,
+        // signing every pack out. Everything else here writes after the merge, carrying the
+        // session this chose, and seeding strips the login it copies (ClientSession.Forget).
+        CaptureLatest();
+
         EnsureDataPath(id);
 
         // Again here, not only on seeding: a pack made before this existed still carries
         // the player's own Mods folder in its settings, and the launch is the only thing
         // that reaches into it.
         var dropped = ClientModPaths.Confine(SettingsIn(store.DataDir(id)), store.DataDir(id));
-
-        // Take the newest login on the machine first. The command line does not wait for
-        // the game to exit, so signing in inside one pack would otherwise never reach the
-        // others; this notices it on the next launch instead.
-        CaptureLatest();
 
         ClientSession.Load(SessionPath).MergeInto(SettingsIn(store.DataDir(id)));
 
