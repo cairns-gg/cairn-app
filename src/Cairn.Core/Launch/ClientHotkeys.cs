@@ -65,28 +65,4 @@ public static class ClientHotkeys
         ClientSettingsFile.Write(clientSettingsPath, root);
         return bound;
     }
-
-    /// <summary>
-    /// What the settings file currently binds, for an editor that wants to show the player
-    /// their own answer alongside the pack's.
-    ///
-    /// Nothing calls this yet, and it stays because it is the only thing that reads what
-    /// <see cref="Apply"/> writes. <see cref="KeyBinding.ToJson"/> has to use the game's own
-    /// property names — a file with different ones deserialises to defaults, which is to say
-    /// to no binding at all — and that is a silent failure with no test that could catch it
-    /// short of launching the game. The round trip through here is that test.
-    /// </summary>
-    public static IReadOnlyDictionary<string, KeyBinding> Read(string clientSettingsPath)
-    {
-        var result = new Dictionary<string, KeyBinding>(StringComparer.OrdinalIgnoreCase);
-
-        if (ClientSettingsFile.TryLoad(clientSettingsPath)?[Bucket] is not JsonObject mapping)
-            return result;
-
-        foreach (var (code, node) in mapping)
-            if (KeyBinding.FromJson(node) is { } binding)
-                result[code] = binding;
-
-        return result;
-    }
 }

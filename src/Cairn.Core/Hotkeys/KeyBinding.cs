@@ -47,6 +47,11 @@ public sealed record KeyBinding(
     /// Written back out with the game's own casing. The game deserialises into a type with
     /// these property names, and a file with different ones would parse to defaults —
     /// which is to say, to no binding at all.
+    ///
+    /// Write-only on purpose. A reader of this shape existed to round-trip it in a test,
+    /// which could only prove Cairn agreed with itself: a wrong name would have been read
+    /// back exactly as wrongly as it was written. KeyCombinationConformanceTests holds these
+    /// names to the game's own type instead, where an install is there to compare with.
     /// </summary>
     public JsonObject ToJson() => new()
     {
@@ -57,20 +62,6 @@ public sealed record KeyBinding(
         ["Shift"] = Shift,
         ["OnKeyUp"] = false,
     };
-
-    public static KeyBinding? FromJson(JsonNode? node)
-    {
-        if (node is not JsonObject o) return null;
-        if (Int(o, "KeyCode") is not { } key) return null;
-
-        return new KeyBinding(key, Bool(o, "Ctrl"), Bool(o, "Alt"), Bool(o, "Shift"), Int(o, "SecondKeyCode"));
-
-        static int? Int(JsonObject o, string key) =>
-            o[key] is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
-
-        static bool Bool(JsonObject o, string key) =>
-            o[key] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
-    }
 
     /// <summary>
     /// Written with hyphens — "Ctrl-Shift-P" — and read with either.

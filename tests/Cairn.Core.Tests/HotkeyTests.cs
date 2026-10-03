@@ -60,19 +60,21 @@ public class KeyBindingTests
         Assert.Null(KeyBinding.Parse(text));
     }
 
+    /// <summary>
+    /// Pinned as text, exactly. The names are the game's KeyCombination fields — checked
+    /// against the type itself by KeyCombinationConformanceTests where an install is to hand
+    /// — and this is what stops them drifting on a machine without one.
+    /// </summary>
     [Fact]
     public void The_json_matches_what_the_game_writes()
     {
-        var json = KeyBinding.Parse("Ctrl+BackSpace")!.ToJson();
+        Assert.Equal(
+            """{"KeyCode":53,"SecondKeyCode":null,"Ctrl":true,"Alt":false,"Shift":false,"OnKeyUp":false}""",
+            KeyBinding.Parse("Ctrl+BackSpace")!.ToJson().ToJsonString());
 
-        // Property names are the game's, casing included: it deserialises into a type with
-        // these members, and different ones would read back as no binding at all.
-        Assert.Equal(53, json["KeyCode"]!.GetValue<int>());
-        Assert.True(json["Ctrl"]!.GetValue<bool>());
-        Assert.False(json["Shift"]!.GetValue<bool>());
-        Assert.Null(json["SecondKeyCode"]);
-
-        Assert.Equal(KeyBinding.Parse("Ctrl+BackSpace"), KeyBinding.FromJson(json));
+        Assert.Equal(
+            """{"KeyCode":93,"SecondKeyCode":95,"Ctrl":true,"Alt":false,"Shift":false,"OnKeyUp":false}""",
+            KeyBinding.Parse("Ctrl+K,M")!.ToJson().ToJsonString());
     }
 
     [Fact]
@@ -181,12 +183,12 @@ public class ClientHotkeyTests : IDisposable
     }
 
     [Fact]
-    public void Reading_back_gives_what_the_player_has_bound()
+    public void The_settings_file_gets_the_games_shape_under_keyMapping()
     {
         ClientHotkeys.Apply(Settings, new Dictionary<string, string> { ["a"] = "Ctrl+K,M" });
 
-        var read = ClientHotkeys.Read(Settings);
-        Assert.Equal("Ctrl-K,M", read["a"].ToString());
+        var written = JsonNode.Parse(File.ReadAllText(Settings))!["keyMapping"]!["a"]!;
+        Assert.Equal(KeyBinding.Parse("Ctrl+K,M")!.ToJson().ToJsonString(), written.ToJsonString());
     }
 
     /// <summary>

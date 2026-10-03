@@ -63,7 +63,9 @@ path fails silently. Two things to know when writing them:
 
 The `Cairn.Core.Tests` conformance suite compiles only when `VINTAGE_STORY` points at a game
 install (`HAS_GAME`); it runs Cairn's version comparator against the real
-`Vintagestory.API.Config.GameVersion` over a corpus. A clean checkout skips it.
+`Vintagestory.API.Config.GameVersion` over a corpus, and holds the hotkey JSON Cairn writes
+to the game's `KeyCombination` fields and `GlKeys` codes. A clean checkout skips it.
+On macOS, `VINTAGE_STORY=~/.cairn/games/<version>.app` is an install to point it at.
 
 ### Platform forks
 
