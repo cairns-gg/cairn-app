@@ -1519,6 +1519,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         SaveSettingsCommand.NotifyCanExecuteChanged();
         DeletePackCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
+
+        // Both run a sync of their own, and both were gated on NotBusy without ever being
+        // told it had changed — so their buttons stayed pressable through another sync.
+        ApplyPackUpdateCommand.NotifyCanExecuteChanged();
+        PublishPackCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -3764,9 +3769,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// Resolves the pack against ModDB, downloads what is missing, removes what is no
     /// longer wanted, and writes the lockfile.
     ///
-    /// Play is its only caller now that the separate sync button is gone. It is not dead
-    /// code — it is the first half of launching, and dropping it would leave Play
-    /// starting the game with whatever happened to be on disk.
+    /// Four callers: Play, which reports through the banner, and three that run it quietly
+    /// after something else changed the manifest or needs the lock — taking an author's
+    /// revision, adding or removing a mod, and publishing a pack whose lock does not cover
+    /// it. They all write the same Mods directory and lockfile, so two must never overlap.
+    /// IsBusy is what keeps them apart: set here for the whole run, it disables Play, Update
+    /// and the commands that edit the pack, and the mod-edit caller returns rather than
+    /// starting while it is set. A caller added here has to answer to it the same way.
     /// </summary>
     /// <param name="quiet">
     /// For a sync the user did not ask for. It still logs and still installs, but a failure

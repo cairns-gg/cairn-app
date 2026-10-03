@@ -1686,6 +1686,33 @@ public class MainWindowTests : IDisposable
         File.WriteAllLines(Path.Combine(LogsDirFor(packId), "client-main.log"), lines);
     }
 
+    /// <summary>
+    /// Every sync writes the same Mods directory and lockfile, and IsBusy is what keeps two
+    /// apart. Taking an update and publishing each start one, and were gated on it without
+    /// ever being told it had changed — so a button drawn before a sync stayed pressable
+    /// through it.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_commands_that_sync_are_told_when_a_sync_starts()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.First();
+        var detail = vm.Detail!;
+
+        var told = new List<string>();
+        detail.ApplyPackUpdateCommand.CanExecuteChanged += (_, _) => told.Add("update");
+        detail.PublishPackCommand.CanExecuteChanged += (_, _) => told.Add("publish");
+        detail.PlayCommand.CanExecuteChanged += (_, _) => told.Add("play");
+
+        detail.IsBusy = true;
+
+        Assert.Contains("update", told);
+        Assert.Contains("publish", told);
+        Assert.Contains("play", told);
+        Assert.False(detail.ApplyPackUpdateCommand.CanExecute(null));
+        Assert.False(detail.PublishPackCommand.CanExecute(null));
+    }
+
     [AvaloniaFact]
     public void The_log_tab_offers_the_games_log_as_well_as_Cairns()
     {
