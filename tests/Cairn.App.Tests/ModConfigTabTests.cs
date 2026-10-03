@@ -93,6 +93,32 @@ public class ModConfigTabTests : IDisposable
         Assert.Equal("Mod config", items[PackDetailViewModel.ModConfigTab].Header as string);
     }
 
+    /// <summary>
+    /// The review's reproduction: a pack declaring a setting whose mod has not written its
+    /// file yet — every imported pack, until its first launch. Opening the tab rebuilt the
+    /// manifest from rows that did not include it, and saved the pack carrying nothing.
+    /// </summary>
+    [AvaloniaFact]
+    public void Opening_the_tab_before_a_mod_has_written_its_file_keeps_what_the_pack_declares()
+    {
+        var manifest = Saved();
+        manifest.ModConfig = new()
+        {
+            ["imported.json"] = (JsonNode.Parse("""{ "v": 1, "Rooms": { "Enabled": true } }""") as JsonObject)!,
+        };
+        manifest.Save(Path.Combine(PackDir, "pack.json"));
+
+        var (_, vm) = Show();
+        var detail = OpenTab(vm);
+
+        var declared = Saved().ModConfig;
+        Assert.NotNull(declared);
+        Assert.True(JsonNode.DeepEquals(manifest.ModConfig["imported.json"], declared["imported.json"]));
+
+        // Shown, so unticking is still possible — that is the one way a value leaves.
+        Assert.Equal(2, detail.ModConfigSettings.Count(r => r.File == "imported.json" && r.Carried));
+    }
+
     [AvaloniaFact]
     public void Opening_the_tab_shows_what_the_author_changed_and_not_the_rest()
     {

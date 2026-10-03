@@ -86,6 +86,7 @@ public static class ModConfigSurvey
         var root = ModConfigFiles.DirectoryIn(dataPath);
         var baseline = ModConfigFiles.Baseline(dataPath);
         var settings = new List<ModConfigSetting>();
+        var surveyed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in Files(root))
         {
@@ -96,6 +97,8 @@ public static class ModConfigSurvey
             // row that silently would not land is worse than not offering it.
             if (content is null || !rewritable) continue;
 
+            surveyed.Add(file);
+
             baseline.TryGetValue(file, out var was);
 
             JsonObject? carried = null;
@@ -103,6 +106,15 @@ public static class ModConfigSurvey
 
             Walk(file, content, was, carried, [], settings, includeUnchanged);
         }
+
+        // Every value the pack declares has a row, whether or not its file could be read.
+        // The tab rebuilds the manifest from its rows — see ToManifest — so a declared value
+        // with no row was erased just by opening it: an imported pack, before its first
+        // launch has written any config, lost every setting it carried. As orphans, which is
+        // what they are from here, and unticking is still the only way one leaves.
+        foreach (var (file, carried) in declared ?? new Dictionary<string, JsonObject>())
+            if (!surveyed.Contains(file))
+                Orphans(file, carried, [], settings);
 
         // Carried first, then changed, then the rest — and alphabetically within each, so a
         // list somebody is working down does not reorder under them as they tick.
@@ -148,10 +160,27 @@ public static class ModConfigSurvey
         // place somebody could untick it.
         foreach (var (key, carried) in declared)
         {
-            if (carried is JsonObject || TryGet(current, key, out _)) continue;
+            // A section the file has was walked above. One it lacks is orphaned whole, every
+            // leaf of it — skipped here once, which dropped them all without a row.
+            if (carried is JsonObject && current[key] is JsonObject) continue;
+            if (carried is not JsonObject && TryGet(current, key, out _)) continue;
 
             prefix.Add(key);
-            into.Add(new ModConfigSetting(file, [.. prefix], null, null, carried, false));
+            if (carried is JsonObject missing) Orphans(file, missing, prefix, into);
+            else into.Add(new ModConfigSetting(file, [.. prefix], null, null, carried, false));
+            prefix.RemoveAt(prefix.Count - 1);
+        }
+    }
+
+    /// <summary>A row for every leaf the pack declares under <paramref name="prefix"/>, none of it in a file.</summary>
+    private static void Orphans(
+        string file, JsonObject declared, List<string> prefix, List<ModConfigSetting> into)
+    {
+        foreach (var (key, carried) in declared)
+        {
+            prefix.Add(key);
+            if (carried is JsonObject section) Orphans(file, section, prefix, into);
+            else into.Add(new ModConfigSetting(file, [.. prefix], null, null, carried, false));
             prefix.RemoveAt(prefix.Count - 1);
         }
     }
@@ -162,10 +191,10 @@ public static class ModConfigSurvey
     /// Built from the ticked rows alone rather than merged over what the manifest already
     /// says — the opposite of the hotkey tab, and for a reason that reverses there. A hotkey
     /// row exists only if the scan could read its registration, so rebuilding from rows would
-    /// silently drop the ones it could not; every mod config row, by contrast, comes from a
-    /// file that is right there, and a key the manifest names that no file has is surfaced as
-    /// its own row rather than hidden. So the rows are the whole truth here, and rebuilding
-    /// is what lets unticking remove one.
+    /// silently drop the ones it could not; <see cref="Read"/>, by contrast, gives every
+    /// declared value a row — from its file, or as an orphan when the file is missing,
+    /// unreadable or lacks the key. So the rows are the whole truth here, and rebuilding is
+    /// what lets unticking remove one.
     /// </summary>
     public static Dictionary<string, JsonObject>? ToManifest(IEnumerable<ModConfigSetting> carried)
     {

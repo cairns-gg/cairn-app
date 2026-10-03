@@ -228,6 +228,48 @@ public class ModConfigSurveyTests : IDisposable
         Assert.True(kept["x.json"].ContainsKey("oldName"));
     }
 
+    /// <summary>
+    /// An imported pack before its first launch: the pack declares settings, and no mod has
+    /// written a file yet. With no rows to rebuild from, opening the tab erased them all.
+    /// </summary>
+    [Fact]
+    public void A_declared_file_with_nothing_on_disk_keeps_every_value()
+    {
+        var declared = Declare("x.json", """{ "v": 1, "Rooms": { "Enabled": true } }""");
+
+        var rows = Read(declared);
+
+        Assert.Equal(["Rooms.Enabled", "v"], rows.Select(s => s.Key).Order());
+        Assert.All(rows, r => Assert.True(r.IsCarried));
+
+        var kept = ModConfigSurvey.ToManifest(rows.Where(s => s.IsCarried))!;
+        Assert.True(JsonNode.DeepEquals(declared["x.json"], kept["x.json"]));
+    }
+
+    [Fact]
+    public void A_declared_file_that_cannot_be_read_back_keeps_every_value()
+    {
+        // There, but not in a shape a tick could write: the file is skipped for rows of its
+        // own, and the declaration must not be skipped with it.
+        WriteConfig("x.json", "{ // a comment\n \"v\": 0 }");
+
+        var declared = Declare("x.json", """{ "v": 1 }""");
+
+        var kept = ModConfigSurvey.ToManifest(Read(declared).Where(s => s.IsCarried))!;
+        Assert.True(JsonNode.DeepEquals(declared["x.json"], kept["x.json"]));
+    }
+
+    [Fact]
+    public void A_declared_section_the_file_lacks_keeps_its_leaves()
+    {
+        WriteConfig("x.json", """{ "v": 1 }""");
+
+        var declared = Declare("x.json", """{ "v": 1, "Rooms": { "Enabled": true, "Size": { "Max": 9 } } }""");
+
+        var kept = ModConfigSurvey.ToManifest(Read(declared).Where(s => s.IsCarried))!;
+        Assert.True(JsonNode.DeepEquals(declared["x.json"], kept["x.json"]));
+    }
+
     // ---- the launch keeps the baseline up to date ----
 
     /// <summary>

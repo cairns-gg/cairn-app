@@ -445,6 +445,14 @@ on running it.
 
 ## Smaller things
 
+- **Looking at Mod config no longer throws away a pack's settings.** **0.9.9.** A pack can
+  carry mod settings, written into each mod's config file when you play. Opening the **Mod
+  config** tab before those files existed — which is every pack you import, until its first
+  launch — quietly saved the pack as carrying nothing, and the settings never arrived. The
+  same happened to a setting inside a section the file did not have yet. They now show in
+  the tab as carried, and only unticking one removes it. A pack that already lost its
+  settings this way does not get them back by itself: import it again from its link to have
+  them.
 - **Mods an author removes now leave your copy too.** **0.9.9.** Taking an update to a pack
   you follow removed the mod from the pack's list but left its file in the pack's `Mods`
   folder, where the game kept loading it — out of sight in the launcher, and in every game

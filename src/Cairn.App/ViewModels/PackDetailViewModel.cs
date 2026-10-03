@@ -3881,6 +3881,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         _allModConfig.Clear();
         _adoptingModConfig = true;
+        var surveyed = false;
 
         try
         {
@@ -3894,6 +3895,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             _modConfigSignature = Signature(settings);
             ModConfigError = null;
+            surveyed = true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -3907,7 +3909,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         RefreshModConfigFilter();
         OnPropertyChanged(nameof(ModConfigSummary));
 
-        if (!adopting) CarryCurrentValues();
+        // Never from a survey that did not finish. Carrying rebuilds the manifest from the
+        // rows, so a part-built list would be saved as the pack having stopped carrying
+        // everything the rows had not reached.
+        if (surveyed && !adopting) CarryCurrentValues();
     }
 
     /// <summary>
@@ -4231,10 +4236,10 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     ///
     /// Rebuilt from the rows rather than merged over what the manifest already says — the
     /// opposite of the hotkey tab, and deliberately. A hotkey row exists only where the scan
-    /// could read a registration, so rebuilding there would drop the ones it could not; every
-    /// row here comes from a file that is present, and a key the manifest names that no file
-    /// has gets a row of its own. So the rows are the whole truth, and rebuilding is what
-    /// lets unticking take an entry out.
+    /// could read a registration, so rebuilding there would drop the ones it could not; here
+    /// every declared value has a row, read from its file or shown as an orphan when the
+    /// file cannot supply it. So the rows are the whole truth, and rebuilding is what lets
+    /// unticking take an entry out.
     /// </summary>
     private void OnModConfigEdited()
     {
