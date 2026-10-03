@@ -435,7 +435,11 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnImportBusyChanged(bool value) => ImportPackCommand.NotifyCanExecuteChanged();
 
-    partial void OnIsImportingChanged(bool value) => RefreshPaneState();
+    partial void OnIsImportingChanged(bool value)
+    {
+        HoldOrRestoreSelection();
+        RefreshPaneState();
+    }
     [ObservableProperty] public partial bool IsCreating { get; set; }
     [ObservableProperty] public partial string NewPackName { get; set; } = "";
 
@@ -490,7 +494,80 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowEmpty));
     }
 
-    partial void OnIsCreatingChanged(bool value) => RefreshPaneState();
+    partial void OnIsCreatingChanged(bool value)
+    {
+        HoldOrRestoreSelection();
+        RefreshPaneState();
+    }
+
+    /// <summary>
+    /// The pack that was selected when a pack form opened. An id rather than the row,
+    /// because <see cref="LoadPacks"/> replaces every row object.
+    /// </summary>
+    private string? _heldSelection;
+
+    /// <summary>
+    /// New pack or Import is in front of the pack pane. Not provisioning, which also takes
+    /// the pane over but leaves the selection where it is.
+    /// </summary>
+    private bool HasOpenPackForm => IsCreating || IsImporting;
+
+    private enum PackForm { Create, Import }
+
+    /// <summary>
+    /// Opens one pack form and closes the other. The order is the point: closing first
+    /// would leave no form open for a moment, so the pack the old one was holding would be
+    /// handed back — its pane shown, and rebuilt if a reload had retired it — only to be
+    /// taken away again by the new one.
+    /// </summary>
+    private void OpenPackForm(PackForm form)
+    {
+        if (form == PackForm.Create)
+        {
+            IsCreating = true;
+            IsImporting = false;
+        }
+        else
+        {
+            IsImporting = true;
+            IsCreating = false;
+        }
+    }
+
+    /// <summary>
+    /// While a pack form is open the sidebar has no selection. Left selected, the pack behind
+    /// the form could not be reached: clicking a row that is already selected changes
+    /// nothing, so nothing closed the form, and with one pack Cancel was the only way back
+    /// (issue #3). Nothing highlighted also means the list no longer names a pack the form
+    /// is not about.
+    ///
+    /// Only the highlight goes. The pack's pane stays alive behind the form — see
+    /// <see cref="OnSelectedPackChanged(PackListItemViewModel?, PackListItemViewModel?)"/> —
+    /// so an update check, a tab or a search filter is still there when it comes back.
+    ///
+    /// When the last form closes the held id is restored, but only if nothing has been
+    /// selected already: a pack clicked to close the form, or one just created or imported,
+    /// is the one somebody asked to see.
+    /// </summary>
+    private void HoldOrRestoreSelection()
+    {
+        if (HasOpenPackForm)
+        {
+            // Already held when one form hands over to the other.
+            if (SelectedPack is null) return;
+
+            _heldSelection = SelectedPack.Id;
+            SelectedPack = null;
+        }
+        else if (_heldSelection is { } id)
+        {
+            _heldSelection = null;
+            SelectedPack ??= Packs.FirstOrDefault(p => p.Id == id);
+
+            // The held pack has gone, so its pane has nobody to show it.
+            if (SelectedPack is null) Detail = null;
+        }
+    }
 
     // A pack whose version is mid-download should not also be told it is missing.
     partial void OnProvisioningChanged(bool value)
@@ -616,7 +693,14 @@ public partial class MainViewModel : ViewModelBase
         RefreshPaneState();
     }
 
-    partial void OnSelectedPackChanged(PackListItemViewModel? value)
+    /// <summary>Choosing a pack is asking to see it, whatever form was in front.</summary>
+    private void CloseAnyPackForm()
+    {
+        IsCreating = false;
+        IsImporting = false;
+    }
+
+    partial void OnSelectedPackChanged(PackListItemViewModel? oldValue, PackListItemViewModel? newValue)
     {
         ConfirmingDelete = false;
         OnPropertyChanged(nameof(DeleteTargetName));
@@ -624,20 +708,34 @@ public partial class MainViewModel : ViewModelBase
         RequestDeleteCommand.NotifyCanExecuteChanged();
         ConfirmDeleteCommand.NotifyCanExecuteChanged();
 
-        if (value is null)
+        if (newValue is null)
         {
-            Detail = null;
+            // Behind a pack form the pane is only hidden, not finished with.
+            if (!HasOpenPackForm) Detail = null;
             return;
         }
 
+        // Coming back to the pane a form was covering. Nothing can have made it stale in
+        // between — LoadPacks retires a held pane — so it is shown again as it was left.
+        // A new row for the same pack outside a form still rebuilds: that is how a reload
+        // hands the pane a new library.
+        if (oldValue is null && Detail is { } held
+            && string.Equals(held.Id, newValue.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            CloseAnyPackForm();
+            return;
+        }
+
+        CloseAnyPackForm();
+
         Detail = new PackDetailViewModel(
-            value.Manifest, _store, _moddb, _http, _library, _runtimes, Runs,
-            log: LogFor(value.Id),
-            note: line => NoteFor(value.Id, line),
+            newValue.Manifest, _store, _moddb, _http, _library, _runtimes, Runs,
+            log: LogFor(newValue.Id),
+            note: line => NoteFor(newValue.Id, line),
             // The sidebar row shows the same manifest the detail pane is editing.
-            onChanged: value.Changed,
-            provision: v => ProvisionAsync(v, value.Id),
-            provisionRuntime: i => ProvisionRuntimeAsync(i, value.Id),
+            onChanged: newValue.Changed,
+            provision: v => ProvisionAsync(v, newValue.Id),
+            provisionRuntime: i => ProvisionRuntimeAsync(i, newValue.Id),
             isProvisioning: v => Provisioning && ProvisioningVersion == v,
             requestDelete: RequestDeleteCommand.Execute,
             knownGameVersions: KnownGameVersionsAsync);
@@ -698,7 +796,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void LoadPacks()
     {
-        var previouslySelected = SelectedPack?.Id;
+        var previouslySelected = SelectedPack?.Id ?? _heldSelection;
 
         Packs.Clear();
 
@@ -722,8 +820,19 @@ public partial class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(HasPacks));
 
-        SelectedPack = Packs.FirstOrDefault(p => p.Id == previouslySelected)
+        var reselect = Packs.FirstOrDefault(p => p.Id == previouslySelected)
                        ?? Packs.FirstOrDefault();
+
+        // Selecting would close a form in front — the import dialog can rebuild this list
+        // while the import pane is open — so the pack is held for it instead. Its pane is
+        // retired rather than held: a reload is how a pane learns of a new library or home,
+        // and the one behind the form was built before it.
+        if (HasOpenPackForm)
+        {
+            _heldSelection = reselect?.Id;
+            Detail = null;
+        }
+        else SelectedPack = reselect;
 
         Status = Packs.Count == 0
             ? Lang.Get("main-no-packs")
@@ -763,13 +872,15 @@ public partial class MainViewModel : ViewModelBase
         ImportText = "";
         ImportAsId = "";
         ImportError = null;
-        IsCreating = false;
 
         if (ChooseImportSource is null)
         {
-            IsImporting = true;   // no view to open a dialog: the pane still takes a paste
+            OpenPackForm(PackForm.Import);   // no view to open a dialog: the pane still takes a paste
             return;
         }
+
+        // The dialog is not the pane: the pack New pack was covering comes back behind it.
+        IsCreating = false;
 
         var choice = NewImportChoice();
 
@@ -1073,9 +1184,8 @@ public partial class MainViewModel : ViewModelBase
             // coming from, and a dialog reopening on top of a failure is not somewhere to
             // read one. Harmless while the pane was being opened here anyway; not once it
             // is only opened when something has gone wrong.
-            IsCreating = false;
+            OpenPackForm(PackForm.Import);
             ImportAsId = "";
-            IsImporting = true;
             ImportText = url;
         }
 
@@ -1252,7 +1362,6 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task BeginCreate()
     {
-        IsImporting = false;
         NewPackName = "";
         NewPackConnect = "";
         NewPackError = null;
@@ -1261,7 +1370,7 @@ public partial class MainViewModel : ViewModelBase
         // coerces its selection to null, and re-assigning the same string afterwards
         // raises no PropertyChanged, so the selection would never come back.
         PopulateInstalledVersions();
-        IsCreating = true;
+        OpenPackForm(PackForm.Create);
 
         await AppendCatalogVersionsAsync();
     }

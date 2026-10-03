@@ -573,6 +573,182 @@ public class MainWindowTests : IDisposable
         Assert.DoesNotContain(vm.Packs, p => p.Id == "bad-version");
     }
 
+    /// <summary>
+    /// The sidebar's list, told apart from the pack pane's own lists by what it is bound to.
+    /// </summary>
+    private static ListBox PackList(MainWindow window, MainViewModel vm) =>
+        window.GetVisualDescendants().OfType<ListBox>().Single(l => ReferenceEquals(l.ItemsSource, vm.Packs));
+
+    /// <summary>
+    /// Issue #3: with one pack, which is therefore already selected, New pack left no way
+    /// back to it. Clicking a selected row changes nothing, so nothing closed the form.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_pack_behind_the_new_pack_form_can_be_selected_again()
+    {
+        var (window, vm) = Show();
+        var list = PackList(window, vm);
+        var anego = vm.Packs.Single(p => p.Id == "anego");
+        list.SelectedItem = anego;
+
+        vm.BeginCreateCommand.Execute(null);
+        Assert.True(vm.ShowCreate);
+
+        // The form holds the selection, so the list does not name a pack it is not about.
+        Assert.Null(list.SelectedItem);
+
+        list.SelectedItem = anego;
+
+        Assert.False(vm.IsCreating);
+        Assert.True(vm.ShowDetail);
+        Assert.Equal("anego", vm.Detail!.Id);
+    }
+
+    [AvaloniaFact]
+    public void Selecting_another_pack_closes_the_new_pack_form()
+    {
+        var (window, vm) = Show();
+        var list = PackList(window, vm);
+        list.SelectedItem = vm.Packs.Single(p => p.Id == "anego");
+        var covered = vm.Detail;
+
+        vm.BeginCreateCommand.Execute(null);
+        list.SelectedItem = vm.Packs.Single(p => p.Id == "vanilla-qol");
+
+        // It used to move the highlight and leave the form where it was.
+        Assert.False(vm.ShowCreate);
+        Assert.True(vm.ShowDetail);
+        Assert.Equal("vanilla-qol", vm.Detail!.Id);
+
+        // The held pane is only ever reused for the pack it shows.
+        Assert.NotSame(covered, vm.Detail);
+    }
+
+    /// <summary>
+    /// Opening a form and cancelling it is not leaving the pack. Rebuilding its pane threw
+    /// away an update check: the updates were still there, but the buttons to take them
+    /// were not until somebody checked again.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Cancelling_the_new_pack_form_returns_to_the_pack_as_it_was_left()
+    {
+        var (window, vm) = Show(TwoUpdatesWaiting());
+        var list = PackList(window, vm);
+        list.SelectedItem = vm.Packs.Single(p => p.Id == "anego");
+
+        var detail = vm.Detail!;
+        await detail.CheckUpdatesCommand.ExecuteAsync(null);
+        Assert.True(detail.UpdateAllCommand.CanExecute(null));
+
+        vm.BeginCreateCommand.Execute(null);
+        vm.CancelCreateCommand.Execute(null);
+
+        Assert.True(vm.ShowDetail);
+        Assert.Equal("anego", vm.SelectedPack!.Id);
+        Assert.Same(vm.SelectedPack, list.SelectedItem);
+        Assert.Same(detail, vm.Detail);
+        Assert.Equal(2, detail.Mods.Count(m => m.UpdateAvailable is not null));
+        Assert.True(detail.UpdateAllCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void The_pack_behind_the_import_pane_can_be_selected_again()
+    {
+        var (window, vm) = Show();
+        var list = PackList(window, vm);
+        var anego = vm.Packs.Single(p => p.Id == "anego");
+        list.SelectedItem = anego;
+
+        vm.BeginImportCommand.Execute(null);
+        Assert.True(vm.ShowImport);
+        Assert.Null(list.SelectedItem);
+
+        list.SelectedItem = anego;
+
+        Assert.False(vm.IsImporting);
+        Assert.True(vm.ShowDetail);
+        Assert.Equal("anego", vm.Detail!.Id);
+    }
+
+    [AvaloniaFact]
+    public void Cancelling_an_import_returns_to_the_pack_it_covered()
+    {
+        var (window, vm) = Show();
+        PackList(window, vm).SelectedItem = vm.Packs.Single(p => p.Id == "old-pack");
+        var covered = vm.Detail;
+
+        vm.BeginImportCommand.Execute(null);
+        vm.CancelImportCommand.Execute(null);
+
+        Assert.True(vm.ShowDetail);
+        Assert.Equal("old-pack", vm.SelectedPack!.Id);
+        Assert.Same(covered, vm.Detail);
+    }
+
+    [AvaloniaFact]
+    public void Moving_from_the_new_pack_form_to_import_keeps_the_pack_held()
+    {
+        var (window, vm) = Show();
+        PackList(window, vm).SelectedItem = vm.Packs.Single(p => p.Id == "old-pack");
+        var covered = vm.Detail;
+
+        vm.BeginCreateCommand.Execute(null);
+
+        // Held throughout, not handed back and taken again: that rebuilt the pane between
+        // the two forms and sent it off to fetch versions for nobody.
+        var reselected = 0;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.SelectedPack) && vm.SelectedPack is not null) reselected++;
+        };
+
+        vm.BeginImportCommand.Execute(null);
+        Assert.True(vm.ShowImport);
+        Assert.Equal(0, reselected);
+        Assert.Same(covered, vm.Detail);
+
+        vm.CancelImportCommand.Execute(null);
+
+        Assert.Equal("old-pack", vm.SelectedPack!.Id);
+        Assert.Same(covered, vm.Detail);
+    }
+
+    /// <summary>
+    /// A pane held behind a form is only reused if nothing has reloaded the list since. A
+    /// reload is how a pane is handed a new library, so the one built before it must not
+    /// come back. Pointing the import dialog at another install is the reload a person can
+    /// reach while the import pane is open.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_reload_behind_a_form_rebuilds_the_pane_it_was_holding()
+    {
+        var (window, vm) = Show();
+        PackList(window, vm).SelectedItem = vm.Packs.Single(p => p.Id == "old-pack");
+        var covered = vm.Detail;
+
+        vm.BeginImportCommand.Execute(null);
+        Assert.True(vm.ShowImport);
+
+        vm.ChooseImportSource = choice =>
+        {
+            choice.InstallChanged!();
+            return Task.FromResult(false);
+        };
+        await vm.BeginImportCommand.ExecuteAsync(null);
+
+        // The form stays open through the reload, and the pane it held is gone.
+        Assert.True(vm.ShowImport);
+        Assert.Null(vm.SelectedPack);
+        Assert.Null(vm.Detail);
+
+        vm.CancelImportCommand.Execute(null);
+
+        Assert.Equal("old-pack", vm.SelectedPack!.Id);
+        Assert.NotSame(covered, vm.Detail);
+        Assert.Equal("old-pack", vm.Detail!.Id);
+        Assert.True(vm.ShowDetail);
+    }
+
     // ---- editing a pack from the UI ----
 
     [AvaloniaFact]

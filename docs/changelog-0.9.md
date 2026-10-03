@@ -445,6 +445,11 @@ on running it.
 
 ## Smaller things
 
+- **Clicking a pack gets you back out of New pack and Import.** **0.9.9.** With either form
+  open, clicking a pack in the list moved the highlight and left the form where it was — and
+  clicking the pack that was already highlighted, which with only one pack is the only one
+  there is, did nothing at all. **Cancel** was the only way out. Clicking any pack now shows
+  that pack, and **Cancel** goes back to the one you were looking at, as you left it. Nothing to do.
 - **A mod refused for your game version says how to take it anyway.** **0.9.9.** A pack can
   carry a mod ModDB does not mark for its game version once somebody says they have run it —
   **Add anyway** in the launcher writes that down — but a pack whose `pack.json` you keep by
