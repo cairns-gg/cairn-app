@@ -389,8 +389,10 @@ public sealed class OptimumProvisioner
     /// does not want, and the client that comes out is a mixture no pin describes.
     /// </param>
     public static (string Script, List<string> Arguments) BootstrapFor(
-        OptimumSource source, bool windows, bool refresh)
+        OptimumSource source, HostOs platform, bool refresh)
     {
+        var windows = platform == HostOs.Windows;
+
         List<string> args = windows
             ? ["-Version", source.GameVersion]
             : ["--version", source.GameVersion];
@@ -407,9 +409,7 @@ public sealed class OptimumProvisioner
         progress?.Report(new OptimumStep("bootstrap",
             Lang.Get("optimum-decompiling"), 0.15));
 
-        var windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-
-        var (name, bootstrapArgs) = BootstrapFor(source, windows, TreeIsStaleFor(source));
+        var (name, bootstrapArgs) = BootstrapFor(source, Host.This, TreeIsStaleFor(source));
 
         var (host, args) = ProcessRunner.ScriptHost(Path.Combine(WorkingTree, "scripts", name));
         args.AddRange(bootstrapArgs);
@@ -510,14 +510,6 @@ public sealed class OptimumProvisioner
         }
     }
 
-    /// <summary>Which packager to drive. A parameter so all three can be tested from one host.</summary>
-    public enum BuildPlatform { Windows, MacOS, Linux }
-
-    public static BuildPlatform HostPlatform =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? BuildPlatform.Windows
-        : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? BuildPlatform.MacOS
-        : BuildPlatform.Linux;
-
     /// <summary>
     /// The packager script and its arguments, for one platform.
     ///
@@ -529,17 +521,20 @@ public sealed class OptimumProvisioner
     /// file and is never passed in. Handing over Optimum's version instead asks the CDN for
     /// a client release numbered 0.3.5 and gets a 404, twenty minutes into a build that had
     /// otherwise succeeded.
+    ///
+    /// Which packager is a <see cref="HostOs"/>, defaulting to <see cref="Host.This"/>, so all
+    /// three can be checked from one host.
     /// </summary>
     public static (string Script, List<string> Arguments) PackagerFor(
         OptimumSource source,
         string outputDir,
         GameInstall? vanilla = null,
-        BuildPlatform? platform = null,
+        HostOs? platform = null,
         bool arm64 = false)
     {
-        switch (platform ?? HostPlatform)
+        switch (platform ?? Host.This)
         {
-            case BuildPlatform.Windows:
+            case HostOs.Windows:
                 List<string> windows = ["-OutputDir", outputDir, "-Version", source.GameVersion];
 
                 // Reuses the client Cairn already downloaded and unpacked. Without this the
@@ -548,7 +543,7 @@ public sealed class OptimumProvisioner
 
                 return ("package.ps1", windows);
 
-            case BuildPlatform.MacOS:
+            case HostOs.MacOs:
                 return ("package-macos.sh",
                     [
                         "--arch", arm64 ? "arm64" : "x64",

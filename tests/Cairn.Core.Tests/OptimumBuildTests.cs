@@ -241,11 +241,11 @@ public class OptimumBuildTests : IDisposable
     /// mistake was sitting in all three branches at once.
     /// </summary>
     [Theory]
-    [InlineData(OptimumProvisioner.BuildPlatform.Windows, "-Version")]
-    [InlineData(OptimumProvisioner.BuildPlatform.MacOS, "--version")]
-    [InlineData(OptimumProvisioner.BuildPlatform.Linux, "--version")]
+    [InlineData(HostOs.Windows, "-Version")]
+    [InlineData(HostOs.MacOs, "--version")]
+    [InlineData(HostOs.Linux, "--version")]
     public void The_packager_is_told_the_game_version_not_optimums(
-        OptimumProvisioner.BuildPlatform platform, string flag)
+        HostOs platform, string flag)
     {
         var source = OptimumSource.Newest;
         var (_, args) = OptimumProvisioner.PackagerFor(source, "/tmp/out", platform: platform);
@@ -257,11 +257,11 @@ public class OptimumBuildTests : IDisposable
     }
 
     [Theory]
-    [InlineData(OptimumProvisioner.BuildPlatform.Windows, "package.ps1")]
-    [InlineData(OptimumProvisioner.BuildPlatform.MacOS, "package-macos.sh")]
-    [InlineData(OptimumProvisioner.BuildPlatform.Linux, "package-linux.sh")]
+    [InlineData(HostOs.Windows, "package.ps1")]
+    [InlineData(HostOs.MacOs, "package-macos.sh")]
+    [InlineData(HostOs.Linux, "package-linux.sh")]
     public void Each_platform_runs_its_own_packager(
-        OptimumProvisioner.BuildPlatform platform, string script)
+        HostOs platform, string script)
     {
         var (name, args) = OptimumProvisioner.PackagerFor(
             OptimumSource.Newest, "/tmp/out", platform: platform);
@@ -282,7 +282,7 @@ public class OptimumBuildTests : IDisposable
 
         var (_, args) = OptimumProvisioner.PackagerFor(
             OptimumSource.Newest, "/tmp/out", vanilla,
-            OptimumProvisioner.BuildPlatform.Windows);
+            HostOs.Windows);
 
         // Only Windows' packager takes one; the others fetch their own client, so passing
         // it there would be an unrecognised argument rather than a saving.
@@ -294,11 +294,11 @@ public class OptimumBuildTests : IDisposable
     public void The_mac_packager_is_told_which_architecture_to_build()
     {
         var (_, arm) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Newest, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            OptimumSource.Newest, "/tmp/out", platform: HostOs.MacOs,
             arm64: true);
 
         var (_, intel) = OptimumProvisioner.PackagerFor(
-            OptimumSource.Newest, "/tmp/out", platform: OptimumProvisioner.BuildPlatform.MacOS,
+            OptimumSource.Newest, "/tmp/out", platform: HostOs.MacOs,
             arm64: false);
 
         Assert.Equal("arm64", arm[arm.IndexOf("--arch") + 1]);
@@ -505,20 +505,21 @@ public class OptimumBuildTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true, "-Version", "-Refresh")]
-    [InlineData(false, "--version", "--refresh")]
+    [InlineData(HostOs.Windows, "-Version", "-Refresh")]
+    [InlineData(HostOs.MacOs, "--version", "--refresh")]
+    [InlineData(HostOs.Linux, "--version", "--refresh")]
     public void Bootstrap_is_told_the_game_version_and_whether_to_start_over(
-        bool windows, string versionFlag, string refreshFlag)
+        HostOs platform, string versionFlag, string refreshFlag)
     {
         var source = OptimumSource.Newest;
 
-        var (script, kept) = OptimumProvisioner.BootstrapFor(source, windows, refresh: false);
+        var (script, kept) = OptimumProvisioner.BootstrapFor(source, platform, refresh: false);
 
-        Assert.Equal(windows ? "bootstrap.ps1" : "bootstrap.sh", script);
+        Assert.Equal(platform == HostOs.Windows ? "bootstrap.ps1" : "bootstrap.sh", script);
         Assert.Equal(source.GameVersion, kept[kept.IndexOf(versionFlag) + 1]);
         Assert.DoesNotContain(refreshFlag, kept);
 
-        var (_, refreshed) = OptimumProvisioner.BootstrapFor(source, windows, refresh: true);
+        var (_, refreshed) = OptimumProvisioner.BootstrapFor(source, platform, refresh: true);
 
         Assert.Contains(refreshFlag, refreshed);
     }
