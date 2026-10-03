@@ -373,16 +373,12 @@ internal static class Program
 
                 // The whole point of the command: deleting the live root is the one mistake
                 // that cannot be walked back, and a mistyped path is how it would happen.
-                if (string.Equals(Path.TrimEndingDirectorySeparator(old),
-                                  Path.TrimEndingDirectorySeparator(CairnPaths.Root),
-                                  StringComparison.OrdinalIgnoreCase))
-                    return Fail($"{old} is where Cairn is keeping its files now");
+                // Asked of Core, which DeleteOldRoot asks again, so the confirmation below
+                // can never promise something the delete does not keep.
+                if (HomeMigration.DiscardProblem(old) is { } problem) return Fail(problem);
 
                 // Kept if it is in there: it is what points Cairn at where everything went.
-                var keep = File.Exists(CairnHome.PointerPath)
-                           && CairnHome.PointerPath.StartsWith(old, StringComparison.OrdinalIgnoreCase)
-                    ? CairnHome.PointerPath
-                    : null;
+                var keep = HomeMigration.PointerToKeep(old);
 
                 Console.WriteLine($"deletes everything under {old}");
                 if (keep is not null) Console.WriteLine($"keeps    {keep}");

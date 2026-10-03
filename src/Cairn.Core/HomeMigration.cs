@@ -282,8 +282,8 @@ public static class HomeMigration
         // case on a CI runner, where nobody has run Cairn: the guard silently did not apply,
         // and the test proving it applied passed only because the developer's own ~/.cairn
         // was there.
-        if (PathsEqual(oldRoot, CairnPaths.Root))
-            throw new MoveFailed(Lang.Get("move-already-here", oldRoot));
+        if (DiscardProblem(oldRoot, CairnPaths.Root, CairnHome.PointerPath) is { } problem)
+            throw new MoveFailed(problem);
 
         if (!Directory.Exists(oldRoot)) return 0;
 
@@ -293,7 +293,7 @@ public static class HomeMigration
         {
             ct.ThrowIfCancellationRequested();
 
-            if (keep is not null && PathsEqual(entry, keep)) continue;
+            if (keep is not null && SamePlace(entry, keep)) continue;
 
             var info = new FileInfo(entry);
 
@@ -498,6 +498,104 @@ public static class HomeMigration
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Why <paramref name="oldRoot"/> must not be deleted, or null when it may be. Both front
+    /// ends ask this one question, and <see cref="DeleteOldRoot"/> asks it again itself.
+    ///
+    /// Containing, not only being. Equality was the whole check once, and a root moved to
+    /// <c>/data/old/cairn</c> then discarded as <c>/data/old</c> passed it — the confirmation
+    /// said the live root was not touched, and a recursive delete of its parent took it.
+    ///
+    /// The pointer as well, for the same shape of mistake: it is kept only as a direct child,
+    /// so an old root holding it deeper down — a home directory holding <c>~/.cairn</c> — would
+    /// take it, and Cairn would wake up in an empty default root.
+    /// </summary>
+    public static string? DiscardProblem(string oldRoot) =>
+        DiscardProblem(oldRoot, CairnPaths.Root, CairnHome.PointerPath);
+
+    /// <param name="liveRoot">The root Cairn is reading, injected for testing.</param>
+    /// <param name="pointer">Where the pointer file is, whether or not it exists.</param>
+    public static string? DiscardProblem(string oldRoot, string liveRoot, string pointer)
+    {
+        if (SamePlace(oldRoot, liveRoot)) return Lang.Get("move-already-here", oldRoot);
+        if (Holds(oldRoot, liveRoot)) return Lang.Get("move-holds-live", oldRoot, liveRoot);
+
+        if (File.Exists(pointer) && Holds(oldRoot, pointer) && PointerToKeep(oldRoot, pointer) is null)
+            return Lang.Get("move-holds-pointer", oldRoot, pointer);
+
+        return null;
+    }
+
+    /// <summary>
+    /// The pointer file, when it sits directly in <paramref name="oldRoot"/> and so has to
+    /// survive the discard — see <see cref="DeleteOldRoot"/>. Otherwise null.
+    /// </summary>
+    public static string? PointerToKeep(string oldRoot) => PointerToKeep(oldRoot, CairnHome.PointerPath);
+
+    private static string? PointerToKeep(string oldRoot, string pointer) =>
+        File.Exists(pointer) && Path.GetDirectoryName(Path.GetFullPath(pointer)) is { } dir
+                             && SamePlace(dir, oldRoot)
+            ? pointer
+            : null;
+
+    /// <summary>
+    /// The same directory, however it was spelled. Links along either path are followed, and
+    /// case is ignored on every platform.
+    ///
+    /// Both choices err the same way, which is the only way this question can afford to err.
+    /// macOS volumes are case-insensitive by default while .NET compares paths ordinally
+    /// there, and <c>/tmp</c> is a link to <c>/private/tmp</c>; either alias made the live root
+    /// look like somewhere else. Ignoring case on Linux can call two different directories
+    /// the same one, which costs a refusal and a retyped path — the opposite mistake costs
+    /// everything Cairn has.
+    /// </summary>
+    private static bool SamePlace(string a, string b) =>
+        string.Equals(Resolved(a), Resolved(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Strictly underneath, by the same rules as <see cref="SamePlace"/>.</summary>
+    private static bool Holds(string outer, string inner)
+    {
+        // A root keeps its separator through the trim — "/" stays "/" — and appending
+        // another would make a prefix nothing starts with, so "/" would hold nothing.
+        var o = Resolved(outer);
+        if (!o.EndsWith(Path.DirectorySeparatorChar)) o += Path.DirectorySeparatorChar;
+
+        return Resolved(inner).StartsWith(o, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The path with every link along it resolved, component by component. A component that
+    /// does not exist is kept as written: the live root may not have been created yet, and a
+    /// path that is not there yet is still a place it could be.
+    /// </summary>
+    private static string Resolved(string path, int depth = 0)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var root = Path.GetPathRoot(full) ?? "";
+        var current = root;
+
+        foreach (var part in full[root.Length..].Split(
+                     Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var next = Path.Combine(current, part);
+
+            FileSystemInfo? target = null;
+            try
+            {
+                target = new FileInfo(next).ResolveLinkTarget(returnFinalTarget: true);
+            }
+            catch (IOException) { /* a broken or looping link: compare it as written */ }
+
+            // A link's target can itself run through links in its parents, which
+            // returnFinalTarget does not undo; resolved again, a little way, for those.
+            current = target is null ? next
+                : depth < 8 ? Resolved(target.FullName, depth + 1)
+                : target.FullName;
+        }
+
+        return Path.TrimEndingDirectorySeparator(current);
     }
 
     /// <summary>Under <see cref="CairnPaths.LogsRoot"/>, given a path relative to the root.</summary>

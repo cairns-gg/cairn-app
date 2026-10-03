@@ -757,6 +757,8 @@
   "launch-no-runtime": "No se encontró ningún entorno .NET {1} para {0}. El juego no trae entorno propio, así que no puede iniciarse hasta que se instale uno.",
 
   "move-already-here": "{0} ya es donde Cairn guarda sus archivos",
+  "move-holds-live": "{0} contiene {1}, que es donde Cairn guarda ahora sus archivos",
+  "move-holds-pointer": "{0} contiene {1}, el archivo que le dice a Cairn dónde están sus archivos",
   "move-missing": "{0} no llegó; no se ha reapuntado nada",
   "move-missing-link": "{0} no llegó como enlace; no se ha reapuntado nada",
   "move-wrong-size": "{0} ocupa {1} bytes y debería ocupar {2}; no se ha reapuntado nada",

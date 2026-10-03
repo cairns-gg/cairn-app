@@ -321,6 +321,72 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Discarding_the_folder_that_holds_the_live_root_is_refused_and_deletes_nothing()
+    {
+        // The review's reproduction: moved to <old>/live, then <old> discarded. Equality was
+        // the whole check, so the CLI said the live root was not touched and then took it.
+        var old = Path.Combine(_tmp, "old-parent");
+        var live = Path.Combine(old, "live");
+        var save = Path.Combine(live, "packs", "demo", "data", "Saves", "world.vcdbs");
+        Directory.CreateDirectory(Path.GetDirectoryName(save)!);
+        File.WriteAllText(save, "a world");
+
+        var defaultRoot = Path.Combine(_tmp, "default");
+        Directory.CreateDirectory(defaultRoot);
+        File.WriteAllText(Path.Combine(defaultRoot, CairnHome.PointerName), live);
+
+        var previous = Environment.GetEnvironmentVariable("CAIRN_DEFAULT_HOME");
+        Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", defaultRoot);
+
+        try
+        {
+            Assert.Equal(live, CairnPaths.Root);
+            Assert.NotNull(HomeMigration.DiscardProblem(old));
+            Assert.Throws<MoveFailed>(() => HomeMigration.DeleteOldRoot(old, null));
+            Assert.True(File.Exists(save));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CAIRN_DEFAULT_HOME", previous);
+        }
+    }
+
+    [Fact]
+    public void The_live_root_is_recognised_through_a_link_and_in_another_case()
+    {
+        var old = Path.Combine(_tmp, "old-parent");
+        var live = Path.Combine(old, "live");
+        Directory.CreateDirectory(live);
+
+        var alias = Path.Combine(_tmp, "alias");
+        Directory.CreateSymbolicLink(alias, old);
+
+        var pointer = Path.Combine(_tmp, "no-pointer-here");
+
+        // /tmp is itself a link on macOS, and its volumes ignore case: two spellings of one
+        // directory that an ordinal comparison calls different places.
+        Assert.NotNull(HomeMigration.DiscardProblem(alias, live, pointer));
+        Assert.NotNull(HomeMigration.DiscardProblem(Path.Combine(alias, "live"), live, pointer));
+        Assert.NotNull(HomeMigration.DiscardProblem(old.ToUpperInvariant(), live, pointer));
+    }
+
+    [Fact]
+    public void A_folder_holding_the_pointer_deeper_than_its_top_is_refused()
+    {
+        // Kept only as a direct child, so a home directory holding ~/.cairn/home would lose it
+        // to the recursive delete of .cairn, and Cairn would start in an empty default root.
+        var homeDir = Path.Combine(_tmp, "user");
+        var pointer = Path.Combine(homeDir, ".cairn", CairnHome.PointerName);
+        Directory.CreateDirectory(Path.GetDirectoryName(pointer)!);
+        File.WriteAllText(pointer, To);
+
+        Assert.NotNull(HomeMigration.DiscardProblem(homeDir, To, pointer));
+
+        // The ordinary case is still allowed: the old default root, pointer and all.
+        Assert.Null(HomeMigration.DiscardProblem(Path.Combine(homeDir, ".cairn"), To, pointer));
+    }
+
+    [Fact]
     public void Discarding_unlinks_a_link_rather_than_deleting_through_it()
     {
         // What it points at is somewhere else and not ours to remove.
