@@ -777,9 +777,12 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
     public bool HasPackUpdate => PackUpdate is not null;
 
-    public string PackUpdateLine => PackUpdate is null
-        ? ""
-        : Lang.Get("packupdate-revision-available", PackUpdate.To, PackUpdate.From);
+    public string PackUpdateLine => PackUpdate switch
+    {
+        null => "",
+        { Changed: true } => Lang.Get("packupdate-source-changed"),
+        _ => Lang.Get("packupdate-revision-available", PackUpdate.To, PackUpdate.From),
+    };
 
     /// <summary>
     /// Offered for any followed pack, not only one with a revision waiting.
@@ -961,11 +964,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             }
 
             var link = _store.LoadLink(Id);
-            var available = (bundle.Revision ?? 0) > (link?.Revision ?? 0);
-
-            PackUpdate = available
-                ? new PackUpdateAvailable(link!.Revision, bundle.Revision ?? 0, bundle)
-                : null;
+            // Asked of Core rather than worked out here, so a pack followed by content — no
+            // revisions — keeps its notice while it differs from what was last taken.
+            PackUpdate = PackUpdateCheck.Compare(link, bundle);
 
             var plan = PackUpdatePlan.Between(
                 Manifest, bundle.Pack!, _store.LoadUpstream(Id),
@@ -976,7 +977,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             // dialog to say so would be worse than saying so.
             if (!plan.AnyChange && !plan.Changes.Any())
             {
-                _log(Lang.Get("pack-matches-revision", bundle.Revision ?? 0));
+                _log(bundle.Revision is { } matched
+                    ? Lang.Get("pack-matches-revision", matched)
+                    : Lang.Get("pack-matches-source"));
                 return;
             }
 
@@ -1016,9 +1019,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 _store.SaveLocalState(Id, state);
             }
 
-            _log(plan.Reset
-                ? Lang.Get("pack-reset-to-revision", bundle.Revision ?? 0)
-                : Lang.Get("pack-updated-to-revision", bundle.Revision ?? 0));
+            _log((plan.Reset, bundle.Revision) switch
+            {
+                (true, { } r) => Lang.Get("pack-reset-to-revision", r),
+                (false, { } r) => Lang.Get("pack-updated-to-revision", r),
+                (true, null) => Lang.Get("pack-reset-to-source"),
+                (false, null) => Lang.Get("pack-updated-from-source"),
+            });
 
             ReloadMods();
             ReloadShare();

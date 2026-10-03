@@ -48,6 +48,19 @@ public sealed class PackBundle
     [JsonIgnore]
     public bool IsPublished => !string.IsNullOrWhiteSpace(CanonicalUrl);
 
+    /// <summary>
+    /// What the document said, as <see cref="PackLink.Fingerprint"/> hashes it: set by
+    /// <see cref="Parse"/> from the text as it arrived, and null for a bundle built in code.
+    ///
+    /// Taken there, before anything else touches the bundle, because nearly everything that
+    /// receives one changes it in place — import renames the pack and clears its pins and
+    /// mod locations — and a hash of the mutated object would never match the next fetch of
+    /// the same document. It is how a pack followed from an address with no revisions finds
+    /// out its source has changed: see <see cref="PackLink.ContentFingerprint"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? Fingerprint { get; private set; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -106,6 +119,8 @@ public sealed class PackBundle
 
         // Not ours to act on, whoever wrote it — see PackLock.Retired.
         if (bundle.Lock is not null) bundle.Lock.Retired = null;
+
+        bundle.Fingerprint = PackLink.Fingerprint(json);
 
         return bundle;
     }

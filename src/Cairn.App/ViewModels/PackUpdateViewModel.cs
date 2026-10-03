@@ -215,9 +215,14 @@ public sealed partial class PackUpdateViewModel(
 
     public string Summary => Plan.Summary();
 
-    public string ApplyLabel => Reset
-        ? Lang.Get("packupdate-apply-reset", Plan.ToRevision)
-        : Lang.Get("packupdate-apply-update", Plan.ToRevision);
+    /// <summary>Without a number for a pack whose address issues none — see PackUpdatePlan.Summary.</summary>
+    public string ApplyLabel => (Reset, Plan.ToRevision) switch
+    {
+        (true, 0) => Lang.Get("packupdate-apply-reset-unnumbered"),
+        (false, 0) => Lang.Get("packupdate-apply-update-unnumbered"),
+        (true, _) => Lang.Get("packupdate-apply-reset", Plan.ToRevision),
+        (false, _) => Lang.Get("packupdate-apply-update", Plan.ToRevision),
+    };
 
     public bool HasChanges => Changes.Count > 0;
 

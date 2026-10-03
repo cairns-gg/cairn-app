@@ -311,6 +311,13 @@ public sealed class PackUpdatePlan
         if (KeybindsChange) parts.Add(Lang.Get("packupdate-changes-keybinds"));
         if (ModConfigChanges) parts.Add(Lang.Get("packupdate-changes-modconfig"));
 
+        // Revisions start at 1, so 0 is a pack followed from an address that issues none —
+        // where "revision 0" would name something that does not exist.
+        if (ToRevision == 0)
+            return parts.Count == 0
+                ? Lang.Get("packupdate-no-mod-changes-unnumbered")
+                : Lang.Get("packupdate-summary-unnumbered", string.Join(", ", parts));
+
         return parts.Count == 0
             ? Lang.Get("packupdate-no-mod-changes", ToRevision)
             : Lang.Get("packupdate-summary", ToRevision, string.Join(", ", parts));

@@ -140,6 +140,12 @@ public sealed class PackStore
         if (LoadLink(id) is { } link)
         {
             link.Revision = bundle.Revision ?? link.Revision;
+
+            // What was just taken, for the next check to compare against. Kept as it was for
+            // a bundle built in code, which has no served text to have hashed.
+            if (link.ContentFingerprint is not null && bundle.Fingerprint is { } taken)
+                link.ContentFingerprint = taken;
+
             SaveLink(id, link);
         }
 
@@ -506,6 +512,29 @@ public sealed class PackStore
     /// Whether this copy follows the author or starts a pack of your own. Null lets the
     /// answer follow from what can be verified: see the comment on the decision below.
     /// </param>
+    /// <summary>
+    /// The address following this pack would check back with, or null when it has none
+    /// worth following. Both front-ends ask it to decide whether to offer the choice, and
+    /// <see cref="Import"/> asks it again to act on one.
+    ///
+    /// Fetched, the answer is where it was fetched from, published or not. That used to
+    /// need cairns.gg's stamp as well, which left an author hosting their own pack — an
+    /// export on a static host, a raw file in a repository — with a copy that could never
+    /// be refreshed: no link, nothing to check, and the only way to a newer version was to
+    /// delete the pack and import it again (cairns-gg/cairn-app#4). Nothing about trust
+    /// changes by dropping it: the address is still the one Cairn watched the document
+    /// arrive from, never one the document names.
+    ///
+    /// Out of a file, only a published document has an address at all, and it is the
+    /// file's own claim — offered, and followed only once somebody chooses to.
+    /// </summary>
+    /// <param name="fetchedFrom">Where the document actually came from, or null for a file.</param>
+    public static string? FollowAddress(PackBundle bundle, string? fetchedFrom)
+    {
+        var address = fetchedFrom ?? (bundle.IsPublished ? bundle.CanonicalUrl : null);
+        return string.IsNullOrWhiteSpace(address) ? null : PackUpdateCheck.PageUrl(address);
+    }
+
     public PackManifest Import(
         PackBundle bundle, string? asId = null, bool reproduce = true, string? sourceUrl = null,
         ImportIntent? intent = null)
@@ -553,7 +582,7 @@ public sealed class PackStore
         // A fork deliberately gets none of this: no link and no merge base, because there
         // is nobody to reconcile with. That is the whole of what forking means here, and it
         // is the only way to get a copy that is yours to publish.
-        if (bundle.IsPublished && decided == ImportIntent.Follow)
+        if (decided == ImportIntent.Follow && FollowAddress(bundle, sourceUrl) is { } followed)
         {
             // The base for every future merge, recorded at the one moment it is certainly
             // the author's own: right now, before anybody has edited a line of it.
@@ -572,9 +601,12 @@ public sealed class PackStore
                 // only once somebody has been shown that address and chosen to follow it.
                 // A claim a person approved is a different thing from a claim believed,
                 // which is why front-ends must show the URL where they offer the choice.
-                Url = PackUpdateCheck.PageUrl(sourceUrl ?? bundle.CanonicalUrl!),
+                Url = followed,
                 Revision = bundle.Revision ?? 0,
                 Following = true,
+
+                // Only where there is no revision to compare instead. See the property.
+                ContentFingerprint = bundle.IsPublished ? null : bundle.Fingerprint,
             });
         }
 

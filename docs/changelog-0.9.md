@@ -445,6 +445,14 @@ on running it.
 
 ## Smaller things
 
+- **A pack you host yourself can be updated in place.** **0.9.9.** A pack imported from an
+  address other than cairns.gg — an export you put on a website, or a raw file in a GitHub
+  repository — arrived as a copy with no way back to where it came from, so trying a new
+  version of your own pack meant backing up the world, deleting the pack and importing it
+  again. It now follows that address like a cairns.gg pack follows its page: push a new
+  export to the same place and **Check for updates** brings it in, worlds untouched, and the
+  button lights up on its own when the pack has changed. Packs you already imported this way
+  need importing once more to pick this up.
 - **Saying no to a game version change gives you the picker back.** **0.9.9.** After you
   chose another game version in a pack's settings and then declined the change, the version
   picker stayed greyed out until you clicked away to another pack and back. It is usable

@@ -62,13 +62,10 @@ public sealed partial class ImportViewModel : ViewModelBase
         _idTaken = idTaken;
         Fetched = fetched;
 
-        // Through PageUrl on both paths, because this is the address that will be written
-        // down and it has to be the one somebody was shown. PackStore.Import normalises
-        // whatever it is given the same way, so showing the document's raw claim here
-        // meant the dialog could name one address and the link record another — only for
-        // a claim ending in .json, which no real pack has, but the two must not be capable
-        // of disagreeing at all.
-        FollowUrl = PackUpdateCheck.PageUrl(fetched ? source : bundle.CanonicalUrl ?? "");
+        // Asked of the same rule PackStore.Import acts on, so the address shown here and the
+        // one written down cannot disagree — and so a pack fetched from an address that is
+        // not cairns.gg is offered the choice too, where the dialog used to hide it.
+        FollowUrl = PackStore.FollowAddress(bundle, fetched ? source : null);
 
         // Preselected only where the address is one Cairn watched this arrive from.
         // Leaving it unanswered for a file is the point rather than an oversight: the only
@@ -206,10 +203,10 @@ public sealed partial class ImportViewModel : ViewModelBase
     public string? FollowUrl { get; }
 
     /// <summary>
-    /// Whether there is anything to decide. A document that came off nobody's server has
-    /// no owner to follow, so the question would be noise.
+    /// Whether there is anything to decide: an address to follow, which a file with no
+    /// published origin does not have. See <see cref="PackStore.FollowAddress"/>.
     /// </summary>
-    public bool CanChooseFollow => Bundle.IsPublished && FollowUrl is { Length: > 0 };
+    public bool CanChooseFollow => FollowUrl is { Length: > 0 };
 
     /// <summary>
     /// Null until answered. Tri-state rather than a bool because "not yet said" and "no"

@@ -106,6 +106,19 @@ public sealed class PackLink
     /// </summary>
     [JsonPropertyName("following")] public bool Following { get; set; }
 
+    /// <summary>
+    /// Follower of an unpublished document only: the fingerprint of the one last taken.
+    /// Null for a pack followed from cairns.gg, whose revision number answers the question.
+    ///
+    /// A pack an author hosts themselves — exported from Cairn and put on a static host, or
+    /// a raw file in a repository — has no revision: nothing stamps one on but a server. So
+    /// "has it changed" is asked of the content instead, against what this copy last took
+    /// rather than what it holds now, so that its own local edits never read as the
+    /// author's. Also what marks the link as one that may be fed unpublished documents at
+    /// all — see <see cref="PackUpdateCheck.FetchAsync"/>.
+    /// </summary>
+    [JsonPropertyName("contentFingerprint")] public string? ContentFingerprint { get; set; }
+
     /// <summary>Author only.</summary>
     [JsonPropertyName("published")] public PublishRecord? Published { get; set; }
 

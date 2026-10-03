@@ -112,11 +112,33 @@ diverge from the set the pack exists to reproduce — while the pack still looks
 
 | | update source | Update means |
 |---|---|---|
-| **linked** — imported from cairns.gg | the author's published revisions | the author shipped a new set; take all of it |
+| **linked** — imported from cairns.gg, or from any address over https | the author's published revisions, or the document at that address | the author shipped a new set; take all of it |
 | **unlinked** — imported from a file, or your own | ModDB, per mod | there is a newer release of this mod |
 
 A linked pack applies a revision **as a set**, because that is the unit the author tested;
 offering its mods one at a time would rebuild the divergence this exists to prevent.
+
+### A pack you host yourself
+
+A pack does not have to be on cairns.gg to be followed. Export it, put the `.json`
+somewhere that serves it over https — a static host, a raw file in a repository — and
+import it from that address: the copy follows the address it was fetched from, exactly as
+a cairns.gg pack follows its page. Push a new export to the same place and **Check for
+updates** takes it, worlds and all, with no deleting and importing again.
+
+Such a document has no revision — nothing but a server stamps one — so whether it has
+changed is asked of the content instead. The link records a fingerprint of the document
+last taken (`contentFingerprint`), hashed over its shape rather than its bytes so a host
+that reformats the file is not mistaken for an edit. It is compared with what was last
+*taken*, not with what the copy holds now, so local edits never read as the author's.
+
+Two things follow from there being no server in the loop. A host that caches —
+GitHub serves raw files a few minutes stale — delays the news by that long; and the
+background check runs at most every two hours, so somebody iterating on a pack presses
+**Check for updates**, which asks every time.
+
+The address must be the one Cairn fetched from. A file handed over with no published
+origin has none, and imports as a pack of your own.
 
 ### The link lives outside the manifest
 

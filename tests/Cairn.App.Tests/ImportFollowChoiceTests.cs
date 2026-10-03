@@ -127,6 +127,33 @@ public class ImportFollowChoiceTests
     }
 
     /// <summary>
+    /// The same unpublished document, fetched from an address an author hosts it at. That
+    /// address is somewhere to check back with, so the choice is offered and following is
+    /// preselected, as for any fetch (cairns-gg/cairn-app#4). It used to be hidden, and the
+    /// pack imported with nothing to refresh it from.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_nobody_published_fetched_from_an_address_can_be_followed_there()
+    {
+        const string address = "https://raw.githubusercontent.com/someone/seraph/main/pack.json";
+
+        var vm = new ImportViewModel(
+            PackBundle.Parse("""
+                {"formatVersion":1,
+                 "pack":{"id":"seraph","gameVersion":"1.22.7","mods":[{"modid":"glassview"}]}}
+                """),
+            address, _ => false, fetched: true);
+
+        var window = new ImportWindow { DataContext = vm };
+        window.Show();
+
+        Assert.True(vm.CanChooseFollow);
+        Assert.Equal(true, vm.Follow);
+        Assert.Equal(ImportIntent.Follow, vm.Intent);
+        Assert.Contains(PackUpdateCheck.PageUrl(address), AllText(window));
+    }
+
+    /// <summary>
     /// Built the way MainViewModel builds it for a file: the "source" it is handed is the
     /// document's own canonicalUrl, because there is nothing else to hand it. The harness
     /// above passes a filename instead, which is fine for the follow choice and wrong for

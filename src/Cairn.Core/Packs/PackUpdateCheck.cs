@@ -5,7 +5,15 @@ namespace Cairn.Core.Packs;
 /// </summary>
 public sealed record PackUpdateAvailable(int From, int To, PackBundle Bundle)
 {
-    public string Describe() => Lang.Get("packupdate-check-describe", To, From);
+    /// <summary>
+    /// Found by the document changing rather than its revision moving — a pack followed from
+    /// an address that issues no revisions, where there is no number to quote.
+    /// </summary>
+    public bool Changed { get; init; }
+
+    public string Describe() => Changed
+        ? Lang.Get("packupdate-check-changed")
+        : Lang.Get("packupdate-check-describe", To, From);
 }
 
 /// <summary>
@@ -22,11 +30,6 @@ public sealed record PackUpdateAvailable(int From, int To, PackBundle Bundle)
 public static class PackUpdateCheck
 {
     /// <summary>
-    /// Whether this pack is one that could have updates at all: somebody else's, still
-    /// followed, with an address to ask. Cheap and offline, so a caller can skip the
-    /// request entirely.
-    /// </summary>
-    /// <summary>
     /// How often one pack's author is asked. A published revision is not urgent — an
     /// author ships one a week at most — and the cost of having no interval was paid by
     /// somebody else's server: selecting a pack asked, so clicking between two followed
@@ -42,6 +45,11 @@ public static class PackUpdateCheck
         state?.LastChecked is not { } last
         || (now ?? DateTimeOffset.UtcNow) - last >= CheckInterval;
 
+    /// <summary>
+    /// Whether this pack is one that could have updates at all: somebody else's, still
+    /// followed, with an address to ask. Cheap and offline, so a caller can skip the
+    /// request entirely.
+    /// </summary>
     public static bool CanCheck(PackLink? link) =>
         link is { Role: PackRole.Follower, Following: true }
         && !string.IsNullOrWhiteSpace(link.Url)
@@ -56,25 +64,34 @@ public static class PackUpdateCheck
         PackLink? link, HttpClient http, CancellationToken ct = default)
     {
         var bundle = await FetchAsync(link, http, ct).ConfigureAwait(false);
-        if (bundle is null) return null;
+        return bundle is null ? null : Compare(link!, bundle);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="bundle"/> is news to a copy following <paramref name="link"/>:
+    /// a later revision, or — for a pack with none — a document that differs from the one
+    /// last taken. Both the background check and an explicit one ask it, so they cannot
+    /// disagree about whether a notice belongs on screen.
+    /// </summary>
+    public static PackUpdateAvailable? Compare(PackLink? link, PackBundle bundle)
+    {
+        if (link is null) return null;
 
         var latest = bundle.Revision ?? 0;
 
         // A revision that went backwards is a cache or a rollback rather than news.
-        return latest > link!.Revision
-            ? new PackUpdateAvailable(link.Revision, latest, bundle)
+        if (latest > link.Revision) return new PackUpdateAvailable(link.Revision, latest, bundle);
+
+        // No revision to go on, so the document itself: different from the one last taken
+        // is news. Compared by shape rather than bytes, so a host that reformats the file is
+        // not mistaken for an author who edited it.
+        return link.ContentFingerprint is { } taken
+               && bundle.Fingerprint is { } now
+               && !string.Equals(taken, now, StringComparison.OrdinalIgnoreCase)
+            ? new PackUpdateAvailable(link.Revision, latest, bundle) { Changed = true }
             : null;
     }
 
-    /// <summary>
-    /// The author's pack as it stands, whether or not it is newer than this copy.
-    ///
-    /// Split from <see cref="CheckAsync"/> because "is there an update" and "what does
-    /// their pack look like" are different questions, and only the first one cares about
-    /// the revision. Somebody who has edited a copy and wants it back is asking the second:
-    /// they are already on the latest revision, so a check would say no and leave them with
-    /// no way to reconcile a pack that has visibly diverged.
-    /// </summary>
     /// <summary>
     /// The document behind a pack's page.
     ///
@@ -112,6 +129,15 @@ public static class PackUpdateCheck
             : trimmed;
     }
 
+    /// <summary>
+    /// The author's pack as it stands, whether or not it is newer than this copy.
+    ///
+    /// Split from <see cref="CheckAsync"/> because "is there an update" and "what does
+    /// their pack look like" are different questions, and only the first one cares about
+    /// the revision. Somebody who has edited a copy and wants it back is asking the second:
+    /// they are already on the latest revision, so a check would say no and leave them with
+    /// no way to reconcile a pack that has visibly diverged.
+    /// </summary>
     public static async Task<PackBundle?> FetchAsync(
         PackLink? link, HttpClient http, CancellationToken ct = default)
     {
@@ -131,7 +157,9 @@ public static class PackUpdateCheck
             return null;
         }
 
-        // A document that lost its canonical URL is not this pack any more.
-        return bundle.IsPublished && bundle.Pack is not null ? bundle : null;
+        // A document that lost its canonical URL is not this pack any more — unless it never
+        // had one, which a link records by carrying a content fingerprint.
+        var acceptable = bundle.IsPublished || link.ContentFingerprint is not null;
+        return acceptable && bundle.Pack is not null ? bundle : null;
     }
 }
