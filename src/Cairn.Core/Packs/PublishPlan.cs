@@ -201,7 +201,8 @@ public sealed record PublishPlan(
     /// <summary>
     /// Whether the lock actually describes this manifest. A lock that names a different
     /// game version, or misses mods the manifest asks for, would publish a claim of
-    /// reproducibility that is not true.
+    /// reproducibility that is not true — and so does one that names the mod as something
+    /// else: see <see cref="Describes"/>.
     ///
     /// Public because it is also the question that decides whether publishing has to sync
     /// first, and both front-ends need to ask it *before* the plan is built rather than by
@@ -223,8 +224,7 @@ public sealed record PublishPlan(
                 $"The lockfile is for game {locked.GameVersion} but the pack targets "
                 + $"{manifest.GameVersion}. Sync it first.");
 
-        var lockedIds = locked.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var missing = manifest.Mods.Where(m => !lockedIds.Contains(m.ModId)).ToList();
+        var missing = manifest.Mods.Where(m => !Describes(locked, m)).ToList();
 
         if (missing.Count == 0) return (true, null);
 
@@ -246,7 +246,7 @@ public sealed record PublishPlan(
         // No sync was run, or one was and said nothing about these. Still not a claim about
         // which — a mod added moments ago and a mod nothing has reached leave the same trace.
         return (false,
-            $"{missing.Count} mod{(missing.Count == 1 ? " is" : "s are")} not installed "
+            $"{missing.Count} mod{(missing.Count == 1 ? " is" : "s are")} not installed as the pack asks "
             + $"({string.Join(", ", missing.Take(3).Select(m => m.ModId))}"
             + $"{(missing.Count > 3 ? ", …" : "")}). Sync the pack first.");
 
@@ -255,4 +255,35 @@ public sealed record PublishPlan(
                                  && string.Equals(s.ModId, modId, StringComparison.OrdinalIgnoreCase))
             ?.Detail;
     }
+
+    /// <summary>
+    /// Whether the lock has an entry that is this mod as the manifest asks for it: the same
+    /// id, the pinned version when there is a pin, and from the same place.
+    ///
+    /// Matching by id alone let a lock speak for a manifest it no longer described. Pin a
+    /// mod from 1.0 to 2.0 and publish before syncing, and coverage said yes, the sync that
+    /// would have settled it was skipped, and the document went out requiring 2.0 beside a
+    /// lock — and a preview — saying 1.0: a recipient resolved 2.0, not the bytes the author
+    /// had. The same for a mod moved between ModDB and a download link, whose entry is the
+    /// hash of a different file, and for a link pointed somewhere new.
+    /// </summary>
+    private static bool Describes(PackLock locked, PackMod mod)
+    {
+        var entry = locked.Mods.FirstOrDefault(
+            m => string.Equals(m.ModId, mod.ModId, StringComparison.OrdinalIgnoreCase));
+
+        if (entry is null) return false;
+
+        if (mod.Version is { } pin && !string.Equals(pin, entry.Version, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (entry.FromUrl != (mod.Url is not null)) return false;
+
+        // An entry that arrived with somebody else's pack has its address cleared, and the
+        // address it is fetched from is the manifest's — so only one that records an address
+        // can disagree with it.
+        return mod.Url is null || entry.Url.Length == 0
+               || string.Equals(entry.Url, mod.Url, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

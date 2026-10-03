@@ -26,6 +26,54 @@ public class PublishPlanTests
         Mods = [.. mods.Select(m => new LockedMod { ModId = m, Version = "1.0.0" })],
     };
 
+    /// <summary>
+    /// The review's reproduction: installed at 1.0, pinned to 2.0, published before syncing.
+    /// Matched by id alone, the lock covered the manifest, the sync that would have settled
+    /// it was skipped, and the document went out requiring 2.0 beside a lock saying 1.0.
+    /// </summary>
+    [Fact]
+    public void A_pin_the_lock_does_not_match_is_not_covered()
+    {
+        var pack = Pack(null, "glassview");
+        pack.Mods[0].Version = "2.0.0";
+
+        var (covers, problem) = PublishPlan.Coverage(pack, Lock("1.22.5", "glassview"));
+
+        Assert.False(covers);
+        Assert.Contains("Sync the pack first", problem);
+    }
+
+    [Fact]
+    public void A_pin_the_lock_matches_is_covered()
+    {
+        var pack = Pack(null, "glassview");
+        pack.Mods[0].Version = "1.0.0";
+
+        Assert.True(PublishPlan.Coverage(pack, Lock("1.22.5", "glassview")).Covers);
+    }
+
+    /// <summary>
+    /// The entry is the hash of a different file once a mod has moved between ModDB and a
+    /// link, or its link points somewhere new.
+    /// </summary>
+    [Fact]
+    public void A_mod_whose_source_changed_since_the_sync_is_not_covered()
+    {
+        var pack = Pack(null, "glassview");
+        pack.Mods[0].Url = "https://files.example/glassview.zip";
+
+        Assert.False(PublishPlan.Coverage(pack, Lock("1.22.5", "glassview")).Covers);
+
+        var linked = Lock("1.22.5", "glassview");
+        linked.Mods[0].FromUrl = true;
+        linked.Mods[0].Url = "https://files.example/old/glassview.zip";
+
+        Assert.False(PublishPlan.Coverage(pack, linked).Covers);
+
+        linked.Mods[0].Url = "https://files.example/glassview.zip";
+        Assert.True(PublishPlan.Coverage(pack, linked).Covers);
+    }
+
     [Fact]
     public async Task A_synced_pack_can_be_published()
     {

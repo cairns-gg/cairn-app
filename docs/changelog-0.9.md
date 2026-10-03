@@ -445,6 +445,11 @@ on running it.
 
 ## Smaller things
 
+- **Publishing right after changing a mod's version shares what you meant.** **0.9.9.** If
+  you set a mod to a different version and published before pressing Play, Cairn shared the
+  pack asking for the new version alongside a record of the old one, so the people who took
+  it did not get the files you had. Publishing now brings the pack up to date first whenever
+  a mod's version or source has changed since it was last installed. Nothing to do.
 - **Taking an author's update keeps the libraries they tested with.** **0.9.9.** Mods often
   need a library mod that the pack's list does not name, and a pack you follow records which
   version of it the author had. Taking any update — even one that only changed the pack's
