@@ -69,6 +69,55 @@ public class PackUpdateCheckTests
         // and appending again would ask for pack.json.json.
         Assert.Equal(url.TrimEnd('/'), PackUpdateCheck.DocumentUrl(url));
 
+    private static string Published(int revision) => $$"""
+        {"formatVersion":1,
+         "pack":{"id":"anego","gameVersion":"1.22.5","mods":[{"modid":"carryon"}]},
+         "publishedBy":"dizzyd","canonicalUrl":"https://cairns.gg/dizzyd/anego","revision":{{revision}}}
+        """;
+
+    private sealed class Serving(string text) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) =>
+            Task.FromResult(r.RequestUri!.ToString() == "https://cairns.gg/dizzyd/anego.json"
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(text) }
+                : new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+    }
+
+    /// <summary>
+    /// The whole job of the check for a pack followed from cairns.gg, through the request
+    /// the background check makes. Nothing held it until the revision comparison and the
+    /// content one were put side by side in Compare: removing it failed no test.
+    /// </summary>
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(1, false)]   // the one this copy has
+    [InlineData(0, false)]   // went backwards: a cache or a rollback, not news
+    public async Task A_newer_revision_is_news_and_no_other_is(int served, bool news)
+    {
+        var found = await PackUpdateCheck.CheckAsync(
+            Following(), new HttpClient(new Serving(Published(served))));
+
+        Assert.Equal(news, found is not null);
+        if (found is null) return;
+
+        Assert.False(found.Changed);
+        Assert.Equal((1, 2), (found.From, found.To));
+        Assert.Equal("revision 2 is available (you have 1)", found.Describe());
+    }
+
+    /// <summary>
+    /// A cairns.gg pack is never judged by content: its link carries no fingerprint, so a
+    /// document that differs at the same revision — a republish the server deduplicated, or
+    /// a mirror's reformatting — is not reported.
+    /// </summary>
+    [Fact]
+    public void A_published_pack_at_the_same_revision_is_not_news_whatever_its_content()
+    {
+        var bundle = PackBundle.Parse(Published(1).Replace("carryon", "heavyweight"));
+
+        Assert.Null(PackUpdateCheck.Compare(Following(), bundle));
+    }
+
     [Fact]
     public void A_pack_never_asked_about_is_due_immediately()
     {

@@ -4215,6 +4215,48 @@ public class MainWindowTests : IDisposable
     /// the save that happens later: asserting on the field would pass against a view model
     /// that never persisted anything.
     /// </summary>
+    /// <summary>
+    /// Check for updates on a pack followed from cairns.gg, with a newer revision up: the
+    /// notice is raised and says which revision, even when the update is then declined.
+    ///
+    /// Nothing held this before the explicit check and the background one were made to
+    /// share PackUpdateCheck.Compare — removing the notice entirely failed no test.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Checking_a_followed_pack_by_hand_raises_the_revision_notice()
+    {
+        WritePack("anego", "Anego", "1.22.5", null, ["carryon"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+        store.SaveLink("anego", new PackLink
+        {
+            Role = PackRole.Follower,
+            Following = true,
+            Url = "https://cairns.gg/dizzyd/anego",
+            Revision = 1,
+        });
+
+        // Checked a moment ago, so selecting the pack does not ask on its own and the notice
+        // can only have come from the button.
+        var state = store.LoadLocalState("anego");
+        state.RecordCheck(DateTimeOffset.UtcNow);
+        store.SaveLocalState("anego", state);
+
+        var http = new OfflineHandler();
+        http.ServeAlways("/dizzyd/anego.json", PublishedWithSettings("2500", "K"));
+
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        Assert.False(vm.Detail!.HasPackUpdate);
+
+        vm.Detail.ConfirmPackUpdate = _ => Task.FromResult(false);
+        await vm.Detail.ApplyPackUpdateCommand.ExecuteAsync(null);
+
+        Assert.True(vm.Detail.HasPackUpdate);
+        Assert.Equal("Revision 4 is available — you have 1.", vm.Detail.PackUpdateLine);
+        Assert.Equal(1, store.LoadLink("anego")!.Revision);
+    }
+
     [AvaloniaFact]
     public async Task An_update_is_not_undone_by_the_next_edit_to_the_pack()
     {
