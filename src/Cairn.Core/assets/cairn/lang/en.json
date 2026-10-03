@@ -827,6 +827,7 @@
   "sync-bad-filename": "refusing a mod filename that {0}: '{1}'",
   "sync-bad-url": "refusing a download that {0} — mods are code",
   "sync-url-changed": "the file at {0} is no longer the one the lock describes — refusing it; update {1} to take the new file",
+  "sync-checksum-refused": "{0} does not match the locked checksum — refusing it",
   "sync-url-not-a-mod": "the file at {0} is not a mod: {1}",
   "sync-url-modid-differs": "the zip declares modid '{0}', not the one the pack names",
   "sync-from-url": "{0} from {1}",

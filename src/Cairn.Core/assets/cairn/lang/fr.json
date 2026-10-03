@@ -829,6 +829,7 @@
 
   "sync-failed-quiet": "certains mods n'ont pas pu être installés — Jouer réessaiera",
   "sync-failed": "Certains mods n'ont pas pu être installés — voir le journal.",
+  "sync-checksum-refused": "{0} ne correspond pas à la somme de contrôle verrouillée — refusé",
   "sync-background-failed": "la synchronisation en arrière-plan a échoué : {0}",
   "sync-stopped": "la synchronisation s'est arrêtée : {0}",
   "sync-no-game-version": "aucune version du jeu",

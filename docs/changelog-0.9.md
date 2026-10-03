@@ -445,6 +445,13 @@ on running it.
 
 ## Smaller things
 
+- **A download that fails no longer costs you the mod you had.** **0.9.9.** If updating a
+  mod failed part-way — ModDB's download server having a bad moment, say — Cairn removed
+  the copy that was working, and the library it needed with it, and the next Play quietly
+  installed the update that had just failed. And when a mod's file no longer matched the
+  checksum the pack recorded, Cairn refused it once and then accepted it the next time.
+  Now the mod you had stays installed until its replacement actually arrives, and a
+  refused file stays refused. Nothing to do.
 - **Cairn keeps a log you can find after something goes wrong.** **0.9.9.** When Play
   refused to start it said only *"sync did not complete cleanly"* — over the top of the line
   that said which mod and why — and the Log tab, the one other place that said, is emptied

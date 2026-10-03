@@ -397,11 +397,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             // arrives from a remote API, and Path.Combine with "../../evil.zip" would
             // happily escape the pack. PackStore.PackDir guards ids for the same reason.
             if (ModFileName.Problem(release.FileName) is { } badName)
-            {
-                Record(new SyncStep(SyncAction.Failed, release.ModId,
-                    Lang.Get("sync-bad-filename", badName, release.FileName)));
-                return null;
-            }
+                return await FailKeepingPriorAsync(want, prior,
+                    Lang.Get("sync-bad-filename", badName, release.FileName)).ConfigureAwait(false);
 
             // And where it comes from, on every path rather than on one of them.
             //
@@ -416,11 +413,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             // from FromLock has passed this already, and paying for it twice is cheaper
             // than reasoning about which callers are covered.
             if (ModDbUrls.DownloadProblem(release.Url) is { } badUrl)
-            {
-                Record(new SyncStep(SyncAction.Failed, release.ModId, Explain(want,
-                    Lang.Get("sync-bad-url", badUrl))));
-                return null;
-            }
+                return await FailKeepingPriorAsync(want, prior,
+                    Lang.Get("sync-bad-url", badUrl)).ConfigureAwait(false);
 
             var safeName = release.FileName;
 
@@ -471,9 +465,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                     && !string.Equals(prior.Sha256, locked.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     File.Delete(target);
-                    Record(new SyncStep(SyncAction.Failed, release.ModId,
-                        $"{release.ModVersion} does not match the locked checksum — refusing it"));
-                    return null;
+                    return await FailKeepingPriorAsync(want, prior,
+                        Lang.Get("sync-checksum-refused", release.ModVersion)).ConfigureAwait(false);
                 }
 
                 newLock.Mods.Add(locked);
@@ -487,8 +480,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             }
             catch (Exception e) when (e is HttpRequestException or IOException)
             {
-                Record(new SyncStep(SyncAction.Failed, release.ModId, e.Message));
-                return null;
+                return await FailKeepingPriorAsync(want, prior, e.Message).ConfigureAwait(false);
             }
         }
 
@@ -506,11 +498,9 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             var url = want.Url!;
 
             if (ModUrl.FileNameFor(url, want.ModId) is not { } name)
-            {
-                Record(new SyncStep(SyncAction.Failed, want.ModId,
-                    Lang.Get("sync-bad-filename", ModFileName.Problem($"{want.ModId}.zip"), want.ModId)));
-                return null;
-            }
+                return await FailKeepingPriorAsync(want, prior,
+                    Lang.Get("sync-bad-filename", ModFileName.Problem($"{want.ModId}.zip"), want.ModId))
+                    .ConfigureAwait(false);
 
             var target = Path.Combine(modsDir, name);
 
@@ -544,70 +534,77 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 return target;
             }
 
+            // Beside the target rather than over it, until it has passed both checks below.
+            // An update downloads to the same name as the file it replaces, so landing it in
+            // place first meant a link now serving an error page deleted a working mod on
+            // the way to refusing the page. Removed in the finally whenever it is not
+            // accepted, which also covers a cancel.
+            var staged = target + StagedSuffix;
+
             try
             {
-                await DownloadAsync(url, target, ct).ConfigureAwait(false);
-                locked.Sha256 = await Sha256Async(target, ct).ConfigureAwait(false);
+                return await AcceptStagedAsync().ConfigureAwait(false);
             }
-            catch (Exception e) when (e is HttpRequestException or IOException)
+            finally
             {
-                Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, e.Message)));
-                return null;
+                if (File.Exists(staged)) File.Delete(staged);
             }
 
-            // The whole promise: the file at the address is the file the lock describes, or
-            // it is not installed. Named as what to do about it, because unlike a ModDB
-            // release that has been swapped underneath a version number, this is usually
-            // the author having rebuilt their own mod — and the way to take that is an update.
-            if (binds && !string.Equals(prior!.Sha256, locked.Sha256, StringComparison.OrdinalIgnoreCase))
+            async Task<string?> AcceptStagedAsync()
             {
-                File.Delete(target);
-                Record(new SyncStep(SyncAction.Failed, want.ModId,
-                    Lang.Get("sync-url-changed", ModUrl.Host(url), want.ModId)));
+                try
+                {
+                    await DownloadAsync(url, staged, ct).ConfigureAwait(false);
+                    locked.Sha256 = await Sha256Async(staged, ct).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is HttpRequestException or IOException)
+                {
+                    return await FailKeepingPriorAsync(want, prior, e.Message).ConfigureAwait(false);
+                }
 
-                // Carried into the new lock as it was, so the refusal holds. Dropped, the
-                // next sync would find no entry to bind to and take the changed file with
-                // no questions asked — a promise that lasted exactly one sync.
-                newLock.Mods.Add(prior);
-                return null;
+                // The whole promise: the file at the address is the file the lock describes, or
+                // it is not installed. Named as what to do about it, because unlike a ModDB
+                // release that has been swapped underneath a version number, this is usually
+                // the author having rebuilt their own mod — and the way to take that is an update.
+                if (binds && !string.Equals(prior!.Sha256, locked.Sha256, StringComparison.OrdinalIgnoreCase))
+                    return await FailKeepingPriorAsync(want, prior,
+                        Lang.Get("sync-url-changed", ModUrl.Host(url), want.ModId)).ConfigureAwait(false);
+
+                // What arrived has to be a mod, and has to be the one asked for. A ModDB
+                // download that will not open is warned about because ModDB has already said
+                // what it is; nothing has said anything about this file except the manifest,
+                // and the manifest only knows where it is.
+                var inspected = ModUrl.Inspect(staged, locked.Sha256);
+                if (!inspected.IsMod)
+                    return await FailKeepingPriorAsync(want, prior,
+                        Lang.Get("sync-url-not-a-mod", ModUrl.Host(url), inspected.Problem)).ConfigureAwait(false);
+
+                File.Move(staged, target, overwrite: true);
+
+                if (!string.Equals(inspected.ModId, want.ModId, StringComparison.OrdinalIgnoreCase))
+                    Record(new SyncStep(SyncAction.Warned, want.ModId,
+                        Lang.Get("sync-url-modid-differs", inspected.ModId)));
+
+                // As for a ModDB alias: the id the zip declares is the one a dependency would
+                // name, and registering it stops the same mod being fetched a second time.
+                seen.Add(inspected.ModId!);
+
+                locked.Version = inspected.Version?.Trim() ?? "";
+                locked.Side = inspected.Side;
+
+                if (ModSides.WrongSide(locked.Side, side))
+                    Record(new SyncStep(SyncAction.Warned, want.ModId,
+                        Lang.Get("sync-wrong-side", locked.Side, ModSides.Describe(side))));
+
+                newLock.Mods.Add(locked);
+
+                var action = prior is null ? SyncAction.Downloaded : SyncAction.Updated;
+                var detail = prior is null || prior.Version == locked.Version
+                    ? Lang.Get("sync-from-url", locked.Version, ModUrl.Host(url))
+                    : Lang.Get("sync-from-url", $"{prior.Version} -> {locked.Version}", ModUrl.Host(url));
+                Record(new SyncStep(action, want.ModId, detail));
+                return target;
             }
-
-            // What arrived has to be a mod, and has to be the one asked for. A ModDB
-            // download that will not open is warned about because ModDB has already said
-            // what it is; nothing has said anything about this file except the manifest,
-            // and the manifest only knows where it is.
-            var inspected = ModUrl.Inspect(target, locked.Sha256);
-            if (!inspected.IsMod)
-            {
-                File.Delete(target);
-                Record(new SyncStep(SyncAction.Failed, want.ModId,
-                    Lang.Get("sync-url-not-a-mod", ModUrl.Host(url), inspected.Problem)));
-                return null;
-            }
-
-            if (!string.Equals(inspected.ModId, want.ModId, StringComparison.OrdinalIgnoreCase))
-                Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    Lang.Get("sync-url-modid-differs", inspected.ModId)));
-
-            // As for a ModDB alias: the id the zip declares is the one a dependency would
-            // name, and registering it stops the same mod being fetched a second time.
-            seen.Add(inspected.ModId!);
-
-            locked.Version = inspected.Version?.Trim() ?? "";
-            locked.Side = inspected.Side;
-
-            if (ModSides.WrongSide(locked.Side, side))
-                Record(new SyncStep(SyncAction.Warned, want.ModId,
-                    Lang.Get("sync-wrong-side", locked.Side, ModSides.Describe(side))));
-
-            newLock.Mods.Add(locked);
-
-            var action = prior is null ? SyncAction.Downloaded : SyncAction.Updated;
-            var detail = prior is null || prior.Version == locked.Version
-                ? Lang.Get("sync-from-url", locked.Version, ModUrl.Host(url))
-                : Lang.Get("sync-from-url", $"{prior.Version} -> {locked.Version}", ModUrl.Host(url));
-            Record(new SyncStep(action, want.ModId, detail));
-            return target;
         }
 
         // A resolve that failed says nothing about the file already here. Dropping the
@@ -629,6 +626,55 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 return;
 
             newLock.Mods.Add(prior);
+        }
+
+        // An install that failed once there was an answer for it — a download that did not
+        // arrive, bytes that did not match the lock, a release ModDB described unusably.
+        // Failed, because what was asked for did not happen; but what was installed before
+        // stays installed until something replaces it.
+        //
+        // Every one of these used to drop the entry, which made each failure undo itself one
+        // sync later. A checksum refusal was forgotten, so the next sync took the changed
+        // bytes without a word — a promise that lasted exactly one sync. An update whose
+        // download failed handed the old zip to the sweep, so a 503 from the CDN removed a
+        // working mod, and the next ordinary sync installed the version that had failed.
+        //
+        // Not across a game version change, for KeepPrior's reason. The path comes back
+        // when the old file is still here with the locked bytes, so its dependencies are
+        // read and kept too: a library pulled in by the old version stays in the lock rather
+        // than being swept as nobody's.
+        async Task<string?> FailKeepingPriorAsync(PendingMod want, LockedMod? prior, string why)
+        {
+            Record(new SyncStep(SyncAction.Failed, want.ModId, Explain(want, why)));
+
+            if (prior is null
+                || !string.Equals(previous!.GameVersion, manifest.GameVersion, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            newLock.Mods.Add(prior);
+
+            if (prior.Sha256.Length > 0 && await FindByHashAsync(prior).ConfigureAwait(false) is { } name)
+            {
+                prior.FileName = name;
+                return Path.Combine(modsDir, name);
+            }
+
+            // No file to read the dependencies out of, so the lock's own record of them
+            // stands in: whatever the previous lock says this mod required is queued as
+            // before, and installed from the lock like anything else.
+            foreach (var dep in previous.Mods.Where(m => m.RequiredBy?.Contains(
+                         want.ModId, StringComparer.OrdinalIgnoreCase) == true))
+            {
+                if (!requiredBy.TryGetValue(dep.ModId, out var wanters))
+                    requiredBy[dep.ModId] = wanters = [];
+
+                if (!wanters.Contains(want.ModId, StringComparer.OrdinalIgnoreCase))
+                    wanters.Add(want.ModId);
+
+                if (seen.Add(dep.ModId)) queue.Enqueue(new PendingMod(dep.ModId, null, want.ModId));
+            }
+
+            return null;
         }
 
         // A resolve that failed, for a mod whose file is already here: installed, not failed.
@@ -683,7 +729,8 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
 
             foreach (var path in Directory.EnumerateFiles(modsDir))
             {
-                if (path.EndsWith(".partial", StringComparison.OrdinalIgnoreCase)) continue;
+                if (path.EndsWith(".partial", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(StagedSuffix, StringComparison.OrdinalIgnoreCase)) continue;
 
                 if (string.Equals(await HashOfAsync(path).ConfigureAwait(false), entry.Sha256,
                         StringComparison.OrdinalIgnoreCase))
@@ -965,6 +1012,9 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
             return null;
         }
     }
+
+    /// <summary>A download waiting to be accepted. See InstallFromUrlAsync.</summary>
+    private const string StagedSuffix = ".incoming";
 
     private Task DownloadAsync(string url, string target, CancellationToken ct) =>
         ModUrl.DownloadAsync(http, url, target, ct);
