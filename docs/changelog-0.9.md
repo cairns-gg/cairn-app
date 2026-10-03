@@ -445,6 +445,11 @@ on running it.
 
 ## Smaller things
 
+- **Windows and Linux are offered updates again.** **0.9.9.** The Windows and Linux
+  downloads were built without their version number, so Cairn on those systems believed
+  it was a development build and never told you a new release was out. macOS was not
+  affected. **If you are on Windows or Linux, download this release by hand once** from
+  the releases page; from then on Cairn offers each new one as it should.
 - **A pack you host yourself can be updated in place.** **0.9.9.** A pack imported from an
   address other than cairns.gg — an export you put on a website, or a raw file in a GitHub
   repository — arrived as a copy with no way back to where it came from, so trying a new

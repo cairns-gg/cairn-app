@@ -308,9 +308,12 @@ jobs:
         with:
           global-json-file: global.json
 
-      - run: ./build-release.sh win-x64 linux-x64
-
-      - name: Package
+      # Before the build, and handed to it. This used to be worked out only for the archive
+      # names, after the binaries were already built — so build-release.sh got no VERSION,
+      # stamped nothing, and every Windows and Linux release reported itself as "dev",
+      # which is the one version the update checker never offers anything to.
+      - name: Work out the version
+        id: version
         run: |
           # Same rule as the macOS job: a manual run has no version, and the branch name
           # is not one.
@@ -319,6 +322,34 @@ jobs:
             *)           version="0.0.0-$(git rev-parse --short HEAD)" ;;
           esac
 
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "version: $version"
+
+      - run: ./build-release.sh win-x64 linux-x64
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+
+      # Asked of what was built, so an unstamped build fails the release here rather than
+      # reaching people as one that never offers an update. The Linux server, because it is
+      # the one binary here this runner can execute, and it reads the same CairnVersion from
+      # the same Core every artifact in this job was built with. Not by searching the
+      # Windows .exe for the string: a single-file bundle compresses the assemblies inside
+      # it, and the search finds nothing even in a correctly stamped build.
+      - name: Check the version was stamped
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          said=$(artifacts/linux-x64/cairn-server version)
+          echo "$said"
+          case "$said" in
+            "cairn-server $VERSION"|"cairn-server $VERSION "*) ;;
+            *) echo "::error::built as '$said', expected version $VERSION"; exit 1 ;;
+          esac
+
+      - name: Package
+        env:
+          version: ${{ steps.version.outputs.value }}
+        run: |
           mkdir -p dist
 
           # The launcher only. cairn-cli is built above and deliberately left out: it is a
