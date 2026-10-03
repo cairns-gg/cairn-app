@@ -360,6 +360,15 @@ public partial class PreferencesViewModel : ViewModelBase
     [ObservableProperty] public partial string MoveAftermath { get; set; } = "";
 
     /// <summary>
+    /// Why the home cannot be moved now — a game running, a download, a pack being changed —
+    /// or null. Set by MainViewModel, which can see all of those; unset, nothing is asked.
+    /// </summary>
+    public Func<string?>? HomeMoveBlocker { get; init; }
+
+    /// <summary>What a move holds every pack through. See <see cref="PackWork.TryBeginHomeMove"/>.</summary>
+    public PackWork? Work { get; init; }
+
+    /// <summary>
     /// Moves everything Cairn keeps to a directory the user chooses.
     ///
     /// Every rule is <see cref="HomeMigration"/>'s — what can be refused, what gets copied,
@@ -371,7 +380,29 @@ public partial class PreferencesViewModel : ViewModelBase
     {
         if (PickFolder is null) return;
 
+        // Said before the folder is asked for, so nobody picks one only to be told no.
+        if (HomeMoveBlocker?.Invoke() is { } before)
+        {
+            MoveAftermath = before;
+            return;
+        }
+
         if (await PickFolder() is not { } chosen) return;
+
+        // Every pack, from here until the clean-up has finished: no Play, no sync, no update
+        // can start while the tree they write to is being copied and then deleted. Taken by
+        // the move rather than the window, and let go in this method's own unwinding, so
+        // closing Preferences part-way does not let anything in.
+        using var hold = Work?.TryBeginHomeMove();
+
+        // Asked again now that nothing new can start. A game already running holds no pack —
+        // it is past the part of Play that does — and it is the case that loses saves: it
+        // was launched with an absolute data path into this tree and goes on writing there.
+        if ((Work is not null && hold is null) || HomeMoveBlocker?.Invoke() is not null)
+        {
+            MoveAftermath = HomeMoveBlocker?.Invoke() ?? Lang.Get("prefs-move-blocked-busy");
+            return;
+        }
 
         var plan = await Task.Run(() => HomeMigration.Plan(chosen));
 

@@ -154,7 +154,26 @@ public partial class GamesViewModel : ViewModelBase
     [ObservableProperty] public partial bool CatalogLoaded { get; set; }
 
     public bool HasError => !string.IsNullOrEmpty(Error);
-    public bool NotBusy => !IsBusy;
+    public bool NotBusy => !IsBusy && !Moving;
+
+    /// <summary>
+    /// Asked by every command that writes under Cairn's home — an install, a removal, a
+    /// runtime — so none starts while the home is being moved out from under it. Set by
+    /// MainViewModel; unset, as in a test that builds this alone, nothing is moving.
+    /// </summary>
+    public Func<bool>? HomeMoving { get; set; }
+
+    private bool Moving => HomeMoving?.Invoke() == true;
+
+    /// <summary>A move of the home began or ended, so every command asks again.</summary>
+    public void RefreshHomeMove()
+    {
+        OnPropertyChanged(nameof(NotBusy));
+        InstallSelectedCommand.NotifyCanExecuteChanged();
+        InstallRuntimeCommand.NotifyCanExecuteChanged();
+        RequestRemoveCommand.NotifyCanExecuteChanged();
+        RefreshCatalogCommand.NotifyCanExecuteChanged();
+    }
     public string StoreRoot => _store.Root;
 
     partial void OnErrorChanged(string? value)
@@ -227,7 +246,7 @@ public partial class GamesViewModel : ViewModelBase
         }
     }
 
-    private bool CanInstallRuntime => !IsBusy && SelectedInstalled is { RuntimeMissing: true };
+    private bool CanInstallRuntime => NotBusy && SelectedInstalled is { RuntimeMissing: true };
 
     /// <summary>
     /// Preferences pointed Cairn at a different install, or at none. Refreshes here rather
@@ -366,7 +385,7 @@ public partial class GamesViewModel : ViewModelBase
         }
     }
 
-    private bool CanInstall => !IsBusy && SelectedAvailable is { CanInstall: true, IsInstalled: false };
+    private bool CanInstall => NotBusy && SelectedAvailable is { CanInstall: true, IsInstalled: false };
 
     /// <summary>
     /// Armed by Remove, so a version in use is not deleted on one click. Mirrors the pack
@@ -459,5 +478,5 @@ public partial class GamesViewModel : ViewModelBase
     }
 
     // An install Cairn merely found on the machine is not Cairn's to delete.
-    private bool CanRemove => !IsBusy && SelectedInstalled is { CanRemove: true };
+    private bool CanRemove => NotBusy && SelectedInstalled is { CanRemove: true };
 }

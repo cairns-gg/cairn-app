@@ -151,6 +151,8 @@ public partial class MainViewModel : ViewModelBase
                 .Select(p => p.Display)
                 .ToList());
 
+        Games.HomeMoving = () => Work.IsMovingHome;
+
         NewPackGameVersion = DefaultPackGameVersion();
 
         // Populate at construction as well as on open: the ComboBox is part of the window
@@ -693,10 +695,38 @@ public partial class MainViewModel : ViewModelBase
                 row.PlayingChanged(Runs.IsLaunching(row.Id), Runs.IsRunning(row.Id));
     }
 
-    private void OnWorkChanged(string packId)
+    private void OnWorkChanged(string? packId)
     {
-        if (Detail is { } detail && string.Equals(detail.Id, packId, StringComparison.OrdinalIgnoreCase))
+        // Null is every pack: a move of the home began or ended.
+        if (Detail is { } detail
+            && (packId is null || string.Equals(detail.Id, packId, StringComparison.OrdinalIgnoreCase)))
             detail.RefreshWorkState();
+
+        if (packId is null) Games.RefreshHomeMove();
+    }
+
+    /// <summary>
+    /// Why Cairn's home cannot be moved right now, or null when it can. Asked by Preferences
+    /// before it plans anything; <see cref="PackWork.TryBeginHomeMove"/> then holds every pack
+    /// for the rest of the move.
+    ///
+    /// A game running is the case that loses data. It was launched with an absolute data
+    /// path into the tree being moved, so it goes on saving there — into files the move then
+    /// deletes, while the copy at the new home keeps what the save looked like before.
+    /// </summary>
+    public string? HomeMoveBlocker()
+    {
+        if (Packs.FirstOrDefault(p => Runs.IsLaunching(p.Id)) is { } playing)
+            return Lang.Get("prefs-move-blocked-game", playing.Display);
+
+        if (Provisioning || Games.IsBusy)
+            return Lang.Get("prefs-move-blocked-download");
+
+        if (Work.AnyBusy is { } busy)
+            return Lang.Get("prefs-move-blocked-pack",
+                Packs.FirstOrDefault(p => string.Equals(p.Id, busy, StringComparison.OrdinalIgnoreCase))?.Display ?? busy);
+
+        return null;
     }
 
     partial void OnNewPackErrorChanged(string? value) => OnPropertyChanged(nameof(HasNewPackError));
@@ -1384,6 +1414,8 @@ public partial class MainViewModel : ViewModelBase
             // read before the move: rebuilt here rather than at the next restart, which is
             // how long a pack pane full of paths from the old disk used to last.
             HomeMoved = OnHomeMoved,
+            HomeMoveBlocker = HomeMoveBlocker,
+            Work = Work,
         };
 
         await OpenPreferences(preferences);

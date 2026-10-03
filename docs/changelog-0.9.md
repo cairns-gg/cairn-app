@@ -445,6 +445,12 @@ on running it.
 
 ## Smaller things
 
+- **Cairn will not move its folder out from under a running game.** **0.9.9.** Moving
+  Cairn's folder (Preferences → Move…) while Vintage Story was still open let the game go on
+  saving into the old folder — which the move then deleted, leaving the moved copy as it was
+  before you last saved. Cairn now refuses while a game is running, a game version is
+  downloading or a pack is being changed, and says which; and while the move runs, nothing
+  can start that would write into the folder being moved. Nothing to do.
 - **One change to a pack at a time, wherever you click.** **0.9.9.** Pressing **Update** on two
   mods in quick succession, or adding a mod and then clicking to another pack and back while
   it downloaded, could start a second round of installing over the first — and the two could

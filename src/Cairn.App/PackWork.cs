@@ -17,19 +17,57 @@ namespace Cairn.App;
 /// <see cref="IsBusy"/> from here. Used only on the UI thread, which is where every command
 /// that asks runs and where its awaits resume, so it needs no lock of its own.
 ///
-/// Also the answer to "is any pack being changed?", which a move of Cairn's whole home has to
-/// ask before it starts — see PreferencesViewModel.
+/// And the one exclusion that is wider than a pack: moving Cairn's whole home. A move copies
+/// every pack, repoints, and deletes the originals, so a sync writing into a pack while it
+/// runs writes into a tree about to be deleted — the change lost without a word. So a move
+/// begins only when no pack is held, and while it runs every pack counts as busy and no hold
+/// is granted. See <see cref="TryBeginHomeMove"/>.
 /// </summary>
 public sealed class PackWork
 {
     private readonly HashSet<string> _busy = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Raised with the pack whose state moved.</summary>
-    public event Action<string>? Changed;
+    private bool _movingHome;
 
-    public bool IsBusy(string packId) => _busy.Contains(packId);
+    /// <summary>Raised with the pack whose state moved, or null when every pack's did.</summary>
+    public event Action<string?>? Changed;
 
-    public bool AnyBusy => _busy.Count > 0;
+    public bool IsBusy(string packId) => _movingHome || _busy.Contains(packId);
+
+    /// <summary>A pack held by anything, for whoever wants to say which.</summary>
+    public string? AnyBusy => _busy.FirstOrDefault();
+
+    public bool IsMovingHome => _movingHome;
+
+    /// <summary>
+    /// Every pack at once, for a move of Cairn's home — or null while any pack is held, or a
+    /// move already is. Held from before the plan until the clean-up has finished, by the
+    /// move itself rather than by the window that started it, so closing Preferences part of
+    /// the way through does not let anything in.
+    /// </summary>
+    public IDisposable? TryBeginHomeMove()
+    {
+        if (_movingHome || _busy.Count > 0) return null;
+
+        _movingHome = true;
+        Changed?.Invoke(null);
+
+        return new HomeHold(this);
+    }
+
+    private sealed class HomeHold(PackWork owner) : IDisposable
+    {
+        private bool _released;
+
+        public void Dispose()
+        {
+            if (_released) return;
+            _released = true;
+
+            owner._movingHome = false;
+            owner.Changed?.Invoke(null);
+        }
+    }
 
     /// <summary>
     /// The pack, for as long as the returned hold is not disposed — or null when something
@@ -37,7 +75,7 @@ public sealed class PackWork
     /// </summary>
     public IDisposable? TryBegin(string packId)
     {
-        if (!_busy.Add(packId)) return null;
+        if (_movingHome || !_busy.Add(packId)) return null;
 
         Changed?.Invoke(packId);
         return new Hold(this, packId);

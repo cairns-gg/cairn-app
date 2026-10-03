@@ -244,6 +244,108 @@ public class HomeMoveTests : IDisposable
         return id;
     }
 
+    // ---- nothing else writes into the tree while it moves ----
+
+    private (MainViewModel Main, PreferencesViewModel Preferences, string Target) MoveReady()
+    {
+        APack();
+
+        var target = Path.Combine(Path.GetTempPath(), "cairn-move-to-" + Guid.NewGuid().ToString("n")[..8]);
+        Directory.CreateDirectory(target);
+
+        var main = new MainViewModel(new OfflineHandler());
+        PreferencesViewModel? preferences = null;
+        main.OpenPreferences = p => { preferences = p; return Task.CompletedTask; };
+        main.ShowPreferencesCommand.Execute(null);
+
+        preferences!.PickFolder = () => Task.FromResult<string?>(target);
+        return (main, preferences, target);
+    }
+
+    /// <summary>
+    /// The review's reproduction, at the launcher's end: a game was left running and the home
+    /// was moved under it. The game had been started with an absolute data path into the old
+    /// tree, went on saving there, and the move deleted it — the copy kept the save as it was
+    /// before. A game running now stops the move before a folder is even asked for.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_game_still_running_stops_the_move()
+    {
+        var (main, preferences, target) = MoveReady();
+        main.Runs.Begin("demo", "playing");
+
+        try
+        {
+            await preferences.MoveHomeCommand.ExecuteAsync(null);
+
+            Assert.Contains("still running", preferences.MoveAftermath);
+            Assert.Equal(_home, CairnPaths.Root);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(target));
+        }
+        finally
+        {
+            main.Runs.Abandon("demo");
+            try { Directory.Delete(target, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_pack_being_changed_stops_the_move()
+    {
+        var (main, preferences, target) = MoveReady();
+
+        try
+        {
+            using (main.Work.TryBegin("demo"))
+                await preferences.MoveHomeCommand.ExecuteAsync(null);
+
+            Assert.Contains("being changed", preferences.MoveAftermath);
+            Assert.Equal(_home, CairnPaths.Root);
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>
+    /// From the moment the move is decided until its clean-up has finished, nothing that
+    /// writes under the home can start: no pack can be taken — so no Play, sync or update —
+    /// and no game version installed. Looked at from inside the confirmation, which the move
+    /// asks after it has taken everything and before it copies a byte.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task While_the_home_moves_nothing_that_writes_into_it_can_start()
+    {
+        var (main, preferences, target) = MoveReady();
+
+        bool? packFree = null, gamesFree = null;
+        preferences.Confirm = _ =>
+        {
+            using var taken = main.Work.TryBegin("demo");
+            packFree = taken is not null;
+            gamesFree = main.Games.NotBusy;
+            return Task.FromResult(true);
+        };
+
+        try
+        {
+            await preferences.MoveHomeCommand.ExecuteAsync(null);
+
+            Assert.False(packFree);
+            Assert.False(gamesFree);
+
+            // And let go once it is done.
+            Assert.False(main.Work.IsMovingHome);
+            Assert.True(main.Games.NotBusy);
+            Assert.Equal(target, CairnPaths.Root);
+        }
+        finally
+        {
+            try { Directory.Delete(target, recursive: true); } catch (IOException) { }
+        }
+    }
+
     [AvaloniaFact]
     public async Task The_launcher_behind_the_dialog_moves_with_it()
     {
