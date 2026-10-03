@@ -42,6 +42,60 @@ public class ModConfigTests : IDisposable
     private IReadOnlyList<ModConfigChange> Apply(Dictionary<string, JsonObject>? declared) =>
         ModConfigFiles.Apply(_data, declared);
 
+    // ---- a write that does not land ----
+
+    /// <summary>
+    /// The review's reproduction. The record took the new value even when the file could not
+    /// be written, so the next launch found the file still holding the old one, read the gap
+    /// as the player's own edit, and Kept it — for ever, though nobody had touched anything.
+    /// </summary>
+    [Fact]
+    public void A_write_that_failed_is_tried_again_rather_than_mistaken_for_an_edit()
+    {
+        if (OperatingSystem.IsWindows()) return;   // file modes: see OwnerOnlyTests
+
+        WriteConfig("x.json", """{ "v": 0 }""");
+        var declared = Declare("x.json", """{ "v": 1 }""");
+
+        var dir = Path.GetDirectoryName(Config("x.json"))!;
+        File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        IReadOnlyList<ModConfigChange> first;
+        try
+        {
+            // Root writes through a read-only directory, which would make this prove nothing.
+            if (CanWriteIn(dir)) return;
+
+            first = Apply(declared);
+        }
+        finally
+        {
+            File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        // Not reported as set, because it was not.
+        Assert.DoesNotContain(first, c => c.Outcome == ModConfigOutcome.Applied);
+        Assert.Contains(first, c => c.Outcome == ModConfigOutcome.Refused);
+
+        var second = Apply(declared);
+
+        Assert.Equal(ModConfigOutcome.Applied, Assert.Single(second).Outcome);
+        Assert.Equal(1, ReadConfig("x.json")["v"]!.GetValue<int>());
+    }
+
+    private static bool CanWriteIn(string dir)
+    {
+        try
+        {
+            var probe = Path.Combine(dir, ".probe");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (IOException) { return false; }
+    }
+
     // ---- the file the mod has not written yet ----
 
     /// <summary>

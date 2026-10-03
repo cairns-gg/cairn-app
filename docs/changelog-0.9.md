@@ -445,6 +445,11 @@ on running it.
 
 ## Smaller things
 
+- **A mod setting Cairn could not write is tried again.** **0.9.9.** If a pack's setting
+  could not be written into a mod's config file — the file read-only, say — the launch log
+  still said it had been set, and every launch after that treated the old value as one you
+  had chosen and left it alone for good. Now the log says it could not be written, and the
+  next launch tries again. Nothing to do.
 - **A failed Optimum build no longer takes Cairn down with it.** **0.9.9.** When building
   Optimum stopped with an error, the last few lines of its log could arrive after the log
   file had been closed, and Cairn quit on the spot instead of showing you what went wrong.

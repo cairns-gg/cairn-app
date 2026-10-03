@@ -247,8 +247,23 @@ public static class ModConfigFiles
                 var written = yaml ? ModConfigYaml.Apply(text!, Applied(changes, from)) : Text(root);
 
                 if (!Save(full, written))
+                {
+                    // None of it landed, so none of it is reported as having landed, and
+                    // the record stays as it was. Recording the new patch here was what made
+                    // the failure permanent: the next launch found the file still holding
+                    // the old value, read the difference from the record as the player's
+                    // own edit, and Kept it on every launch after.
+                    for (var i = changes.Count - 1; i >= from; i--)
+                        if (changes[i].Outcome == ModConfigOutcome.Applied) changes.RemoveAt(i);
+
                     changes.Add(new ModConfigChange(file, "", ModConfigOutcome.Refused,
                         new Message("modconfig-why-unwritable")));
+
+                    if (last is not null) next[file] = last;
+                    else record.Remove(file);
+
+                    continue;
+                }
             }
 
             next[file] = patch.DeepClone().AsObject();
