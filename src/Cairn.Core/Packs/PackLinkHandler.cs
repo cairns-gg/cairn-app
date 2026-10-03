@@ -54,27 +54,42 @@ public static class PackLinkHandler
     /// </summary>
     public static void Register()
     {
+        if (Environment.GetEnvironmentVariable(OptOutVariable) is { Length: > 0 }) return;
+
+        // Environment.ProcessPath is the apphost that was actually launched, which is what
+        // has to be recorded — Assembly.Location is the managed dll and is empty in a
+        // single-file build.
+        if (Environment.ProcessPath is not { Length: > 0 } executable) return;
+
+        RegisterFor(executable);
+    }
+
+    /// <summary>
+    /// Registers <paramref name="executable"/> as the handler, and says whether anything had
+    /// to be written. <see cref="Register"/> is this for the running build, behind the
+    /// opt-out; taken apart so a test can register a path of its own and watch the second
+    /// call write nothing — which is what keeps every start after the first cheap.
+    ///
+    /// Never throws, and on macOS does nothing at all.
+    /// </summary>
+    public static bool RegisterFor(string executable)
+    {
         try
         {
-            if (Environment.GetEnvironmentVariable(OptOutVariable) is { Length: > 0 }) return;
-
-            // Environment.ProcessPath is the apphost that was actually launched, which is
-            // what has to be recorded — Assembly.Location is the managed dll and is empty
-            // in a single-file build.
-            if (Environment.ProcessPath is not { Length: > 0 } executable) return;
-
-            if (OperatingSystem.IsLinux()) RegisterOnLinux(executable);
-            else if (OperatingSystem.IsWindows()) RegisterOnWindows(executable);
+            if (OperatingSystem.IsLinux()) return RegisterOnLinux(executable);
+            if (OperatingSystem.IsWindows()) return RegisterOnWindows(executable);
 
             // macOS is deliberately absent: build-macos-app.sh writes CFBundleURLTypes and
             // the .cairn document type into the bundle, and a second registration from in
             // here could only disagree with it.
+            return false;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
                                       or System.ComponentModel.Win32Exception)
         {
             // See the class summary: links not working is a disappointment, and a launcher
             // that will not start is a broken download.
+            return false;
         }
     }
 
@@ -159,17 +174,28 @@ public static class PackLinkHandler
         return true;
     }
 
-    private static void RegisterOnLinux(string executable)
+    /// <summary>
+    /// Where a user's desktop data lives: <c>XDG_DATA_HOME</c> when it is set to an absolute
+    /// path, as the base-directory spec says it must be to count, and <c>~/.local/share</c>
+    /// otherwise. Hard-coding the second wrote into a directory nothing read on a desktop
+    /// that had moved it.
+    /// </summary>
+    public static string DataHome() =>
+        Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } set && Path.IsPathRooted(set)
+            ? set
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+
+    private static bool RegisterOnLinux(string executable)
     {
-        var share = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        var share = DataHome();
         var applications = Path.Combine(share, "applications");
         var mime = Path.Combine(share, "mime");
 
         // The type first, so the entry that claims it below is claiming something known.
-        if (WriteMimeDefinition(mime)) Run("update-mime-database", mime);
+        var typed = WriteMimeDefinition(mime);
+        if (typed) Run("update-mime-database", mime);
 
-        if (!WriteDesktopEntry(applications, executable)) return;
+        if (!WriteDesktopEntry(applications, executable)) return typed;
 
         // The database is what desktop environments actually consult; the file alone is
         // inert until this has run.
@@ -180,6 +206,7 @@ public static class PackLinkHandler
         // and being the only handler is not the same as being the chosen one.
         Run("xdg-mime", "default", DesktopFileName, MimeType);
         Run("xdg-mime", "default", DesktopFileName, PackFile.MimeType);
+        return true;
     }
 
     // ---- Windows ----
@@ -224,13 +251,13 @@ public static class PackLinkHandler
         ];
     }
 
-    private static void RegisterOnWindows(string executable)
+    private static bool RegisterOnWindows(string executable)
     {
         var command = OpenCommand(executable);
 
         // Both, because a build from before the file type existed has the scheme already
         // and nothing else.
-        if (CurrentCommand(Key) == command && CurrentCommand(FileKey) == command) return;
+        if (CurrentCommand(Key) == command && CurrentCommand(FileKey) == command) return false;
 
         var wrote = false;
         foreach (var args in WindowsRegistration(executable)) wrote |= RegRead(args).Exit == 0;
@@ -241,6 +268,7 @@ public static class PackLinkHandler
         // this method returns early on every start after the first, so it would never be
         // asked again. Microsoft's own rule for association changes is to say so.
         if (wrote && OperatingSystem.IsWindows()) AssociationsChanged();
+        return wrote;
     }
 
     /// <summary>SHCNE_ASSOCCHANGED, with no item: every association, re-read.</summary>
