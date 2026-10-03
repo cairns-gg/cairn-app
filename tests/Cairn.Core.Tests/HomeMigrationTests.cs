@@ -187,6 +187,38 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
+    public void A_cancel_after_the_repoint_is_a_finished_move_with_its_clean_up_stopped()
+    {
+        // Ctrl-C landing just after the commit point. It used to escape as a cancelled move,
+        // and the CLI then said nothing had been repointed and to delete the part-copy at
+        // the destination — which was by then the live root.
+        using var cts = new CancellationTokenSource();
+
+        var result = HomeMigration.Move(PlanTo(To), repoint: to =>
+        {
+            _repointedTo = to;
+            cts.Cancel();
+        }, ct: cts.Token);
+
+        Assert.Equal(To, _repointedTo);
+        Assert.Equal(Lang.Get("move-cleanup-cancelled"), result.RemovalProblem);
+        Assert.True(File.Exists(Path.Combine(To, "packs", "demo", "pack.json")));
+    }
+
+    [Fact]
+    public void A_cancel_before_the_repoint_is_still_a_cancelled_move()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            HomeMigration.Move(PlanTo(To), ct: cts.Token, repoint: to => _repointedTo = to));
+
+        Assert.Null(_repointedTo);
+        Assert.True(File.Exists(Path.Combine(From, "settings.json")));
+    }
+
+    [Fact]
     public void A_log_still_being_written_does_not_fail_the_move()
     {
         var log = Path.Combine(From, "logs", "cairn.log");

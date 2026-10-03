@@ -887,6 +887,7 @@
   "move-already-here": "{0} est déjà là où Cairn garde ses fichiers",
   "move-holds-live": "{0} contient {1}, là où Cairn garde maintenant ses fichiers",
   "move-holds-pointer": "{0} contient {1}, le fichier qui indique à Cairn où sont ses fichiers",
+  "move-cleanup-cancelled": "sa suppression a été annulée en cours de route ; le déplacement lui-même est terminé",
   "move-missing": "{0} n'est pas arrivé ; rien n'a été repointé",
   "move-missing-link": "{0} n'est pas arrivé sous forme de lien ; rien n'a été repointé",
   "move-wrong-size": "{0} fait {1} octets au lieu de {2} ; rien n'a été repointé",

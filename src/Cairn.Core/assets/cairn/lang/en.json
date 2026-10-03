@@ -690,6 +690,7 @@
   "move-already-here": "{0} is where Cairn is keeping its files now",
   "move-holds-live": "{0} holds {1}, which is where Cairn is keeping its files now",
   "move-holds-pointer": "{0} holds {1}, the file that tells Cairn where its files are",
+  "move-cleanup-cancelled": "removing it was cancelled part-way; the move itself is complete",
   "move-missing": "{0} did not arrive; nothing has been repointed",
   "move-missing-link": "{0} did not arrive as a link; nothing has been repointed",
   "move-wrong-size": "{0} is {1} bytes and should be {2}; nothing has been repointed",

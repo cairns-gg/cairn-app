@@ -32,9 +32,8 @@ public sealed record MoveProgress(int Files, int FilesTotal, long Bytes, long By
 /// <param name="OldRoot">Where it came from, now removed unless <paramref name="RemovalProblem"/> says otherwise.</param>
 /// <param name="Freed">Bytes the old copy gave back.</param>
 /// <param name="RemovalProblem">
-/// Why the old copy is still there, or null. Not a failure of the move: by the time this can
-/// happen everything has arrived, been checked and been repointed, so the right answer is to
-/// say the space was not reclaimed rather than to pretend the move did not happen.
+/// Why the old copy is still there, wholly or in part, or null. Not a failure of the move:
+/// it can only happen after the commit point, so it says the space was not reclaimed.
 /// </param>
 /// <param name="KeepInOldRoot">
 /// A file inside the old root that must survive it being cleared out, or null.
@@ -58,15 +57,12 @@ public sealed class MoveFailed(string message) : Exception(message);
 /// boundary, where <c>Directory.Move</c> fails — <c>OptimumProvisioner</c> already hit that
 /// and says so.
 ///
-/// The order is the safety property. The pointer moves second to last, so a failure at any
-/// earlier step leaves the original root live and untouched and there is no window in which
-/// Cairn is pointed at a tree still being written. The original goes only after that, when
-/// it is no longer the live one and every file has been checked.
-///
-/// This did stop after the repoint, leaving the old copy for somebody to deal with. It was
-/// the wrong shape: whoever asks for this is out of disk space, and answering with two
-/// copies and a note about where the second one is has not moved anything. One decision,
-/// taken once, does the whole of it.
+/// The order is the safety property. The repoint is the commit point: a failure or a cancel
+/// before it leaves the original root live and untouched, and there is no window in which
+/// Cairn is pointed at a tree still being written. After it the move has happened, whatever
+/// follows. The original is removed last, once it is no longer live and every file has been
+/// checked — removed rather than left, because whoever asks for this is out of disk space,
+/// and two copies with a note about the second has not moved anything.
 ///
 /// What "checked" means is worth being exact about, since the delete rests on it: every file
 /// is confirmed present at its full length. Not hashed — the mods carry SHA-256 in the
@@ -226,20 +222,12 @@ public static class HomeMigration
 
         var rewritten = RewriteInstallDirectories(plan.From, plan.To);
 
-        // Last, and only now. Everything above can fail without the old root ceasing to be
-        // the live one.
+        // The commit point. Everything above can fail, or be cancelled, and leave the old
+        // root live and untouched; from here on the new one is live, and nothing that
+        // happens afterwards may be reported as the move not having happened.
         (repoint ?? CairnHome.SetPointer)(plan.To);
 
-        // Only when moving away from the default, which is the ordinary case and the one
-        // where clearing out the old directory would take the pointer with it.
-        var keep = Contains(plan.From, CairnHome.PointerPath) ? CairnHome.PointerPath : null;
-
-        // And then the original goes, which is what makes this a move. Somebody doing this
-        // is out of disk space; stopping here would leave them with two of everything and
-        // less room than they started with, having agreed to a move.
-        //
-        // After the repoint, never before: until that line above, the old root is the live
-        // one. Everything here has already arrived and been checked file by file.
+        var keep = PointerToKeep(plan.From);
         var freed = 0L;
         string? problem = null;
 
@@ -249,39 +237,33 @@ public static class HomeMigration
         }
         catch (Exception e) when (e is MoveFailed or IOException or UnauthorizedAccessException)
         {
-            // The move happened. Reporting this as a failure would send somebody looking for
-            // data that is exactly where it should be — what is wrong is that the space was
-            // not given back, which is a different sentence.
             problem = e.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopping is still honoured, but as a clean-up stopped part-way: answered as a
+            // cancelled move, the caller told somebody to delete the destination — the live
+            // root, by then — as a part-copy.
+            problem = Lang.Get("move-cleanup-cancelled");
         }
 
         return new MoveResult(files, links, bytes, rewritten, plan.From, keep, freed, problem);
     }
 
     /// <summary>
-    /// Removes what was left behind, once the copy has been proven.
+    /// Removes the old root once it is no longer the live one — the last step of a move, and
+    /// <c>cairn-cli home discard</c> for one whose last step did not finish.
     ///
-    /// The other half of a move. Copying and repointing is the safe part and it is not the
-    /// whole job: somebody moves 40 GB off a disk because the disk is full, and stopping
-    /// after the copy leaves them with two copies and less room than they started with.
-    ///
-    /// Everything except <paramref name="keep"/>, which is the pointer file when the old
-    /// root was the default — deleting that would send Cairn back to a default root that is
-    /// now empty, undoing the move by way of tidying up. Kept, so the directory survives
-    /// holding one line of text.
+    /// Everything except <paramref name="keep"/>, the pointer when the old root was the
+    /// default: deleting it would send Cairn back to a default root that is now empty.
+    /// Refuses anything <see cref="DiscardProblem(string)"/> objects to.
     /// </summary>
     /// <returns>Bytes removed.</returns>
     public static long DeleteOldRoot(string oldRoot, string? keep, CancellationToken ct = default)
     {
-        // First, and unconditionally. This is called with a path that is supposed to be no
-        // longer the live root, and being wrong about that deletes everything Cairn has —
-        // so the refusal must not depend on anything else being true first.
-        //
-        // It used to sit behind the existence check below, which made it conditional on the
-        // live root happening to exist. That is nearly always the case and was never the
-        // case on a CI runner, where nobody has run Cairn: the guard silently did not apply,
-        // and the test proving it applied passed only because the developer's own ~/.cairn
-        // was there.
+        // First, and unconditionally — ahead of the existence check, where it once sat and
+        // so silently did not apply on a machine with no live root yet, which is every CI
+        // runner.
         if (DiscardProblem(oldRoot, CairnPaths.Root, CairnHome.PointerPath) is { } problem)
             throw new MoveFailed(problem);
 

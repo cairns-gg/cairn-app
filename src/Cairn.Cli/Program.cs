@@ -325,6 +325,8 @@ internal static class Program
                 {
                     result = HomeMigration.Move(plan, progress, cts.Token);
                 }
+                // Only ever before the repoint: a cancel after it comes back as a finished
+                // move whose RemovalProblem says the clean-up stopped, handled below.
                 catch (OperationCanceledException)
                 {
                     Console.WriteLine();
