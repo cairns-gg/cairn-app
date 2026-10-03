@@ -1164,17 +1164,55 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>
     /// A .cairn file the operating system handed over — double-clicked, or opened from a
-    /// download (cairns-gg/cairn-app#2). Put in the import pane with its path filled in,
-    /// rather than imported: opening a file is not agreeing to add a pack, and somebody who
-    /// double-clicked the wrong one should be able to read what it is and close the pane.
-    /// Import then reads the file as it reads any path typed there.
+    /// download (cairns-gg/cairn-app#2). Shown, not imported: opening a file is not agreeing
+    /// to add a pack, and somebody who double-clicked the wrong one should be able to read
+    /// what it is and say no.
+    ///
+    /// Shown as the pack — its name, game version and mods, in the dialog a link gets — and
+    /// not as the import pane with the path in it, which was the first version of this: a
+    /// box holding a filename tells nobody what they are about to add. A file that cannot be
+    /// read lands in the pane with the reason, where it can be looked at and retried.
     /// </summary>
-    public void OfferPackFile(string path)
+    public async Task OfferPackFileAsync(string path)
     {
-        OpenPackForm(PackForm.Import);
-        ImportAsId = "";
-        ImportError = null;
-        ImportText = path;
+        PackBundle bundle;
+        try
+        {
+            bundle = PackBundle.Parse(await File.ReadAllTextAsync(path));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            ShowImportError(e.Message, path);
+            return;
+        }
+
+        // With no window to ask in — a test, mostly — the pane, with the path to import.
+        if (ConfirmImport is null)
+        {
+            OpenPackForm(PackForm.Import);
+            ImportAsId = "";
+            ImportError = null;
+            ImportText = path;
+            return;
+        }
+
+        // A published document's own address, as an import from a typed path shows it; a
+        // file nobody published, by its name.
+        var offer = new ImportViewModel(
+            bundle, bundle.CanonicalUrl ?? path, id => _store.Exists(id), fetched: false);
+
+        if (!await ConfirmImport(offer)) return;
+
+        try
+        {
+            Added(_store.Import(
+                bundle, PackId.FromOrFallback(offer.AsId), sourceUrl: null, intent: offer.Intent));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+                                      or InvalidDataException or InvalidOperationException)
+        {
+            ShowImportError(e.Message, path);
+        }
     }
 
     /// <summary>

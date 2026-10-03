@@ -451,6 +451,7 @@
   "import-by": "de {0} · ",
   "import-from": "{0}depuis {1}",
   "import-file-says": "le fichier dit : {0}depuis {1}",
+  "import-from-file": "{0}depuis le fichier {1}",
   "import-has-lock": "Installe les versions exactes que l'auteur a testées, vérifiées avec ses sommes de contrôle.",
   "import-no-lock": "Ce pack ne contient pas de fichier de verrouillage : la synchronisation résoudra donc les publications compatibles les plus récentes.",
   "import-follow-fetched": "Rester au pas de {0}, d'où ceci provient.",

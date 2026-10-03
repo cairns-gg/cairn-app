@@ -1895,12 +1895,7 @@ public class MainWindowTests : IDisposable
         Assert.Equal(["anego", "old-pack", "vanilla-qol"], Cairn.Core.CairnSettings.Load().PackOrder!);
     }
 
-    /// <summary>
-    /// A .cairn file opened from a file manager (cairns-gg/cairn-app#2). It lands in the import
-    /// pane with its path filled in, and is not a pack until somebody presses Import.
-    /// </summary>
-    [AvaloniaFact]
-    public async Task Opening_a_pack_file_offers_it_and_imports_nothing_until_asked()
+    private string SentPack()
     {
         var path = Path.Combine(_home, "sent-to-me.cairn");
         File.WriteAllText(path, Cairn.Core.Packs.PackBundle.Serialize(new PackManifest
@@ -1908,17 +1903,57 @@ public class MainWindowTests : IDisposable
             Id = "sent-to-me", Name = "Sent To Me", GameVersion = "1.22.5",
             Mods = [new PackMod { ModId = "glassview" }],
         }));
+        return path;
+    }
 
+    /// <summary>
+    /// A .cairn file opened from a file manager (cairns-gg/cairn-app#2) is shown as the pack it
+    /// holds — name, game version, mods — in the dialog a link gets, and is not a pack until
+    /// somebody says yes. The first version put the path in the import pane, which told
+    /// nobody what they were about to add.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Opening_a_pack_file_shows_the_pack_and_adds_it_only_when_asked()
+    {
+        var path = SentPack();
         var (_, vm) = Show();
-        vm.OfferPackFile(path);
 
-        Assert.True(vm.ShowImport);
-        Assert.Equal(path, vm.ImportText);
+        ImportViewModel? shown = null;
+        vm.ConfirmImport = offer => { shown = offer; return Task.FromResult(false); };
+
+        await vm.OfferPackFileAsync(path);
+
+        Assert.NotNull(shown);
+        Assert.Equal("Sent To Me", shown.PackName);
+        Assert.Equal("1.22.5", shown.GameVersion);
+        Assert.Equal(["glassview"], shown.Mods.Select(m => m.ModId));
+        Assert.Equal("from the file sent-to-me.cairn", shown.Provenance);
+
+        // Said no: nothing added, and no pane left open behind the dialog.
         Assert.DoesNotContain(vm.Packs, p => p.Id == "sent-to-me");
+        Assert.False(vm.ShowImport);
 
-        await vm.ImportPackCommand.ExecuteAsync(null);
+        vm.ConfirmImport = _ => Task.FromResult(true);
+        await vm.OfferPackFileAsync(path);
 
         Assert.Contains(vm.Packs, p => p.Id == "sent-to-me");
+        Assert.Equal("sent-to-me", vm.SelectedPack?.Id);
+    }
+
+    [AvaloniaFact]
+    public async Task A_pack_file_that_cannot_be_read_says_why_in_the_import_pane()
+    {
+        var path = Path.Combine(_home, "broken.cairn");
+        File.WriteAllText(path, "not a pack at all");
+
+        var (_, vm) = Show();
+        vm.ConfirmImport = _ => throw new InvalidOperationException("nothing to confirm");
+
+        await vm.OfferPackFileAsync(path);
+
+        Assert.True(vm.ShowImport);
+        Assert.NotNull(vm.ImportError);
+        Assert.Equal(path, vm.ImportText);
     }
 
     [AvaloniaFact]

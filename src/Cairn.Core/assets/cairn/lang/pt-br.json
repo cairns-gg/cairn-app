@@ -323,6 +323,7 @@
   "import-by": "de {0} · ",
   "import-from": "{0}de {1}",
   "import-file-says": "o arquivo diz: {0}de {1}",
+  "import-from-file": "{0}do arquivo {1}",
   "import-has-lock": "Instala as versões exatas que o autor testou, conferidas com as somas de verificação dele.",
   "import-no-lock": "Este pacote não traz lockfile, então a sincronização vai resolver as versões compatíveis mais novas.",
   "import-follow-fetched": "Acompanhar {0}, de onde isto veio.",

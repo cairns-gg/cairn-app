@@ -63,11 +63,13 @@ public static class PackLinks
     /// same reason <see cref="Follow"/> does. See <see cref="MainViewModel.OfferPackFile"/>.
     /// </summary>
     public static void OpenFile(Application app, MainViewModel model, string path) =>
-        Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(async () =>
         {
             Trace($"opened {path}");
+
+            // Before the dialog, which is modal — see Follow.
             Raise(app);
-            model.OfferPackFile(path);
+            await model.OfferPackFileAsync(path);
         });
 
     private static void Raise(Application app)

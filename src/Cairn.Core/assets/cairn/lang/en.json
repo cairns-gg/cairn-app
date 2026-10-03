@@ -296,6 +296,7 @@
   "import-by": "by {0} · ",
   "import-from": "{0}from {1}",
   "import-file-says": "the file says: {0}from {1}",
+  "import-from-file": "{0}from the file {1}",
   "import-summary-one": "{0} mod · game {1}",
   "import-summary-other": "{0} mods · game {1}",
   "import-has-lock": "Installs the exact versions the author tested, checked against their checksums.",

@@ -446,8 +446,8 @@ on running it.
 ## Smaller things
 
 - **Double-click a `.cairn` file to open it in Cairn.** **0.9.10.** A pack file you were
-  sent now opens Cairn's import screen with the file filled in; press **Import** to add it,
-  or close the screen if it was not what you meant. On Windows and Linux, Cairn tells your
+  sent now opens in Cairn, which shows you what it is — its name, game version and mods —
+  and adds it only if you say so. On Windows and Linux, Cairn tells your
   system about `.cairn` files the first time you start this version; on macOS the app
   carries that itself. Nothing to do.
 - **Pack files end in `.cairn`.** **0.9.10.** An exported pack is now saved as

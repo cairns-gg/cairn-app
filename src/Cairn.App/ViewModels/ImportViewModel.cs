@@ -162,9 +162,11 @@ public sealed partial class ImportViewModel : ViewModelBase
         {
             var by = PublishedBy is { Length: > 0 } who ? Lang.Get("import-by", who) : "";
 
-            return Fetched
-                ? Lang.Get("import-from", by, Source)
-                : Lang.Get("import-file-says", by, Source);
+            // A file nobody published makes no claim about where it is from, so there is no
+            // claim to report — only the file it was read out of.
+            if (Fetched) return Lang.Get("import-from", by, Source);
+            if (!Bundle.IsPublished) return Lang.Get("import-from-file", by, Path.GetFileName(Source));
+            return Lang.Get("import-file-says", by, Source);
         }
     }
 
