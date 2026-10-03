@@ -147,14 +147,9 @@ public sealed class OptimumProvisioner
 
         // Every line goes to the file as well as the caller, so a failure is still
         // explainable after the window is gone.
-        using var file = new StreamWriter(LogPath, append: true) { AutoFlush = true };
-        var both = new Progress<string>(line =>
-        {
-            lock (file) file.WriteLine(line);
-            log?.Report(line);
-        });
+        using var both = new BuildLog(LogPath, log);
 
-        lock (file) file.WriteLine($"--- build started for {source.GameVersion} ---");
+        both.Note($"--- build started for {source.GameVersion} ---");
 
         var sdk = await EnsureSdkAsync(progress, ct).ConfigureAwait(false);
 
@@ -187,6 +182,48 @@ public sealed class OptimumProvisioner
 
         progress?.Report(new OptimumStep("ready", Lang.Get("optimum-installed", source.Version), 1));
         return install;
+    }
+
+    /// <summary>
+    /// The build log: each line written to the file as it is reported, then handed to the
+    /// caller.
+    ///
+    /// Synchronous, where it was a <see cref="Progress{T}"/>. That one posts its callback to
+    /// whatever context created it — the UI thread, for a build started from the window —
+    /// and so ran it later, sometimes after BuildAsync had returned or thrown and disposed
+    /// the writer the callback captured. The late lines then threw ObjectDisposedException
+    /// on the UI thread, outside anything awaiting the build. Written here, a line is in the
+    /// file before Report returns; the caller's own progress may still post, and that is
+    /// theirs to do. Anything reported after Dispose is dropped rather than thrown over.
+    /// </summary>
+    private sealed class BuildLog(string path, IProgress<string>? forward) : IProgress<string>, IDisposable
+    {
+        private readonly StreamWriter _file = new(path, append: true) { AutoFlush = true };
+        private bool _closed;
+
+        public void Report(string line)
+        {
+            Note(line);
+            forward?.Report(line);
+        }
+
+        /// <summary>To the file only.</summary>
+        public void Note(string line)
+        {
+            lock (_file)
+            {
+                if (!_closed) _file.WriteLine(line);
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_file)
+            {
+                _closed = true;
+                _file.Dispose();
+            }
+        }
     }
 
     private async Task<DotnetSdk> EnsureSdkAsync(

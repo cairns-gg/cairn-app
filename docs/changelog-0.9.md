@@ -445,6 +445,10 @@ on running it.
 
 ## Smaller things
 
+- **A failed Optimum build no longer takes Cairn down with it.** **0.9.9.** When building
+  Optimum stopped with an error, the last few lines of its log could arrive after the log
+  file had been closed, and Cairn quit on the spot instead of showing you what went wrong.
+  The build log is now written as each line arrives. Nothing to do.
 - **Looking at Mod config no longer throws away a pack's settings.** **0.9.9.** A pack can
   carry mod settings, written into each mod's config file when you play. Opening the **Mod
   config** tab before those files existed — which is every pack you import, until its first

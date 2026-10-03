@@ -409,6 +409,55 @@ public class OptimumBuildTests : IDisposable
         Assert.DoesNotContain(env.Keys, k => k.StartsWith("DOTNET_ROOT"));
     }
 
+    // ---- the build log ----
+
+    /// <summary>
+    /// Holds callbacks posted to it until asked, as a UI thread does while it is busy —
+    /// which is what lets them run after the build has already failed.
+    /// </summary>
+    private sealed class Queueing : SynchronizationContext
+    {
+        public Queue<(SendOrPostCallback Callback, object? State)> Posted { get; } = new();
+
+        public override void Post(SendOrPostCallback d, object? state) => Posted.Enqueue((d, state));
+    }
+
+    /// <summary>
+    /// The review's reproduction. The build's log was a Progress&lt;string&gt;, which posts its
+    /// callback to whatever context made it; the callback wrote to a writer BuildAsync had
+    /// disposed by the time it ran, and threw on the UI thread, outside the build's own error
+    /// handling.
+    /// </summary>
+    [Fact]
+    public void A_failed_build_leaves_no_log_line_waiting_to_write_to_a_closed_file()
+    {
+        // An SDK the plan accepts, and a working tree whose .git is empty, so the first git
+        // command fails here rather than reaching the network.
+        Dir("runtimes", "fake-sdk", "sdk", "10.0.100");
+        var provisioner = Provisioner();
+        Directory.CreateDirectory(Path.Combine(provisioner.WorkingTree, ".git"));
+
+        var queue = new Queueing();
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(queue);
+
+        try
+        {
+            Assert.ThrowsAny<Exception>(() =>
+                provisioner.BuildAsync(OptimumSource.Newest).GetAwaiter().GetResult());
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        // Whatever was posted runs now, after the build is over — and must not throw.
+        while (queue.Posted.TryDequeue(out var posted)) posted.Callback(posted.State);
+
+        // And the failing command's output reached the file before it closed.
+        Assert.Contains("--- build started", File.ReadAllText(provisioner.LogPath));
+    }
+
     // ---- reusing the working tree ----
 
     private OptimumProvisioner Provisioner() => new(
