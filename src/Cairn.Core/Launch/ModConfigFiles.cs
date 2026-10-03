@@ -207,21 +207,27 @@ public static class ModConfigFiles
             {
                 changes.Add(new ModConfigChange(file, "", ModConfigOutcome.Refused, why));
 
-                // Still recorded, when the file is there and cannot be written. The pack's
-                // word has not changed just because this copy is unreadable, and forgetting
-                // it would make the next readable launch treat every key as a first word and
-                // take back the player's edits.
-                //
-                // Not recorded when the file is simply not there yet — the absent-YAML case,
-                // where ConfigLib writes the file during the session that follows. A record
-                // saying the pack already asked for these values makes that file, holding
-                // nothing but the mod's own defaults, read as the admin's deliberate edits on
-                // the very next launch: Kept, and Kept for ever. Read promises the cost of
-                // waiting is one session, and recording here is what made it permanent.
-                if (File.Exists(full)) next[file] = patch.DeepClone().AsObject();
+                // There and unwritable: the record stays what it was. It says what the pack
+                // last got into this file, and this launch got nothing in — the same rule as
+                // a save that fails, below. Recording the new patch here made the refusal
+                // permanent: once the file became writable, its untouched value differed
+                // from the record, read as the player's own edit, and was Kept on every
+                // launch after. Forgetting a record that existed would be wrong the other
+                // way, making every key a first word and taking back the player's edits. No
+                // record before means none now, and the first writable launch applies.
+                if (File.Exists(full))
+                {
+                    if (last is not null) next[file] = last;
+                }
 
-                // So the drop loop below does not read the gap as a file the pack stopped
-                // asking for and report every key Released.
+                // Not there at all: forgotten. The absent-YAML case, where ConfigLib writes
+                // the file during the session that follows, and a file deleted between
+                // launches. Any record would make that file, holding nothing but the mod's
+                // own defaults, read as deliberate edits on the very next launch — Kept, and
+                // Kept for ever. Read promises the cost of waiting is one session.
+                //
+                // Taken out of the old record too, so the drop loop below does not read the
+                // gap as a file the pack stopped asking for and report every key Released.
                 else record.Remove(file);
 
                 continue;

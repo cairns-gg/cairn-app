@@ -83,6 +83,44 @@ public class ModConfigTests : IDisposable
         Assert.Equal(1, ReadConfig("x.json")["v"]!.GetValue<int>());
     }
 
+    /// <summary>
+    /// The review's reproduction. A file with a comment in it cannot be written back, so the
+    /// value is refused — and the record took it anyway. Once the comment went, the file's
+    /// untouched value differed from the record, read as the player's own edit, and was
+    /// Kept from then on.
+    /// </summary>
+    [Fact]
+    public void A_refused_file_is_applied_once_it_can_be_written()
+    {
+        WriteConfig("x.json", """{ /* the mod's defaults */ "enabled": false }""");
+        var declared = Declare("x.json", """{ "enabled": true }""");
+
+        Assert.Equal(ModConfigOutcome.Refused, Assert.Single(Apply(declared)).Outcome);
+
+        WriteConfig("x.json", """{ "enabled": false }""");
+
+        Assert.Equal(ModConfigOutcome.Applied, Assert.Single(Apply(declared)).Outcome);
+        Assert.True(ReadConfig("x.json")["enabled"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void A_refusal_keeps_the_record_from_before_it_rather_than_forgetting_it()
+    {
+        // Applied once, so there is a record: v was the pack's 1.
+        WriteConfig("x.json", """{ "v": 0 }""");
+        Apply(Declare("x.json", """{ "v": 1 }"""));
+
+        // Then the file cannot be written while the pack moves on to 2.
+        WriteConfig("x.json", """{ /* edited */ "v": 1 }""");
+        Assert.Equal(ModConfigOutcome.Refused, Assert.Single(Apply(Declare("x.json", """{ "v": 2 }"""))).Outcome);
+
+        // The file still holds what the pack last put there, so it is the pack's to move:
+        // the record that said 1 survived the refusal rather than being replaced by 2.
+        WriteConfig("x.json", """{ "v": 1 }""");
+        Assert.Equal(ModConfigOutcome.Applied, Assert.Single(Apply(Declare("x.json", """{ "v": 2 }"""))).Outcome);
+        Assert.Equal(2, ReadConfig("x.json")["v"]!.GetValue<int>());
+    }
+
     private static bool CanWriteIn(string dir)
     {
         try
