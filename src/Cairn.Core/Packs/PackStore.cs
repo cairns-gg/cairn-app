@@ -531,24 +531,6 @@ public sealed class PackStore
     }
 
     /// <summary>
-    /// Creates a pack from a shared bundle.
-    /// </summary>
-    /// <param name="asId">Override the author's id, e.g. when it collides with an existing pack.</param>
-    /// <param name="reproduce">
-    /// Keep the author's lock, so the first sync installs their exact versions and
-    /// verifies the bytes. Set false for a loose import: the lock is discarded and every
-    /// pin dropped, so the pack resolves newest-compatible instead.
-    /// </param>
-    /// <param name="sourceUrl">
-    /// The address this document was actually fetched from, or null when it came out of a
-    /// file. This — not anything the document says about itself — is what a follow
-    /// relationship is recorded against whenever it exists.
-    /// </param>
-    /// <param name="intent">
-    /// Whether this copy follows the author or starts a pack of your own. Null lets the
-    /// answer follow from what can be verified: see the comment on the decision below.
-    /// </param>
-    /// <summary>
     /// The address following this pack would check back with, or null when it has none
     /// worth following. Both front-ends ask it to decide whether to offer the choice, and
     /// <see cref="Import"/> asks it again to act on one.
@@ -571,6 +553,24 @@ public sealed class PackStore
         return string.IsNullOrWhiteSpace(address) ? null : PackUpdateCheck.PageUrl(address);
     }
 
+    /// <summary>
+    /// Creates a pack from a shared bundle.
+    /// </summary>
+    /// <param name="asId">Override the author's id, e.g. when it collides with an existing pack.</param>
+    /// <param name="reproduce">
+    /// Keep the author's lock, so the first sync installs their exact versions and
+    /// verifies the bytes. Set false for a loose import: the lock is discarded and every
+    /// pin dropped, so the pack resolves newest-compatible instead.
+    /// </param>
+    /// <param name="sourceUrl">
+    /// The address this document was actually fetched from, or null when it came out of a
+    /// file. This — not anything the document says about itself — is what a follow
+    /// relationship is recorded against whenever it exists.
+    /// </param>
+    /// <param name="intent">
+    /// Whether this copy follows the author or starts a pack of your own. Null lets the
+    /// answer follow from what can be verified: see the comment on the decision below.
+    /// </param>
     public PackManifest Import(
         PackBundle bundle, string? asId = null, bool reproduce = true, string? sourceUrl = null,
         ImportIntent? intent = null)

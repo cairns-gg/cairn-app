@@ -381,15 +381,6 @@ public static class ModConfigFiles
         LoadDocument(Path.Combine(dataPath, BaselineName));
 
     /// <summary>
-    /// Merges one sparse patch into the file's tree, deciding each leaf on its own.
-    ///
-    /// Objects recurse; everything else — a number, a string, an array — is a leaf and is
-    /// replaced whole. Merging arrays element by element was considered and dropped: there
-    /// is no answer to whether a declared list appends, replaces or de-duplicates that is
-    /// right for every mod, and a pack that declares the list its author tested is both
-    /// predictable and what the manifest appears to say.
-    /// </summary>
-    /// <summary>
     /// The patch with ConfigLib's <c>version</c> removed, and a word about why.
     ///
     /// One bad key costs one key: the rest of the patch still lands, the same as a mod entry
@@ -431,6 +422,15 @@ public static class ModConfigFiles
         return written;
     }
 
+    /// <summary>
+    /// Merges one sparse patch into the file's tree, deciding each leaf on its own.
+    ///
+    /// Objects recurse; everything else — a number, a string, an array — is a leaf and is
+    /// replaced whole. Merging arrays element by element was considered and dropped: there
+    /// is no answer to whether a declared list appends, replaces or de-duplicates that is
+    /// right for every mod, and a pack that declares the list its author tested is both
+    /// predictable and what the manifest appears to say.
+    /// </summary>
     private static void Merge(
         JsonObject target, JsonObject patch, JsonObject? last,
         string file, string prefix, List<ModConfigChange> changes, ref bool wrote,
@@ -657,12 +657,15 @@ public static class ModConfigFiles
         }
     }
 
+    /// <summary>The file's text, as <see cref="Save"/> writes it.</summary>
+    private static string Text(JsonObject root) => root.ToJsonString(Write);
+
     /// <summary>
     /// Staged and moved, so an interrupted write never leaves a mod a half-written config —
     /// which is a mod that either refuses to load or silently reverts to its defaults.
+    ///
+    /// False when it could not be written, which Apply reports and does not record.
     /// </summary>
-    private static string Text(JsonObject root) => root.ToJsonString(Write);
-
     private static bool Save(string path, string content)
     {
         try
