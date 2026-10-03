@@ -105,12 +105,8 @@ public static class HomeMigration
         // been put in the wrong place first.
         var exists = Directory.Exists(from);
 
-        if (PathsEqual(from, to)) return No($"{to} is already where Cairn keeps its state");
+        if (Nesting(from, to) is { } nested) return No(nested);
 
-        // Either nesting is a mess rather than a copy: into a subdirectory of itself never
-        // terminates, and the reverse leaves the old tree sitting inside the new root.
-        if (Contains(from, to)) return No($"{to} is inside {from}");
-        if (Contains(to, from)) return No($"{to} contains {from}");
 
         // The pointer does not count as an occupant. Moving away from the default leaves it
         // behind in the directory just emptied, so it is the one thing standing between
@@ -163,6 +159,10 @@ public static class HomeMigration
         Action<string>? repoint = null)
     {
         if (!plan.CanMove) throw new MoveFailed(plan.Problem!);
+
+        // Again, now: a plan is a snapshot, and a link made between planning and moving
+        // could put the destination inside what is about to be walked.
+        if (Nesting(plan.From, plan.To) is { } nested) throw new MoveFailed(nested);
 
         Directory.CreateDirectory(plan.To);
 
@@ -481,6 +481,21 @@ public static class HomeMigration
             return null;
         }
     }
+
+    /// <summary>
+    /// Why a move from <paramref name="from"/> to <paramref name="to"/> is not a copy at all,
+    /// or null. Either nesting is a mess: into a subdirectory of itself never terminates, and
+    /// the reverse leaves the old tree sitting inside the new root.
+    ///
+    /// Asked with links resolved, as <see cref="DiscardProblem(string)"/> is. Compared as
+    /// strings, /alias/nested was not inside /source though /alias pointed at it, and the
+    /// copy walked into its own output until the disk filled.
+    /// </summary>
+    private static string? Nesting(string from, string to) =>
+        SamePlace(from, to) ? $"{to} is already where Cairn keeps its state"
+        : Holds(from, to) ? $"{to} is inside {from}"
+        : Holds(to, from) ? $"{to} contains {from}"
+        : null;
 
     /// <summary>
     /// Why <paramref name="oldRoot"/> must not be deleted, or null when it may be. Both front

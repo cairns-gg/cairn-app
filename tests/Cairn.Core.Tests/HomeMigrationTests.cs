@@ -85,6 +85,38 @@ public class HomeMigrationTests : IDisposable
         Assert.Contains("contains", plan.Problem);
     }
 
+    /// <summary>
+    /// The review's reproduction: a link to the root, and a destination under the link. As
+    /// strings the two are unrelated, so the plan allowed it and the copy walked into its
+    /// own output — payload, nested/payload, nested/nested/payload — until stopped.
+    /// </summary>
+    [Fact]
+    public void Refused_when_the_destination_is_inside_the_source_by_way_of_a_link()
+    {
+        var alias = Path.Combine(_tmp, "alias");
+        Directory.CreateSymbolicLink(alias, From);
+
+        var plan = PlanTo(Path.Combine(alias, "nested"));
+
+        Assert.False(plan.CanMove);
+        Assert.Contains("inside", plan.Problem);
+    }
+
+    [Fact]
+    public void A_link_made_after_planning_is_still_refused_when_the_move_starts()
+    {
+        // A plan that was sound when it was made: the link does not exist yet. Built directly,
+        // because Plan would also refuse a destination whose parent is not there.
+        var alias = Path.Combine(_tmp, "alias");
+        var plan = new MovePlan(From, Path.Combine(alias, "nested"), 2, 0, 1, null);
+
+        Directory.CreateSymbolicLink(alias, From);
+
+        Assert.Throws<MoveFailed>(() => Move(plan));
+        Assert.False(Directory.Exists(Path.Combine(From, "nested")));
+        Assert.Null(_repointedTo);
+    }
+
     [Fact]
     public void A_sibling_with_a_shared_prefix_is_not_nesting()
     {
