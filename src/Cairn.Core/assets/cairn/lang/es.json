@@ -107,7 +107,7 @@
   "hotkeys-held-alongside": "se mantiene junto a {0}",
 
   "log-clear": "Limpiar", "log-game-log": "Registro del juego",
-  "log-open-folder": "Abrir la carpeta de registros", "log-copy-diagnostics": "Copiar diagnóstico",
+  "log-open-folder": "Abrir la carpeta de registros del juego", "log-open-cairn-log": "Abrir el registro de Cairn", "log-copy-diagnostics": "Copiar diagnóstico",
   "log-no-game-logs": "aún no hay registros del juego — este pack nunca se ha iniciado",
   "log-diagnostics-copied": "diagnóstico copiado al portapapeles",
 
@@ -680,7 +680,9 @@
 
   "play-force-quit-body": "«{0}» tiene Vintage Story en marcha. Forzar el cierre termina el juego de inmediato — se pierde todo lo posterior a la última partida guardada, y el juego no tiene ocasión de guardar. Úsalo cuando el juego haya dejado de responder.",
   "play-prepare-failed": "No se pudo preparar Vintage Story {0} — mira el registro.",
-  "play-sync-unclean": "No se inicia — la sincronización no terminó limpia.",
+  "play-sync-stopped": "No se inicia — la sincronización se detuvo: {0}",
+  "play-sync-failed-one": "No se inicia — no se pudo instalar {1}: {2}",
+  "play-sync-failed-other": "No se inicia — no se pudieron instalar {0} mods; el primero, {1}: {2}. La pestaña Registro tiene el resto.",
   "play-dropped-mod-path": "ya no se cargan mods de {0} — este pack tiene los suyos",
   "play-runtime-failed": "{0} necesita .NET {1}, que no se pudo instalar — mira el registro.",
   "play-launching": "iniciando: {0}",
@@ -700,6 +702,7 @@
   "sync-failed-quiet": "algunos mods no se pudieron instalar — Jugar lo intentará de nuevo",
   "sync-failed": "Algunos mods no se pudieron instalar — mira el registro.",
   "sync-background-failed": "la sincronización en segundo plano falló: {0}",
+  "sync-stopped": "la sincronización se detuvo: {0}",
   "sync-no-game-version": "ninguna versión del juego",
   "sync-too-many-deps": "declara más dependencias de las que Cairn va a seguir ({0}); el resto se ignora",
   "sync-no-longer-in-pack": "ya no está en el pack",

@@ -77,6 +77,17 @@ public static class CairnPaths
     /// </summary>
     public static string CacheRoot => Path.Combine(Root, "cache");
 
+    /// <summary>
+    /// Cairn's own log, and the one before it — see <see cref="CairnLog"/>. Not under
+    /// <see cref="CacheRoot"/>: clearing the cache to free space should not take with it the
+    /// only record of why somebody's last launch failed.
+    /// </summary>
+    public static string LogsRoot => Path.Combine(Root, LogsDirName);
+
+    internal const string LogsDirName = "logs";
+
+    public static string LogPath => Path.Combine(LogsRoot, "cairn.log");
+
     /// <summary>Mod icons from ModDB, so browsing does not re-download the same images.</summary>
     public static string IconCacheRoot => Path.Combine(CacheRoot, "icons");
 

@@ -1699,7 +1699,7 @@ public class MainWindowTests : IDisposable
 
         var buttons = Buttons(window);
 
-        foreach (var label in new[] { "Clear", "Game log", "Open logs folder" })
+        foreach (var label in new[] { "Clear", "Game log", "Open game logs folder", "Open Cairn's log" })
         {
             Assert.True(buttons.ContainsKey(label), $"no '{label}' button in the Log tab");
             Assert.NotNull(buttons[label].Command);
@@ -2924,6 +2924,36 @@ public class MainWindowTests : IDisposable
 
         vm.Runs.Abandon(launching.Id);
         Assert.False(vm.Detail.IsShowingLaunchStage);
+    }
+
+    /// <summary>
+    /// cairns-gg/cairn-app#8: Play said "sync did not complete cleanly", over the top of the
+    /// sentence that said which mod and why, and the only other record was a tab that a
+    /// restart empties.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Play_stopped_by_a_mod_says_which_and_the_log_on_disk_keeps_it()
+    {
+        var (window, vm) = Show();   // offline, so glassview cannot be fetched
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "vanilla-qol");
+        var detail = vm.Detail!;
+        Assert.NotNull(detail.ResolvedInstall);
+
+        await detail.PlayCommand.ExecuteAsync(null);
+
+        Assert.StartsWith("Not launching — glassview could not be installed: ", detail.Error);
+        Assert.Contains(detail.Error!, VisibleText(window));
+
+        // The step itself and the banner both, on disk and filed under the pack — which is
+        // what Copy diagnostics now reads, so a report made after a restart still has them.
+        //
+        // Sync reports its steps through Progress<T>, which posts them to the UI thread.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var kept = CairnLog.Tail(100, "vanilla-qol");
+        Assert.Contains(kept, e => e.Contains("glassview") && e.Contains("failed"));
+        Assert.Contains(kept, e => e.EndsWith("error: " + detail.Error));
+        Assert.DoesNotContain(CairnLog.Tail(100, "anego"), e => e.Contains("[vanilla-qol]"));
     }
 
     [AvaloniaFact]

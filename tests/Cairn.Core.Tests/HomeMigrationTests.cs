@@ -187,6 +187,30 @@ public class HomeMigrationTests : IDisposable
     }
 
     [Fact]
+    public void A_log_still_being_written_does_not_fail_the_move()
+    {
+        var log = Path.Combine(From, "logs", "cairn.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+        File.WriteAllText(log, "before\n");
+
+        // The launcher goes on logging while it moves — every file copied is a chance for a
+        // line to land in the original after its copy was taken. Synchronous, unlike
+        // Progress<T>, so the append happens between the copy and the check.
+        var appending = new Appending(() => File.AppendAllText(log, "during\n"));
+
+        var result = HomeMigration.Move(PlanTo(To), appending, repoint: to => _repointedTo = to);
+
+        Assert.Equal(To, _repointedTo);
+        Assert.True(File.Exists(Path.Combine(To, "logs", "cairn.log")));
+        Assert.Null(result.RemovalProblem);
+    }
+
+    private sealed class Appending(Action append) : IProgress<MoveProgress>
+    {
+        public void Report(MoveProgress value) => append();
+    }
+
+    [Fact]
     public void The_executable_bit_survives()
     {
         // Without it every game binary arrives unrunnable and nothing launches. File.Copy

@@ -107,7 +107,7 @@
   "hotkeys-held-alongside": "segurado junto com {0}",
 
   "log-clear": "Limpar", "log-game-log": "Registro do jogo",
-  "log-open-folder": "Abrir a pasta de registros", "log-copy-diagnostics": "Copiar o diagnóstico",
+  "log-open-folder": "Abrir a pasta de registros do jogo", "log-open-cairn-log": "Abrir o registro do Cairn", "log-copy-diagnostics": "Copiar o diagnóstico",
   "log-no-game-logs": "ainda não há registros do jogo — este pacote nunca foi iniciado",
   "log-diagnostics-copied": "diagnóstico copiado para a área de transferência",
 
@@ -680,7 +680,9 @@
 
   "play-force-quit-body": "«{0}» está com o Vintage Story rodando. Forçar o fechamento termina o jogo na hora — tudo o que houve desde o último save se perde, e o jogo não tem chance de gravar um. Use quando o jogo tiver parado de responder.",
   "play-prepare-failed": "Não foi possível preparar o Vintage Story {0} — veja o registro.",
-  "play-sync-unclean": "Não vai iniciar — a sincronização não terminou limpa.",
+  "play-sync-stopped": "Não vai iniciar — a sincronização parou: {0}",
+  "play-sync-failed-one": "Não vai iniciar — não foi possível instalar {1}: {2}",
+  "play-sync-failed-other": "Não vai iniciar — não foi possível instalar {0} mods; o primeiro, {1}: {2}. A aba Registro tem o resto.",
   "play-dropped-mod-path": "não carrega mais mods de {0} — este pacote tem os seus",
   "play-runtime-failed": "O {0} precisa do .NET {1}, que não pôde ser instalado — veja o registro.",
   "play-launching": "iniciando: {0}",
@@ -700,6 +702,7 @@
   "sync-failed-quiet": "alguns mods não puderam ser instalados — o Jogar tenta de novo",
   "sync-failed": "Alguns mods não puderam ser instalados — veja o registro.",
   "sync-background-failed": "a sincronização em segundo plano falhou: {0}",
+  "sync-stopped": "a sincronização parou: {0}",
   "sync-no-game-version": "nenhuma versão do jogo",
   "sync-too-many-deps": "declara mais dependências do que o Cairn segue ({0}); as demais são ignoradas",
   "sync-no-longer-in-pack": "não está mais no pacote",

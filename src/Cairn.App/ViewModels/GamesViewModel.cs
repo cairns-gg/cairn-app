@@ -157,7 +157,11 @@ public partial class GamesViewModel : ViewModelBase
     public bool NotBusy => !IsBusy;
     public string StoreRoot => _store.Root;
 
-    partial void OnErrorChanged(string? value) => OnPropertyChanged(nameof(HasError));
+    partial void OnErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasError));
+        if (value is not null) CairnLog.Write($"error: {value}");
+    }
 
     partial void OnIsBusyChanged(bool value)
     {

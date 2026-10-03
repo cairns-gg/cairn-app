@@ -626,7 +626,11 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
 
     public bool HasError => Error is not null;
 
-    partial void OnErrorChanged(string? value) => OnPropertyChanged(nameof(HasError));
+    partial void OnErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasError));
+        if (value is not null) CairnLog.Write($"error: {value}");
+    }
 
     /// <summary>
     /// Reads the folder and works out what each mod would become.

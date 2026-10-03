@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -170,8 +171,24 @@ public partial class MainViewModel : ViewModelBase
     private readonly Dictionary<string, ObservableCollection<string>> _logs =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private ObservableCollection<string> LogFor(string packId) =>
-        _logs.TryGetValue(packId, out var log) ? log : _logs[packId] = [];
+    private ObservableCollection<string> LogFor(string packId)
+    {
+        if (_logs.TryGetValue(packId, out var log)) return log;
+
+        log = [];
+
+        // Everything the tab shows also goes to disk — see CairnLog. Watched on the
+        // collection rather than at each place that writes a line, because the pane adds to
+        // it directly as well as through NoteFor, and a line missing from the file is
+        // exactly the line somebody will be looking for. Clear empties the tab, not the file.
+        log.CollectionChanged += (_, e) =>
+        {
+            if (e.Action is not NotifyCollectionChangedAction.Add || e.NewItems is null) return;
+            foreach (var line in e.NewItems.OfType<string>()) CairnLog.Write(line, packId);
+        };
+
+        return _logs[packId] = log;
+    }
 
     /// <summary>
     /// Which packs have a game up, held here for the same reason the logs are: the detail
@@ -845,7 +862,11 @@ public partial class MainViewModel : ViewModelBase
     /// status bar only; filing them under whichever pack happened to be selected is the
     /// cross-contamination the per-pack logs exist to avoid.
     /// </summary>
-    private void Note(string line) => Status = line;
+    private void Note(string line)
+    {
+        CairnLog.Write(line);
+        Status = line;
+    }
 
     /// <summary>An event that belongs to one pack: its log, and the status bar.</summary>
     private void NoteFor(string packId, string line)
@@ -1571,6 +1592,7 @@ public partial class MainViewModel : ViewModelBase
         {
             ProvisionStatus = Lang.Get("provision-failed", gameVersion, e.Message);
             Say(ProvisionStatus);
+            CairnLog.Error($"provisioning {gameVersion}", e, forPackId);
         }
         finally
         {

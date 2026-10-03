@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Cairn.App.ViewModels;
 using Cairn.App.Views;
 using Cairn.Core;
@@ -72,6 +74,16 @@ public partial class App : Application
             // cairn-cli refuses the same way. It can print a line and exit; here it takes a
             // window, because there is nowhere else to say it.
             if (CairnHome.Preflight() is { } problem && !AcceptedDefault(desktop, problem)) return;
+
+            // After the preflight, which is what says the root is somewhere it is safe to
+            // write. Marks where each session begins in the file, and which build it was.
+            CairnLog.Write($"cairn {CairnVersion.Current} started on {RuntimeInformation.OSDescription.Trim()}");
+
+            // The half of Program.Main's crash hooks that needed Avalonia running. Recorded,
+            // not handled: an exception nothing caught leaves state nobody can vouch for,
+            // and carrying on past it would trade a crash for something stranger.
+            Dispatcher.UIThread.UnhandledException += (_, e) =>
+                CairnLog.Error("unhandled on the UI thread", e.Exception);
 
             var model = new MainViewModel();
             _model = model;

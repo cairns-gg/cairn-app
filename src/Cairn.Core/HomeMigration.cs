@@ -204,7 +204,16 @@ public static class HomeMigration
                     // File.Copy carries the Unix mode across, which was checked rather than
                     // assumed — without it every game binary would arrive without its
                     // executable bit and nothing would launch.
-                    File.Copy(entry.Full, target, overwrite: true);
+                    try
+                    {
+                        File.Copy(entry.Full, target, overwrite: true);
+                    }
+                    catch (IOException) when (IsLog(entry.Relative))
+                    {
+                        // Rotated away between the walk and the copy, or caught mid-append.
+                        // Not worth a failed move: see Verify.
+                        continue;
+                    }
                     files++;
                     bytes += entry.Length;
                     progress?.Report(new MoveProgress(
@@ -339,6 +348,13 @@ public static class HomeMigration
 
         foreach (var entry in Walk(plan.From, ct))
         {
+            // Except Cairn's own log, which goes on being written while the move runs — the
+            // move itself is something worth logging — so the original has grown past the
+            // copy, or been rotated out from under it, by the time anything checks. A copy
+            // short of the last few lines loses nothing that matters, and refusing a move over
+            // it would make moving impossible whenever anything at all was happening.
+            if (IsLog(entry.Relative)) continue;
+
             var target = Path.Combine(plan.To, entry.Relative);
 
             switch (entry.Kind)
@@ -483,6 +499,10 @@ public static class HomeMigration
             return null;
         }
     }
+
+    /// <summary>Under <see cref="CairnPaths.LogsRoot"/>, given a path relative to the root.</summary>
+    private static bool IsLog(string relative) =>
+        relative.Split(Path.DirectorySeparatorChar)[0] == CairnPaths.LogsDirName;
 
     private static bool PathsEqual(string a, string b) =>
         string.Equals(Trim(a), Trim(b), PathComparison);

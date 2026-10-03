@@ -312,8 +312,12 @@ public partial class PreferencesViewModel : ViewModelBase
         {
             try
             {
+                // Not counting Cairn's own log, which the launcher writes into a fresh root
+                // the moment it opens: a root holding nothing but that is still one nobody
+                // has put anything in, and choosing leaves a log behind, not a pack.
                 return Directory.Exists(CairnPaths.Root)
-                       && Directory.EnumerateFileSystemEntries(CairnPaths.Root).Any();
+                       && Directory.EnumerateFileSystemEntries(CairnPaths.Root)
+                           .Any(e => Path.GetFileName(e) != Path.GetFileName(CairnPaths.LogsRoot));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

@@ -107,7 +107,7 @@
   "hotkeys-held-alongside": "mantido em conjunto com {0}",
 
   "log-clear": "Limpar", "log-game-log": "Registo do jogo",
-  "log-open-folder": "Abrir a pasta de registos", "log-copy-diagnostics": "Copiar o diagnóstico",
+  "log-open-folder": "Abrir a pasta de registos do jogo", "log-open-cairn-log": "Abrir o registo do Cairn", "log-copy-diagnostics": "Copiar o diagnóstico",
   "log-no-game-logs": "ainda não há registos do jogo — este pack nunca foi iniciado",
   "log-diagnostics-copied": "diagnóstico copiado para a área de transferência",
 
@@ -680,7 +680,9 @@
 
   "play-force-quit-body": "«{0}» tem o Vintage Story a correr. Forçar o fecho termina o jogo de imediato — perde-se tudo o que houve desde a última gravação, e o jogo não tem hipótese de gravar. Usa isto quando o jogo tiver deixado de responder.",
   "play-prepare-failed": "Não foi possível preparar o Vintage Story {0} — vê o registo.",
-  "play-sync-unclean": "Não vai iniciar — a sincronização não terminou limpa.",
+  "play-sync-stopped": "Não vai iniciar — a sincronização parou: {0}",
+  "play-sync-failed-one": "Não vai iniciar — não foi possível instalar {1}: {2}",
+  "play-sync-failed-other": "Não vai iniciar — não foi possível instalar {0} mods; o primeiro, {1}: {2}. O separador Registo tem o resto.",
   "play-dropped-mod-path": "já não são carregados mods de {0} — este pack tem os seus",
   "play-runtime-failed": "O {0} precisa do .NET {1}, que não foi possível instalar — vê o registo.",
   "play-launching": "a iniciar: {0}",
@@ -700,6 +702,7 @@
   "sync-failed-quiet": "alguns mods não puderam ser instalados — o Jogar volta a tentar",
   "sync-failed": "Alguns mods não puderam ser instalados — vê o registo.",
   "sync-background-failed": "a sincronização em segundo plano falhou: {0}",
+  "sync-stopped": "a sincronização parou: {0}",
   "sync-no-game-version": "nenhuma versão do jogo",
   "sync-too-many-deps": "declara mais dependências do que o Cairn segue ({0}); as restantes são ignoradas",
   "sync-no-longer-in-pack": "já não está no pack",

@@ -159,7 +159,7 @@
 
   "log-clear": "Effacer",
   "log-game-log": "Journal du jeu",
-  "log-open-folder": "Ouvrir le dossier des journaux",
+  "log-open-folder": "Ouvrir le dossier des journaux du jeu", "log-open-cairn-log": "Ouvrir le journal de Cairn",
   "log-copy-diagnostics": "Copier le diagnostic",
   "log-no-game-logs": "aucun journal de jeu — ce pack n'a jamais été lancé",
   "log-diagnostics-copied": "diagnostic copié dans le presse-papiers",
@@ -808,7 +808,9 @@
 
   "play-force-quit-body": "« {0} » a Vintage Story en cours d'exécution. Forcer la fermeture termine le jeu immédiatement — tout ce qui suit la dernière sauvegarde est perdu, et le jeu n'a pas l'occasion d'en écrire une. À utiliser quand le jeu ne répond plus.",
   "play-prepare-failed": "Impossible de préparer Vintage Story {0} — voir le journal.",
-  "play-sync-unclean": "Pas de lancement — la synchronisation ne s'est pas terminée proprement.",
+  "play-sync-stopped": "Pas de lancement — la synchronisation s'est arrêtée : {0}",
+  "play-sync-failed-one": "Pas de lancement — {1} n'a pas pu être installé : {2}",
+  "play-sync-failed-other": "Pas de lancement — {0} mods n'ont pas pu être installés, dont {1} : {2}. L'onglet Journal contient le reste.",
   "play-dropped-mod-path": "les mods de {0} ne sont plus chargés — ce pack a les siens",
   "play-runtime-failed": "{0} a besoin de .NET {1}, qui n'a pas pu être installé — voir le journal.",
   "play-launching": "lancement : {0}",
@@ -828,6 +830,7 @@
   "sync-failed-quiet": "certains mods n'ont pas pu être installés — Jouer réessaiera",
   "sync-failed": "Certains mods n'ont pas pu être installés — voir le journal.",
   "sync-background-failed": "la synchronisation en arrière-plan a échoué : {0}",
+  "sync-stopped": "la synchronisation s'est arrêtée : {0}",
   "sync-no-game-version": "aucune version du jeu",
   "sync-too-many-deps": "déclare plus de dépendances que Cairn n'en suit ({0}) ; le reste est ignoré",
   "sync-no-longer-in-pack": "n'est plus dans le pack",

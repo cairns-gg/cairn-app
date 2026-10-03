@@ -1322,6 +1322,9 @@
                                         Command="{Binding Detail.ShowGameLogCommand}" />
                                 <Button Content="{l:Tr log-open-folder}"
                                         Command="{Binding Detail.OpenLogsFolderCommand}" />
+                                <Button Name="OpenCairnLogButton"
+                                        Content="{l:Tr log-open-cairn-log}"
+                                        Command="{Binding Detail.OpenCairnLogCommand}" />
 
                                 <!--
                                     Beside the log because that is where somebody already is

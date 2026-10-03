@@ -445,6 +445,15 @@ on running it.
 
 ## Smaller things
 
+- **Cairn keeps a log you can find after something goes wrong.** **0.9.9.** When Play
+  refused to start it said only *"sync did not complete cleanly"* — over the top of the line
+  that said which mod and why — and the Log tab, the one other place that said, is emptied
+  every time Cairn closes. Play now says which mod stopped it and what was wrong with it, and
+  everything the Log tab shows is also written to `logs/cairn.log` in Cairn's folder, along
+  with anything that goes wrong and, if Cairn ever crashes, why. **Open Cairn's log** in the
+  Log tab shows you the file, and **Copy diagnostics** now reads from it, so a report made
+  after a restart still has the failure in it. Nothing to do; if you are reporting a problem,
+  that file is the thing to attach.
 - **Clicking a pack gets you back out of New pack and Import.** **0.9.9.** With either form
   open, clicking a pack in the list moved the highlight and left the form where it was — and
   clicking the pack that was already highlighted, which with only one pack is the only one

@@ -230,9 +230,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         // Off the UI thread: this hashes every mod zip in the pack, which for a large one
         // is tens of megabytes and would otherwise freeze the window mid-click.
+        //
+        // The log from disk rather than the tab, because the tab starts empty every session
+        // and the failure being reported usually happened in the one before a restart. The
+        // tab only when the file cannot be read.
         var report = await Task.Run(() => Diagnostics.Report(
-            Manifest, _store.LoadLock(Id), Log.ToList(), _library, _store.ModsDir(Id),
-            ResolvedInstall));
+            Manifest, _store.LoadLock(Id),
+            CairnLog.Tail(Diagnostics.LogLines, Id) is { Count: > 0 } kept ? kept : Log.ToList(),
+            _library, _store.ModsDir(Id), ResolvedInstall));
 
         try
         {
@@ -291,6 +296,17 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
         if (!Files.OpenFolder(logs.Directory))
             _log(Lang.Get("log-open-failed", logs.Directory));
+    }
+
+    /// <summary>
+    /// Shows Cairn's own log file, picked out in its folder: the one thing to attach to a
+    /// bug report, and the only record of anything from before this session.
+    /// </summary>
+    [RelayCommand]
+    private void OpenCairnLog()
+    {
+        if (!Files.Reveal(CairnPaths.LogPath))
+            _log(Lang.Get("log-open-failed", CairnPaths.LogPath));
     }
 
     public ObservableCollection<ModRowViewModel> Mods { get; } = [];
@@ -1483,7 +1499,15 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     // available while a launch is already in flight.
     public bool CanLaunch => !IsBusy && !IsLaunching;
 
-    partial void OnErrorChanged(string? value) => OnPropertyChanged(nameof(HasError));
+    partial void OnErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasError));
+
+        // To the file, not the Log tab: the banner is already on screen, and saying it twice
+        // there would read as two things going wrong. What the file needs is the record of
+        // it, because the next banner replaces this one.
+        if (value is not null) CairnLog.Write($"error: {value}", Id);
+    }
 
     partial void OnIsBusyChanged(bool value)
     {
@@ -3186,9 +3210,22 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         Stage(Lang.Get("play-checking-mods"));
 
         var report = await RunSyncAsync();
-        if (report is null || report.Failed)
+
+        // Says what went wrong rather than that something did. This used to be one fixed
+        // sentence, written over whatever RunSyncAsync had just put in the banner — the
+        // exception's message, or the pointer to the log — so the one place the reason was
+        // shown was the one place it was taken away (cairns-gg/cairn-app#8).
+        if (report is null)
         {
-            Error = Lang.Get("play-sync-unclean");
+            Error = Lang.Get("play-sync-stopped", Error);
+            return;
+        }
+
+        if (report.Failed)
+        {
+            var failed = report.Steps.Where(s => s.Action == SyncAction.Failed).ToList();
+            Error = Lang.Plural("play-sync-failed", failed.Count,
+                failed.Count, failed[0].ModId, failed[0].Detail);
             return;
         }
 
@@ -3273,6 +3310,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         catch (Exception e)
         {
+            CairnLog.Error("launch", e, Id);
             Error = Lang.Get("play-failed", e.Message);
         }
     }
@@ -3762,8 +3800,17 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         catch (Exception e)
         {
+            CairnLog.Error("sync", e, Id);
+
             if (quiet) _log(Lang.Get("sync-background-failed", e.Message));
-            else Error = e.Message;
+            else
+            {
+                // In the tab as well as the banner: the steps before it are there, and a run
+                // that stops part-way with no line saying so reads as one that finished.
+                _log(Lang.Get("sync-stopped", e.Message));
+                Error = e.Message;
+            }
+
             return null;
         }
         finally
