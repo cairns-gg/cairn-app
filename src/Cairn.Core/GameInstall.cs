@@ -460,21 +460,6 @@ public sealed class GameInstall
     }
 
     /// <summary>
-    /// Reads metadata only — never loads the assembly, so this works from a process of a
-    /// different architecture than the game.
-    ///
-    /// Prefers GameVersion.ShortGameVersion, the constant the game itself reports. The
-    /// assembly attributes are not trustworthy across releases: 1.22.5 carries
-    /// AssemblyVersion 1.22.5.0, but 1.21.5 carries 1.0.0.0 with FileVersion 1.21.0.
-    /// </summary>
-    /// <summary>
-    /// The label in the directory's variant marker, or null for a stock install.
-    ///
-    /// Silent about an unreadable one: a marker nobody can read means the same thing as no
-    /// marker for every decision that follows, and refusing to see an install over it would
-    /// be worse than treating it as ordinary.
-    /// </summary>
-    /// <summary>
     /// The bare filename, or null if it is not one. A marker is a file in a directory Cairn
     /// hands to a process launcher, so a name carrying a path could point the launch
     /// anywhere on the machine.
@@ -488,6 +473,13 @@ public sealed class GameInstall
             : null;
     }
 
+    /// <summary>
+    /// The label in the directory's variant marker, or null for a stock install.
+    ///
+    /// Silent about an unreadable one: a marker nobody can read means the same thing as no
+    /// marker for every decision that follows, and refusing to see an install over it would
+    /// be worse than treating it as ordinary.
+    /// </summary>
     private static (string? Label, string? Executable) ReadVariant(string dir)
     {
         try
@@ -519,6 +511,14 @@ public sealed class GameInstall
         }
     }
 
+    /// <summary>
+    /// Reads metadata only — never loads the assembly, so this works from a process of a
+    /// different architecture than the game.
+    ///
+    /// Prefers GameVersion.ShortGameVersion, the constant the game itself reports. The
+    /// assembly attributes are not trustworthy across releases: 1.22.5 carries
+    /// AssemblyVersion 1.22.5.0, but 1.21.5 carries 1.0.0.0 with FileVersion 1.21.0.
+    /// </summary>
     private static string ReadVersion(string apiDllPath)
     {
         var declared = AssemblyConstantReader.ReadStringConstant(
