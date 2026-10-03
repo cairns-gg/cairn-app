@@ -1740,9 +1740,11 @@ internal static class Program
         // keeps working.
         var isPublic = !args.Contains("--unlisted");
 
-        // A public pack almost never wants a real server address in it, and an unlisted one
-        // usually does. --keep-server overrides, because sometimes it is deliberate.
-        var strip = isPublic && !args.Contains("--keep-server");
+        // Left out unless --keep-server asks for it, whatever the visibility. This used to
+        // follow --unlisted, so making a pack less findable added its server address to
+        // what was published — and an unlisted link gets pasted into a chat like any other.
+        // The Share window has never done that, and docs/sharing.md says why it must not.
+        var strip = !args.Contains("--keep-server");
 
         if (plan.HasConnect)
             Console.WriteLine(strip

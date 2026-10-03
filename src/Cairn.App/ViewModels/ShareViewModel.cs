@@ -72,9 +72,9 @@ public sealed partial class ShareViewModel : ViewModelBase
         // A pack already published keeps whatever was chosen for it, here and below.
         IsPublic = _published is null || _published.Visibility == "public";
 
-        // A pack handed to your own players is exactly when the server address is wanted,
-        // and a public one almost never is — so a first publish strips it for public and
-        // keeps it for unlisted. A re-publish keeps whatever was chosen last time.
+        // Stripped for a first publish, whichever visibility: including a server address
+        // is something somebody ticks, never something a default does for them. A
+        // re-publish keeps whatever was chosen last time, which is on screen to change.
         StripConnect = _published is not null
             ? _published.Connect == "stripped"
             : IsPublic;
