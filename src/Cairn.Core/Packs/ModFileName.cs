@@ -3,12 +3,15 @@ namespace Cairn.Core.Packs;
 /// <summary>
 /// The name a mod file is allowed to have inside a pack's Mods directory.
 ///
-/// Two properties, and they only work together. A name has to be a bare filename, because
-/// it is combined with a directory and "../../evil.zip" would write outside the pack. And
-/// it has to be one of the kinds of file Cairn installs, because the sweep that clears out
-/// what a pack no longer lists can only remove what it knows to look for — a name outside
-/// that set is a file nothing would ever tidy away again, still sitting in the directory
-/// handed to the game long after the mod was removed from the pack.
+/// Two properties. A name has to be a bare filename, because it is combined with a
+/// directory and "../../evil.zip" would write outside the pack. And it has to be one of the
+/// kinds of file the game loads from a mod path, because anything else is not a mod: a
+/// release named otherwise is refused rather than installed as something the game will
+/// ignore.
+///
+/// Neither says what Cairn may remove. That is decided by the lock alone — the sweep in
+/// <see cref="PackSyncer"/> removes what the previous lock named and nothing else, so a mod
+/// somebody placed by hand is never Cairn's to delete whatever it is called.
 ///
 /// This lives here rather than inside <see cref="PackSyncer"/>, where it was written and
 /// where it was correct. Three places write or read a lock's filename and only that one
@@ -28,13 +31,9 @@ public static class ModFileName
     /// what its API can hand back, not a preference. A folder mod is a directory and is
     /// unaffected either way.
     ///
-    /// This list used to be the sweep's set too, on the reasoning that anything Cairn can
-    /// write must be something Cairn can later clear away. The reasoning was sound and the
-    /// mechanism was not: keying removal on the extension meant Cairn deleted loose mods
-    /// somebody had placed by hand, which it had never written. The sweep now works from
-    /// the previous lock — Cairn's record of what it actually installed — so the two sets
-    /// are deliberately no longer coupled, and widening this one no longer widens what gets
-    /// deleted. See the sweep in <see cref="PackSyncer"/>.
+    /// Not what may be deleted. This list was once the sweep's set as well, and keying
+    /// removal on the extension deleted loose mods people had placed by hand; the sweep
+    /// works from the previous lock now, so widening this widens nothing that is removed.
     /// </summary>
     public static readonly string[] Extensions = [".zip", ".dll", ".cs"];
 
@@ -73,9 +72,9 @@ public static class ModFileName
     public static bool IsBare(string? name) => BareFileName.IsBare(name);
 
     /// <summary>
-    /// Whether this is a file Cairn installs, and therefore one it is entitled to remove.
-    /// Length is checked as well as the suffix so a file called exactly ".zip" — which has
-    /// no name at all — is not treated as a mod.
+    /// Whether this is a kind of file the game loads as a mod — see <see cref="Extensions"/>,
+    /// and not a statement about who may remove it. Length is checked as well as the suffix
+    /// so a file called exactly ".zip" — which has no name at all — is not treated as a mod.
     /// </summary>
     public static bool HasModExtension(string? name) =>
         name is not null
