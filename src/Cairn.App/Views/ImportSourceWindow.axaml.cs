@@ -45,7 +45,31 @@ public partial class ImportSourceWindow : Window
     {
         base.OnDataContextChanged(e);
 
-        if (DataContext is ImportSourceViewModel vm) vm.PickFolder = PickFolderAsync;
+        if (DataContext is ImportSourceViewModel vm)
+        {
+            vm.PickFolder = PickFolderAsync;
+            vm.PickFile = PickFileAsync;
+        }
+    }
+
+    /// <summary>
+    /// The platform's file chooser, offering pack files first and anything else after, since
+    /// a file somebody was sent may have been renamed on the way.
+    /// </summary>
+    private async Task<string?> PickFileAsync()
+    {
+        var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = Lang.Get("importsrc-file-title"),
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(Lang.Get("importsrc-file-type")) { Patterns = ["*.json"] },
+                FilePickerFileTypes.All,
+            ],
+        });
+
+        return picked.Count == 0 ? null : picked[0].TryGetLocalPath();
     }
 
     /// <summary>

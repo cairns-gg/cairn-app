@@ -260,6 +260,9 @@
                 <TextBlock DockPanel.Dock="Top" FontSize="12" TextWrapping="Wrap" Opacity="0.8"
                            Margin="0,0,0,8"
                            Text="{l:Tr importsrc-text-explain}" />
+                <Button Name="ChooseFileButton" DockPanel.Dock="Top" Margin="0,0,0,8"
+                        Content="{l:Tr importsrc-choose-file}"
+                        Command="{Binding ChooseFileCommand}" />
                 <!-- A pack is a few hundred lines of JSON. Room to see that something
                      arrived, and to scroll it; the window is no taller than it needs. -->
                 <TextBox Name="PasteBox" Text="{Binding Text}" AcceptsReturn="True"

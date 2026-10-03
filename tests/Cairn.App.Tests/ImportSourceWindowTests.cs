@@ -129,6 +129,43 @@ public class ImportSourceWindowTests
         Assert.Contains(VisibleBoxes(window), b => b.Name == "IdBox");
     }
 
+    /// <summary>
+    /// The way in for a file somebody was sent, beside the box (cairns-gg/cairn-app#6). The
+    /// box took a path all along; nothing offered to find one.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_pack_file_can_be_chosen_rather_than_typed()
+    {
+        var (window, vm) = Show();
+        vm.FromPaste = true;
+
+        var button = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ChooseFileButton");
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Same(vm.ChooseFileCommand, button.Command);
+
+        // The window hands over the platform's picker; answered here instead of opened.
+        Assert.NotNull(vm.PickFile);
+
+        var path = Path.Combine(Path.GetTempPath(), "anego.cairn.json");
+        vm.PickFile = () => Task.FromResult<string?>(path);
+        vm.ChooseFileCommand.Execute(null);
+
+        Assert.Equal(path, vm.Text);
+    }
+
+    [AvaloniaFact]
+    public void Cancelling_the_file_picker_leaves_the_box_as_it_was()
+    {
+        var (_, vm) = Show();
+        vm.FromPaste = true;
+        vm.Text = "{ \"pack\": {} }";
+
+        vm.PickFile = () => Task.FromResult<string?>(null);
+        vm.ChooseFileCommand.Execute(null);
+
+        Assert.Equal("{ \"pack\": {} }", vm.Text);
+    }
+
     [AvaloniaFact]
     public void Choosing_paste_shows_the_paste_box()
     {

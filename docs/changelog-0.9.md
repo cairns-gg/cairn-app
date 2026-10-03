@@ -445,6 +445,9 @@ on running it.
 
 ## Smaller things
 
+- **Choose a pack file instead of typing its path.** **0.9.10.** Importing a pack you were
+  sent as a file meant typing out where it was. **From pasted text or a file** now has a
+  **Choose file…** button that opens your system's file picker. Nothing to do.
 - **Put your packs in the order you want.** **0.9.10.** Drag a pack up or down the list on
   the left to move it, or right-click it for **Move up** and **Move down**. Cairn remembers
   the order. New packs join at the bottom.

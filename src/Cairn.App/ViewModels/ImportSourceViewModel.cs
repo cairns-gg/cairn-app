@@ -509,6 +509,26 @@ public sealed partial class ImportSourceViewModel : ViewModelBase
     public Func<Task<string?>>? PickFolder { get; set; }
 
     /// <summary>
+    /// Asks for a pack file, returning its path or null. Set by the view, as
+    /// <see cref="PickFolder"/> is.
+    /// </summary>
+    public Func<Task<string?>>? PickFile { get; set; }
+
+    /// <summary>
+    /// Fills the box with the path of a file somebody picked (cairns-gg/cairn-app#6). The box
+    /// took a path all along — the import reads the file a path names — but
+    /// typing one out is not something to ask of anybody who has just been sent a file.
+    /// Filled in rather than read here, so the import goes the way a typed path always has.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChooseFile()
+    {
+        if (PickFile is null) return;
+
+        if (await PickFile() is { } path) Text = path;
+    }
+
+    /// <summary>
     /// Why a chosen directory was refused, or empty. Left on screen: somebody who picked the
     /// wrong folder is about to pick another one and needs to be able to read what was wrong
     /// with the first while the picker is open.
