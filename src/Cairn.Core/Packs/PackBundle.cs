@@ -17,6 +17,17 @@ public sealed class PackBundle
     /// <summary>Bumped if the shape ever changes incompatibly.</summary>
     public const int CurrentFormat = 1;
 
+    /// <summary>
+    /// What a pack file is called on disk: <c>anego.cairn</c>. JSON inside, the same document
+    /// as ever, under a name that says what it is to somebody who has been sent one rather
+    /// than one that says how it is written (cairns-gg/cairn-app#2). Files named
+    /// <c>.cairn.json</c>, as exports were, still import — the name was never what was read.
+    /// </summary>
+    public const string FileExtension = ".cairn";
+
+    /// <summary>The file a pack exports to.</summary>
+    public static string FileNameFor(string packId) => packId + FileExtension;
+
     [JsonPropertyName("formatVersion")] public int FormatVersion { get; set; } = CurrentFormat;
     [JsonPropertyName("pack")] public PackManifest? Pack { get; set; }
     [JsonPropertyName("lock")] public PackLock? Lock { get; set; }

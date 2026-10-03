@@ -2353,6 +2353,9 @@ public class MainWindowTests : IDisposable
         Assert.Null(vm.Detail.Error);
         Assert.True(vm.Detail.HasExported);
         Assert.True(File.Exists(vm.Detail.ExportedPath!));
+
+        // Named for what it is to whoever is sent it (cairns-gg/cairn-app#2).
+        Assert.Equal("anego.cairn", Path.GetFileName(vm.Detail.ExportedPath));
         Assert.Contains("\"pack\"", vm.Detail.ExportedJson);
     }
 

@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Cairn.App.ViewModels;
 using Cairn.Core;
+using Cairn.Core.Packs;
 
 namespace Cairn.App.Views;
 
@@ -64,7 +65,10 @@ public partial class ImportSourceWindow : Window
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType(Lang.Get("importsrc-file-type")) { Patterns = ["*.json"] },
+                new FilePickerFileType(Lang.Get("importsrc-file-type"))
+                {
+                    Patterns = ["*" + PackBundle.FileExtension, "*.json"],
+                },
                 FilePickerFileTypes.All,
             ],
         });

@@ -70,6 +70,37 @@ public class SelfHostedPackTests : IDisposable
         Assert.True(PackUpdateCheck.CanCheck(link));
     }
 
+    /// <summary>
+    /// A pack file named as Cairn names them, hosted as it is (cairns-gg/cairn-app#2). Asked
+    /// for with .json on the end, it was not found, and the pack could never be checked.
+    /// </summary>
+    [Fact]
+    public async Task A_cairn_file_at_an_address_is_followed_at_that_address()
+    {
+        const string cairnFile = "https://raw.githubusercontent.com/someone/seraph/main/seraph.cairn";
+
+        var bundle = PackBundle.Parse(Export("carryon"));
+        _store.Import(bundle, sourceUrl: cairnFile);
+
+        var link = _store.LoadLink("seraph")!;
+        Assert.Equal(cairnFile, PackUpdateCheck.DocumentUrl(link.Url));
+
+        var http = new HttpClient(new Fixed(Export("carryon", "heavyweight")));
+        Assert.NotNull(await PackUpdateCheck.FetchAsync(link, http));
+    }
+
+    [Fact]
+    public void A_pack_file_is_named_cairn_and_the_old_name_still_imports()
+    {
+        Assert.Equal("seraph.cairn", PackBundle.FileNameFor("seraph"));
+
+        // An export made before the rename: the name was never what import read.
+        var old = Path.Combine(_root, "seraph.cairn.json");
+        File.WriteAllText(old, Export("carryon"));
+
+        Assert.Equal("seraph", _store.Import(PackBundle.Parse(File.ReadAllText(old))).Id);
+    }
+
     [Fact]
     public void Out_of_a_file_it_has_no_address_and_is_not_followed()
     {

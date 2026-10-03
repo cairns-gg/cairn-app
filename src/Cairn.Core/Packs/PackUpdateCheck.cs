@@ -101,17 +101,22 @@ public static class PackUpdateCheck
     /// author being unreachable — which is what "could not reach the author's pack" meant
     /// every single time, for every pack, including ones whose server was perfectly well.
     ///
-    /// A URL that already ends in <c>.json</c> is left alone, so a document served
-    /// directly — a file on a static host, a dev server on loopback — still works.
+    /// A URL that already names a document — ending in <c>.json</c>, or in
+    /// <see cref="PackBundle.FileExtension"/> — is left alone, so a document served
+    /// directly — a file on a static host, a dev server on loopback — still works. A pack
+    /// file hosted as <c>pack.cairn</c> used to be asked for as <c>pack.cairn.json</c>, and
+    /// found nothing.
     /// </summary>
     public static string DocumentUrl(string url)
     {
         var trimmed = url.TrimEnd('/');
 
-        return trimmed.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? trimmed
-            : trimmed + ".json";
+        return IsDocument(trimmed) ? trimmed : trimmed + ".json";
     }
+
+    private static bool IsDocument(string url) =>
+        url.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+        || url.EndsWith(PackBundle.FileExtension, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The inverse: the page a person reads, from the address a machine fetched.

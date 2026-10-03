@@ -120,7 +120,7 @@ offering its mods one at a time would rebuild the divergence this exists to prev
 
 ### A pack you host yourself
 
-A pack does not have to be on cairns.gg to be followed. Export it, put the `.json`
+A pack does not have to be on cairns.gg to be followed. Export it, put the `.cairn` file
 somewhere that serves it over https — a static host, a raw file in a repository — and
 import it from that address: the copy follows the address it was fetched from, exactly as
 a cairns.gg pack follows its page. Push a new export to the same place and **Check for

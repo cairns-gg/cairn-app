@@ -445,6 +445,10 @@ on running it.
 
 ## Smaller things
 
+- **Pack files end in `.cairn`.** **0.9.10.** An exported pack is now saved as
+  `<name>.cairn` rather than `<name>.cairn.json`, so whoever you send it to can tell what it
+  is. Inside it is exactly the same, and files with the old name still import. A `.cairn`
+  file you host yourself can be followed for updates like any other. Nothing to do.
 - **Choose a pack file instead of typing its path.** **0.9.10.** Importing a pack you were
   sent as a file meant typing out where it was. **From pasted text or a file** now has a
   **Choose file…** button that opens your system's file picker. Nothing to do.

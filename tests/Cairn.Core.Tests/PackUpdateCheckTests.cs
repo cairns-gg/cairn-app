@@ -64,6 +64,7 @@ public class PackUpdateCheckTests
     [Theory]
     [InlineData("http://127.0.0.1:8811/pack.json")]
     [InlineData("https://example.com/packs/anego.JSON")]
+    [InlineData("https://raw.githubusercontent.com/someone/seraph/main/seraph.cairn")]   // #2
     public void A_url_that_is_already_a_document_is_left_alone(string url) =>
         // A file on a static host or a dev server on loopback serves the document itself,
         // and appending again would ask for pack.json.json.

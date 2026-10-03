@@ -3449,7 +3449,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             ExportedJson = _store.Export(Id, ExportIncludesLock);
 
             Directory.CreateDirectory(CairnPaths.ExportsRoot);
-            var path = Path.Combine(CairnPaths.ExportsRoot, $"{Id}.cairn.json");
+            var path = Path.Combine(CairnPaths.ExportsRoot, PackBundle.FileNameFor(Id));
             File.WriteAllText(path, ExportedJson);
 
             ExportedPath = path;
