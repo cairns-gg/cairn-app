@@ -445,6 +445,12 @@ on running it.
 
 ## Smaller things
 
+- **Two mods with the same file name both install.** **0.9.9.** Two mods added by their
+  download links could share a file name — two different mods both published as
+  `release.zip`, say — and the second quietly replaced the first in the pack's `Mods`
+  folder, while Cairn went on believing both were installed. The second now gets its mod's
+  name in front of its file instead. Nothing to do; a pack this happened to gets the missing
+  mod back on its next Play.
 - **Windows and Linux are offered updates again.** **0.9.9.** The Windows and Linux
   downloads were built without their version number, so Cairn on those systems believed
   it was a development build and never told you a new release was out. macOS was not

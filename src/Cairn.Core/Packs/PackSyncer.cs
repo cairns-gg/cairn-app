@@ -90,6 +90,9 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         // See FindByHashAsync.
         var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
 
+        // Which mod each file in Mods belongs to, in this sync. See Claim.
+        var claimed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         void Record(SyncStep step)
         {
             steps.Add(step);
@@ -420,7 +423,7 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 return await FailKeepingPriorAsync(want, prior,
                     Lang.Get("sync-bad-url", badUrl)).ConfigureAwait(false);
 
-            var safeName = release.FileName;
+            var safeName = Claim(release.FileName, release.ModId);
 
             var target = Path.Combine(modsDir, safeName);
 
@@ -501,10 +504,22 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
         {
             var url = want.Url!;
 
-            if (ModUrl.FileNameFor(url, want.ModId) is not { } name)
+            if (ModUrl.FileNameFor(url, want.ModId) is not { } fromUrl)
                 return await FailKeepingPriorAsync(want, prior,
                     Lang.Get("sync-bad-filename", ModFileName.Problem($"{want.ModId}.zip"), want.ModId))
                     .ConfigureAwait(false);
+
+            // The name it already has, while it comes from the same address: worked out from
+            // the URL afresh, a mod that had to be given another name — see Claim — would
+            // flip back to the plain one the moment the mod holding that left the pack, and
+            // be downloaded again for nothing.
+            var kept = prior is { FileName.Length: > 0 }
+                       && string.Equals(prior.Url, url, StringComparison.OrdinalIgnoreCase)
+                       && ModFileName.Problem(prior.FileName) is null
+                ? prior.FileName
+                : null;
+
+            var name = Claim(kept ?? fromUrl, want.ModId);
 
             var target = Path.Combine(modsDir, name);
 
@@ -609,6 +624,43 @@ public sealed class PackSyncer(ModDbClient moddb, HttpClient http)
                 Record(new SyncStep(action, want.ModId, detail));
                 return target;
             }
+        }
+
+        // The file name a mod installs under, once no other mod in this sync holds it.
+        //
+        // Two mods cannot share a file in Mods, and nothing stopped them: a direct link names
+        // its file after the URL's last segment, so https://a.example/alpha/release.zip and
+        // https://b.example/beta/release.zip both became release.zip. The second download
+        // replaced the first, the lock kept two entries with two hashes for one file, and
+        // sync reported success — a pack missing a mod it believed it had. ModDB's own
+        // filenames are not promised unique across mods either, so the same rule covers them.
+        //
+        // The mod that asks second gets its id in front instead. Asked in the manifest's
+        // order, and the name it gets is written into the lock, which is where the next sync
+        // reads it from — so the choice is made once rather than on every sync. Held against
+        // what is already in the new lock as well, which is where an entry kept after a
+        // failure (FailKeepingPriorAsync, KeepWhatIsHereAsync) is.
+        string Claim(string wanted, string modId)
+        {
+            bool Free(string name) =>
+                (!claimed.TryGetValue(name, out var owner)
+                 || string.Equals(owner, modId, StringComparison.OrdinalIgnoreCase))
+                && !newLock.Mods.Any(m =>
+                    string.Equals(m.FileName, name, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(m.ModId, modId, StringComparison.OrdinalIgnoreCase));
+
+            var name = wanted;
+
+            for (var n = 1; !Free(name); n++)
+            {
+                var prefixed = n == 1 ? $"{modId}_{wanted}" : $"{modId}_{n}_{wanted}";
+                // An id is the manifest's or a zip's word, so a name built from one is checked
+                // like any other — and when it will not do, one built from nothing but the count.
+                name = ModFileName.Safe(prefixed) ?? $"mod_{n}.zip";
+            }
+
+            claimed[name] = modId;
+            return name;
         }
 
         // A resolve that failed says nothing about the file already here. Dropping the
