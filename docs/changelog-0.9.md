@@ -445,6 +445,10 @@ on running it.
 
 ## Smaller things
 
+- **Saying no to a game version change gives you the picker back.** **0.9.9.** After you
+  chose another game version in a pack's settings and then declined the change, the version
+  picker stayed greyed out until you clicked away to another pack and back. It is usable
+  again straight away. Nothing to do.
 - **Playing an old pack no longer signs you out of the others.** **0.9.9.** Launching a pack
   you had not played since an earlier login could put that old login back in charge, and
   every pack then asked you to sign in again. Cairn now picks up your newest login before it

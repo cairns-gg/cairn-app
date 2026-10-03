@@ -1867,6 +1867,32 @@ public class MainWindowTests : IDisposable
         Assert.False(detail.CheckVersionCommand.CanExecute(null));
     }
 
+    /// <summary>
+    /// The review's reproduction. Saying no bumped the check's generation, and the check's
+    /// own finally — which only clears the busy state for the current generation — then
+    /// left it set, so the picker stayed disabled until the pane was rebuilt.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Declining_a_version_change_gives_the_picker_back()
+    {
+        var (window, vm) = ShowWithModDb();
+        var detail = await Retargetable(vm);
+        detail.ConfirmVersionChange = _ => Task.FromResult(false);
+
+        detail.TargetGameVersion = "1.22.6";   // picking starts the check
+        if (detail.CheckVersionCommand.ExecutionTask is { } running) await running;
+
+        Assert.False(detail.IsCheckingVersion);
+        Assert.Null(detail.VersionChange);
+        Assert.Equal("1.22.5", detail.TargetGameVersion);
+
+        detail.SelectedTab = 1;   // Settings, where the picker is
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        var picker = window.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "GameVersionChoice");
+        Assert.True(picker.IsEnabled);
+    }
+
     [AvaloniaFact]
     public async Task Checking_a_version_writes_nothing()
     {

@@ -1998,6 +1998,13 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // Bumped so the check this abandons cannot come back and reopen its dialog.
         _versionCheckGeneration++;
 
+        // And so its finally, keyed to the generation just retired, no longer clears the
+        // busy state — that is how a newer check keeps its own. Released here instead:
+        // left to the finally, saying no to the dialog left the picker disabled until the
+        // pane was rebuilt. A check started after this sets it again under its own number.
+        IsCheckingVersion = false;
+        CheckingMod = "";
+
         if (HasPendingGameVersion) TargetGameVersion = Manifest.GameVersion;
     }
 
