@@ -230,6 +230,8 @@ compatibleMods             terrainslabs.json           was []      [footprints]<
 <h2>Smaller things</h2>
 
 <ul>
+  <li><strong>Taking an author's update keeps the libraries they tested with.</strong> <strong>0.9.9.</strong> Mods often need a library mod that the pack's list does not name, and a pack you follow records which version of it the author had. Taking any update &mdash; even one that only changed the pack's description &mdash; forgot that, so the next Play fetched the newest version of each library rather than the one the author tested, and could not install them at all offline. It now keeps them. Nothing to do.</li>
+
   <li><strong>Two mods with the same file name both install.</strong> <strong>0.9.9.</strong> Two mods added by their download links could share a file name &mdash; two different mods both published as <code>release.zip</code>, say &mdash; and the second quietly replaced the first in the pack's <code>Mods</code> folder, while Cairn went on believing both were installed. The second now gets its mod's name in front of its file instead. Nothing to do; a pack this happened to gets the missing mod back on its next Play.</li>
 
   <li><strong>Windows and Linux are offered updates again.</strong> <strong>0.9.9.</strong> The Windows and Linux downloads were built without their version number, so Cairn on those systems believed it was a development build and never told you a new release was out. macOS was not affected. <strong>If you are on Windows or Linux, download this release by hand once</strong> from the releases page; from then on Cairn offers each new one as it should.</li>

@@ -210,18 +210,21 @@ public sealed class PackStore
 
         var next = new PackLock { GameVersion = merged.GameVersion };
 
-        var wanted = merged.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The mods the merged pack names, and everything each lock says they pulled in.
+        var roots = merged.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var theirsWanted = Reachable(theirs, roots);
         foreach (var entry in theirs?.Mods ?? [])
-            if (wanted.Contains(entry.ModId))
+            if (theirsWanted.Contains(entry.ModId))
                 next.Mods.Add(entry);
 
         if (!retargeted)
         {
             var covered = next.Mods.Select(m => m.ModId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var mineWanted = Reachable(mine, roots);
 
             foreach (var entry in mine?.Mods ?? [])
-                if (wanted.Contains(entry.ModId) && !covered.Contains(entry.ModId))
+                if (mineWanted.Contains(entry.ModId) && !covered.Contains(entry.ModId))
                     next.Mods.Add(entry);
 
             // Their entry, and where this machine already got it from. Clearing the
@@ -268,6 +271,39 @@ public sealed class PackStore
         next.Retired = retired.Count > 0 ? retired : null;
 
         next.Save(LockPath(id));
+    }
+
+    /// <summary>
+    /// The mods in <paramref name="locked"/> that <paramref name="roots"/> keep: the roots
+    /// themselves, and every entry whose <see cref="LockedMod.RequiredBy"/> names one that
+    /// is kept, followed as far as it goes.
+    ///
+    /// A lock is the installed closure, not the manifest's list. Filtering it by the mods the
+    /// manifest names dropped every dependency — a library pulled in by a zip and locked by
+    /// the author beside the mod that wanted it — so taking a revision that changed nothing
+    /// but a description left the next sync to rediscover the library with no entry, and
+    /// resolve the newest one rather than the version the author tested. Offline, there was
+    /// no locked identity to fall back on at all.
+    ///
+    /// A dependency whose every requirer has gone is not kept: that is the case the filter was
+    /// for, and the sync that follows sweeps its file.
+    /// </summary>
+    private static HashSet<string> Reachable(PackLock? locked, IReadOnlySet<string> roots)
+    {
+        var kept = new HashSet<string>(roots, StringComparer.OrdinalIgnoreCase);
+        if (locked is null) return kept;
+
+        for (var grew = true; grew;)
+        {
+            grew = false;
+
+            foreach (var entry in locked.Mods)
+                if (!kept.Contains(entry.ModId)
+                    && entry.RequiredBy?.Any(kept.Contains) == true)
+                    grew |= kept.Add(entry.ModId);
+        }
+
+        return kept;
     }
 
     /// <summary>

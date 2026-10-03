@@ -445,6 +445,12 @@ on running it.
 
 ## Smaller things
 
+- **Taking an author's update keeps the libraries they tested with.** **0.9.9.** Mods often
+  need a library mod that the pack's list does not name, and a pack you follow records which
+  version of it the author had. Taking any update — even one that only changed the pack's
+  description — forgot that, so the next Play fetched the newest version of each library
+  rather than the one the author tested, and could not install them at all offline. It now
+  keeps them. Nothing to do.
 - **Two mods with the same file name both install.** **0.9.9.** Two mods added by their
   download links could share a file name — two different mods both published as
   `release.zip`, say — and the second quietly replaced the first in the pack's `Mods`

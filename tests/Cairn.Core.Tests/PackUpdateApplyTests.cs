@@ -403,6 +403,47 @@ public class PackUpdateApplyTests : IDisposable
     }
 
     [Fact]
+    public void A_revision_keeps_the_dependencies_the_author_locked()
+    {
+        // The review's reproduction: alpha's zip requires beta, and the author locked both.
+        var locked = Lock("1.22.5", ("alpha", "1.0.0"), ("beta", "1.0.0"));
+        locked.Mods.Single(m => m.ModId == "beta").RequiredBy = ["alpha"];
+
+        Follow(Pack("1.22.5", Mod("alpha")), locked);
+
+        // A revision that changes nothing but the description.
+        var theirs = Pack("1.22.5", Mod("alpha"));
+        theirs.Description = "now with a description";
+
+        var revised = Lock("1.22.5", ("alpha", "1.0.0"), ("beta", "1.0.0"));
+        revised.Mods.Single(m => m.ModId == "beta").RequiredBy = ["alpha"];
+
+        var plan = PackUpdatePlan.Between(_store.Load("anego"), theirs, _store.LoadUpstream("anego"));
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, revised, revision: 2));
+
+        // Still locked at the version the author tested, rather than left for the next sync
+        // to rediscover with no entry and resolve the newest.
+        var beta = Assert.Single(_store.LoadLock("anego")!.Mods, m => m.ModId == "beta");
+        Assert.Equal("1.0.0", beta.Version);
+    }
+
+    [Fact]
+    public void A_dependency_goes_with_the_last_mod_that_wanted_it()
+    {
+        var locked = Lock("1.22.5", ("alpha", "1.0.0"), ("beta", "1.0.0"), ("carryon", "1.0.0"));
+        locked.Mods.Single(m => m.ModId == "beta").RequiredBy = ["alpha"];
+
+        Follow(Pack("1.22.5", Mod("alpha"), Mod("carryon")), locked);
+
+        // The author drops alpha, the only thing that asked for beta.
+        var theirs = Pack("1.22.5", Mod("carryon"));
+        var plan = PackUpdatePlan.Between(_store.Load("anego"), theirs, _store.LoadUpstream("anego"));
+        _store.ApplyUpdate("anego", plan, Bundle(theirs, Lock("1.22.5", ("carryon", "1.0.0")), revision: 2));
+
+        Assert.Equal(["carryon"], _store.LoadLock("anego")!.Mods.Select(m => m.ModId));
+    }
+
+    [Fact]
     public void A_lock_never_mentions_a_mod_the_merge_left_out()
     {
         Follow(Pack("1.22.5", Mod("carryon"), Mod("heavyweight")),
