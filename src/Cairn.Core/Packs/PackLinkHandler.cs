@@ -232,8 +232,36 @@ public static class PackLinkHandler
         // and nothing else.
         if (CurrentCommand(Key) == command && CurrentCommand(FileKey) == command) return;
 
-        foreach (var args in WindowsRegistration(executable)) Reg(args);
+        var wrote = false;
+        foreach (var args in WindowsRegistration(executable)) wrote |= RegRead(args).Exit == 0;
+
+        // Explorer caches what each extension opens with, and does not look again because a
+        // registry key changed underneath it: a .cairn file it had already seen as
+        // unassociated went on offering "choose an app" until a refresh or a reboot — and
+        // this method returns early on every start after the first, so it would never be
+        // asked again. Microsoft's own rule for association changes is to say so.
+        if (wrote && OperatingSystem.IsWindows()) AssociationsChanged();
     }
+
+    /// <summary>SHCNE_ASSOCCHANGED, with no item: every association, re-read.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void AssociationsChanged()
+    {
+        try
+        {
+            SHChangeNotify(ShcneAssocChanged, ShcnfIdList, IntPtr.Zero, IntPtr.Zero);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            // A Windows without the shell — Server Core. Nothing there shows files anyway.
+        }
+    }
+
+    private const int ShcneAssocChanged = 0x08000000;
+    private const uint ShcnfIdList = 0x0000;
+
+    [System.Runtime.InteropServices.DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
 
     private static string? CurrentCommand(string key)
     {
@@ -245,8 +273,6 @@ public static class PackLinkHandler
         var marker = output.IndexOf("REG_SZ", StringComparison.Ordinal);
         return marker < 0 ? null : output[(marker + "REG_SZ".Length)..].Trim();
     }
-
-    private static void Reg(params string[] args) => RegRead(args);
 
     private static (int Exit, string Output) RegRead(params string[] args)
     {
