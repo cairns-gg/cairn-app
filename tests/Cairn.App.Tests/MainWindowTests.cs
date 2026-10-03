@@ -1840,9 +1840,10 @@ public class MainWindowTests : IDisposable
         var (window, vm) = Show();
         Assert.Equal(["anego", "old-pack", "vanilla-qol"], Order(vm));
 
-        // vanilla-qol, dragged up onto anego's row.
+        // vanilla-qol, dragged up into the top half of anego's row — above its middle, which
+        // is where a row has to be taken to go before it.
         var from = RowCentre(window, "vanilla-qol");
-        var to = RowCentre(window, "anego");
+        var to = RowCentre(window, "anego") - new Point(0, 10);
 
         window.MouseDown(from, MouseButton.Left);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -1862,6 +1863,51 @@ public class MainWindowTests : IDisposable
         // Written down, and the next launcher lists them that way.
         Assert.Equal(["vanilla-qol", "anego", "old-pack"], Cairn.Core.CairnSettings.Load().PackOrder!);
         Assert.Equal(["vanilla-qol", "anego", "old-pack"], Order(new MainViewModel(new OfflineHandler())));
+    }
+
+    /// <summary>
+    /// The review's reproduction. anego has a server line and stands taller than old-pack;
+    /// dragging old-pack to just inside anego's bottom edge swapped them, left the shorter row
+    /// under the pointer, and every pixel after swapped them back — the drop kept whichever
+    /// order the last event happened to leave. With layout run between moves, as on screen,
+    /// the order has to hold still while the pointer barely does.
+    /// </summary>
+    [AvaloniaFact]
+    public void Dragging_over_a_taller_row_settles_rather_than_flickering()
+    {
+        var (window, vm) = Show();
+        Assert.Equal(["anego", "old-pack", "vanilla-qol"], Order(vm));
+
+        var tall = window.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(i => (i.DataContext as PackListItemViewModel)?.Id == "anego");
+        var bottom = tall.TranslatePoint(new Point(20, tall.Bounds.Height - 3), window)!.Value;
+
+        var start = RowCentre(window, "old-pack");
+        Assert.True(tall.Bounds.Height > window.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(i => (i.DataContext as PackListItemViewModel)?.Id == "old-pack").Bounds.Height);
+
+        void Step(Action act)
+        {
+            act();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        Step(() => window.MouseDown(start, MouseButton.Left));
+        Step(() => window.MouseMove(bottom, RawInputModifiers.LeftMouseButton));
+
+        var settled = Order(vm);
+        var seen = new List<string[]>();
+
+        for (var dx = 1; dx <= 4; dx++)
+        {
+            Step(() => window.MouseMove(new Point(bottom.X + dx, bottom.Y), RawInputModifiers.LeftMouseButton));
+            seen.Add(Order(vm));
+        }
+
+        Assert.All(seen, order => Assert.Equal(settled, order));
+
+        Step(() => window.MouseUp(new Point(bottom.X + 4, bottom.Y), MouseButton.Left));
+        Assert.Equal(settled, Cairn.Core.CairnSettings.Load().PackOrder?.ToArray() ?? Order(vm));
     }
 
     [AvaloniaFact]

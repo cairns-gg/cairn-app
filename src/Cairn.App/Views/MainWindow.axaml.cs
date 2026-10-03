@@ -80,9 +80,38 @@ public partial class MainWindow : Window
             e.Pointer.Capture(PackList);
         }
 
-        // Whichever row is under the pointer now; the dragged one takes its place.
-        if (RowAt(PackList.InputHitTest(at)) is { } over && !ReferenceEquals(over, _dragging))
-            vm.MovePack(_dragging, vm.Packs.IndexOf(over));
+        if (SlotAt(vm, _dragging, at.Y) is { } slot) vm.MovePack(_dragging, slot);
+    }
+
+    /// <summary>
+    /// Where among the other rows the dragged one belongs: before the first whose middle is
+    /// below the pointer.
+    ///
+    /// Not "whichever row is under the pointer", which this was. Rows differ in height — a
+    /// pack with a server has a line more — so swapping with the row under the pointer left
+    /// a shorter row under it after the layout, and the next pixel swapped them back: the
+    /// order flickered between two answers for as long as the pointer moved, and the drop
+    /// kept whichever the last event happened to leave. The middles of the other rows only
+    /// move when the dragged row crosses one, so a slot stays put until the pointer does.
+    ///
+    /// Asked of the rows the list has drawn, so a long list scrolled part-way still gets a
+    /// place among the ones that are there.
+    /// </summary>
+    private int? SlotAt(MainViewModel vm, PackListItemViewModel dragging, double y)
+    {
+        var others = vm.Packs.Where(p => !ReferenceEquals(p, dragging)).ToList();
+        int? slot = null;
+
+        for (var i = 0; i < others.Count; i++)
+        {
+            if (PackList.ContainerFromItem(others[i]) is not Control row) continue;
+            if (row.TranslatePoint(new Point(0, row.Bounds.Height / 2), PackList) is not { } middle) continue;
+
+            if (y < middle.Y) return i;
+            slot = i + 1;
+        }
+
+        return slot;
     }
 
     private void OnPackReleased(object? sender, PointerReleasedEventArgs e)
