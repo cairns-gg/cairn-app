@@ -445,6 +445,11 @@ on running it.
 
 ## Smaller things
 
+- **Double-click a `.cairn` file to open it in Cairn.** **0.9.10.** A pack file you were
+  sent now opens Cairn's import screen with the file filled in; press **Import** to add it,
+  or close the screen if it was not what you meant. On Windows and Linux, Cairn tells your
+  system about `.cairn` files the first time you start this version; on macOS the app
+  carries that itself. Nothing to do.
 - **Pack files end in `.cairn`.** **0.9.10.** An exported pack is now saved as
   `<name>.cairn` rather than `<name>.cairn.json`, so whoever you send it to can tell what it
   is. Inside it is exactly the same, and files with the old name still import. A `.cairn`

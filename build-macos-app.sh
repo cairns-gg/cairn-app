@@ -141,6 +141,45 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         </array>
       </dict>
     </array>
+    <!-- .cairn pack files. The type is declared here as well as claimed, because nothing
+         else on the machine knows what one is: exported, it is a type of its own that is
+         JSON underneath, and Cairn is its owner. Double-clicking one opens Cairn with the
+         file in the import pane, and nothing is imported until somebody says so. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+      <dict>
+        <key>UTTypeIdentifier</key>
+        <string>$BUNDLE_ID.pack-file</string>
+        <key>UTTypeDescription</key>
+        <string>Cairn pack</string>
+        <key>UTTypeConformsTo</key>
+        <array>
+          <string>public.json</string>
+        </array>
+        <key>UTTypeTagSpecification</key>
+        <dict>
+          <key>public.filename-extension</key>
+          <array>
+            <string>cairn</string>
+          </array>
+        </dict>
+      </dict>
+    </array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleTypeName</key>
+        <string>Cairn pack</string>
+        <key>CFBundleTypeRole</key>
+        <string>Viewer</string>
+        <key>LSHandlerRank</key>
+        <string>Owner</string>
+        <key>LSItemContentTypes</key>
+        <array>
+          <string>$BUNDLE_ID.pack-file</string>
+        </array>
+      </dict>
+    </array>
 $ICON_KEY
   </dict>
 </plist>

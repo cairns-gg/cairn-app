@@ -3,7 +3,8 @@ using System.Diagnostics;
 namespace Cairn.Core.Packs;
 
 /// <summary>
-/// Tells the operating system that <c>cairn://</c> links belong to this build.
+/// Tells the operating system that <c>cairn://</c> links, and <c>.cairn</c> files, belong to
+/// this build.
 ///
 /// Handling a link has always worked everywhere — the URL arrives in <c>argv</c> on
 /// Windows and Linux, and through an activation event on macOS. What was missing off
@@ -65,9 +66,9 @@ public static class PackLinkHandler
             if (OperatingSystem.IsLinux()) RegisterOnLinux(executable);
             else if (OperatingSystem.IsWindows()) RegisterOnWindows(executable);
 
-            // macOS is deliberately absent: build-macos-app.sh writes CFBundleURLTypes
-            // into the bundle, and a second registration from in here could only disagree
-            // with it.
+            // macOS is deliberately absent: build-macos-app.sh writes CFBundleURLTypes and
+            // the .cairn document type into the bundle, and a second registration from in
+            // here could only disagree with it.
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
                                       or System.ComponentModel.Win32Exception)
@@ -96,12 +97,49 @@ public static class PackLinkHandler
         [Desktop Entry]
         Type=Application
         Name=Cairn
-        Comment=Open a Cairn pack link
+        Comment=Open a Cairn pack link or pack file
         Exec="{executable}" %u
         Terminal=false
         NoDisplay=true
-        MimeType={MimeType};
+        MimeType={MimeType};{PackFile.MimeType};
         """ + "\n";
+
+    /// <summary>
+    /// The shared-mime-info definition that tells a Linux desktop a <c>.cairn</c> file is a
+    /// type of its own. Without it the extension means nothing and the file is plain JSON,
+    /// opened by whatever opens JSON. A subclass of JSON, so an editor is still offered.
+    /// </summary>
+    public static string MimeDefinition() =>
+        $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+          <mime-type type="{PackFile.MimeType}">
+            <comment>Cairn pack</comment>
+            <sub-class-of type="application/json"/>
+            <glob pattern="*{PackBundle.FileExtension}"/>
+          </mime-type>
+        </mime-info>
+        """ + "\n";
+
+    /// <summary>Named for what it is, as the desktop entry is.</summary>
+    public const string MimeFileName = "cairn-pack.xml";
+
+    /// <summary>
+    /// Writes the definition into a mime directory's packages, and says whether it had to —
+    /// the same once-and-not-again as <see cref="WriteDesktopEntry"/>.
+    /// </summary>
+    public static bool WriteMimeDefinition(string mimeDir)
+    {
+        var packages = Path.Combine(mimeDir, "packages");
+        var path = Path.Combine(packages, MimeFileName);
+        var wanted = MimeDefinition();
+
+        if (File.Exists(path) && File.ReadAllText(path) == wanted) return false;
+
+        Directory.CreateDirectory(packages);
+        File.WriteAllText(path, wanted);
+        return true;
+    }
 
     /// <summary>
     /// Writes the entry into an applications directory, and says whether it had to.
@@ -123,9 +161,13 @@ public static class PackLinkHandler
 
     private static void RegisterOnLinux(string executable)
     {
-        var applications = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".local", "share", "applications");
+        var share = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        var applications = Path.Combine(share, "applications");
+        var mime = Path.Combine(share, "mime");
+
+        // The type first, so the entry that claims it below is claiming something known.
+        if (WriteMimeDefinition(mime)) Run("update-mime-database", mime);
 
         if (!WriteDesktopEntry(applications, executable)) return;
 
@@ -134,9 +176,10 @@ public static class PackLinkHandler
         Run("update-desktop-database", applications);
 
         // And this is what makes it the default rather than merely a candidate. Usually
-        // redundant, since nothing else claims this scheme — but "usually" is not a
-        // guarantee, and being the only handler is not the same as being the chosen one.
+        // redundant, since nothing else claims these — but "usually" is not a guarantee,
+        // and being the only handler is not the same as being the chosen one.
         Run("xdg-mime", "default", DesktopFileName, MimeType);
+        Run("xdg-mime", "default", DesktopFileName, PackFile.MimeType);
     }
 
     // ---- Windows ----
@@ -149,22 +192,52 @@ public static class PackLinkHandler
     /// </summary>
     public static string OpenCommand(string executable) => $"\"{executable}\" \"%1\"";
 
+    private const string Classes = @"HKCU\Software\Classes\";
+
+    private const string FileKey = Classes + PackFile.WindowsProgId;
+
+    /// <summary>
+    /// Every <c>reg add</c> that registers this build, as argument lists — the scheme, then
+    /// the file type. Its own method so the keys can be checked from a machine without a
+    /// registry, which is every machine but the Windows one CI runs.
+    ///
+    /// The file type is two keys, as Windows has it: the extension names a type, and the
+    /// type says how to open one. <c>%1</c> is the file's path, quoted for the spaces a
+    /// Downloads folder under somebody's name will have.
+    /// </summary>
+    public static IReadOnlyList<string[]> WindowsRegistration(string executable)
+    {
+        var command = OpenCommand(executable);
+
+        return
+        [
+            // The default value is the description shown for the scheme; "URL Protocol" is
+            // the empty-valued marker that tells Windows this key describes one at all,
+            // without which the rest is ignored.
+            ["add", Key, "/ve", "/d", $"URL:{PackUri.Scheme} pack link", "/f"],
+            ["add", Key, "/v", "URL Protocol", "/d", "", "/f"],
+            ["add", $@"{Key}\shell\open\command", "/ve", "/d", command, "/f"],
+
+            ["add", Classes + PackBundle.FileExtension, "/ve", "/d", PackFile.WindowsProgId, "/f"],
+            ["add", FileKey, "/ve", "/d", "Cairn pack", "/f"],
+            ["add", $@"{FileKey}\shell\open\command", "/ve", "/d", command, "/f"],
+        ];
+    }
+
     private static void RegisterOnWindows(string executable)
     {
         var command = OpenCommand(executable);
-        if (CurrentCommand() == command) return;
 
-        // The default value is the description shown for the scheme; "URL Protocol" is the
-        // empty-valued marker that tells Windows this key describes one at all, without
-        // which the rest is ignored.
-        Reg("add", Key, "/ve", "/d", $"URL:{PackUri.Scheme} pack link", "/f");
-        Reg("add", Key, "/v", "URL Protocol", "/d", "", "/f");
-        Reg("add", $@"{Key}\shell\open\command", "/ve", "/d", command, "/f");
+        // Both, because a build from before the file type existed has the scheme already
+        // and nothing else.
+        if (CurrentCommand(Key) == command && CurrentCommand(FileKey) == command) return;
+
+        foreach (var args in WindowsRegistration(executable)) Reg(args);
     }
 
-    private static string? CurrentCommand()
+    private static string? CurrentCommand(string key)
     {
-        var (exit, output) = RegRead("query", $@"{Key}\shell\open\command", "/ve");
+        var (exit, output) = RegRead("query", $@"{key}\shell\open\command", "/ve");
         if (exit != 0) return null;
 
         // reg.exe prints "    (Default)    REG_SZ    <value>", and the value can contain

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Cairn.App.ViewModels;
 using Cairn.Core.Packs;
@@ -40,11 +41,42 @@ public static class PackLinks
 
         activatable.Activated += (_, e) =>
         {
+            // A .cairn file opened on macOS arrives the same way a link does, as an event
+            // to the instance already running.
+            if (e is FileActivatedEventArgs { Files: [var first, ..] }
+                && first.TryGetLocalPath() is { } path
+                && PackFile.PathFrom(path) is { } pack)
+            {
+                OpenFile(app, model, pack);
+                return;
+            }
+
             if (e is not ProtocolActivatedEventArgs protocol) return;
             if (e.Kind != ActivationKind.OpenUri) return;
 
             Follow(app, model, protocol.Uri.ToString());
         };
+    }
+
+    /// <summary>
+    /// Puts a .cairn file in front of somebody to import, bringing the window forward for the
+    /// same reason <see cref="Follow"/> does. See <see cref="MainViewModel.OfferPackFile"/>.
+    /// </summary>
+    public static void OpenFile(Application app, MainViewModel model, string path) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            Trace($"opened {path}");
+            Raise(app);
+            model.OfferPackFile(path);
+        });
+
+    private static void Raise(Application app)
+    {
+        if (app.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
+        {
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Activate();
+        }
     }
 
     /// <summary>
@@ -64,14 +96,7 @@ public static class PackLinks
             // Raised before the fetch for the same reason: the dialog is modal, and
             // raising the window after it opens would put it behind whatever the browser
             // left in front.
-            if (app.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime
-                { MainWindow: { } window })
-            {
-                if (window.WindowState == WindowState.Minimized)
-                    window.WindowState = WindowState.Normal;
-
-                window.Activate();
-            }
+            Raise(app);
 
             if (!await model.FollowLinkAsync(link)) Trace($"refused {link}");
         });

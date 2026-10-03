@@ -1163,6 +1163,21 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// A .cairn file the operating system handed over — double-clicked, or opened from a
+    /// download (cairns-gg/cairn-app#2). Put in the import pane with its path filled in,
+    /// rather than imported: opening a file is not agreeing to add a pack, and somebody who
+    /// double-clicked the wrong one should be able to read what it is and close the pane.
+    /// Import then reads the file as it reads any path typed there.
+    /// </summary>
+    public void OfferPackFile(string path)
+    {
+        OpenPackForm(PackForm.Import);
+        ImportAsId = "";
+        ImportError = null;
+        ImportText = path;
+    }
+
+    /// <summary>
     /// Accepts either a pasted bundle or a URL to one, so a pack can be shared as a file,
     /// a gist link, or a blob of text in a chat message.
     ///

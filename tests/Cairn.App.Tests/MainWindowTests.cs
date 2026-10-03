@@ -1895,6 +1895,32 @@ public class MainWindowTests : IDisposable
         Assert.Equal(["anego", "old-pack", "vanilla-qol"], Cairn.Core.CairnSettings.Load().PackOrder!);
     }
 
+    /// <summary>
+    /// A .cairn file opened from a file manager (cairns-gg/cairn-app#2). It lands in the import
+    /// pane with its path filled in, and is not a pack until somebody presses Import.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Opening_a_pack_file_offers_it_and_imports_nothing_until_asked()
+    {
+        var path = Path.Combine(_home, "sent-to-me.cairn");
+        File.WriteAllText(path, Cairn.Core.Packs.PackBundle.Serialize(new PackManifest
+        {
+            Id = "sent-to-me", Name = "Sent To Me", GameVersion = "1.22.5",
+            Mods = [new PackMod { ModId = "glassview" }],
+        }));
+
+        var (_, vm) = Show();
+        vm.OfferPackFile(path);
+
+        Assert.True(vm.ShowImport);
+        Assert.Equal(path, vm.ImportText);
+        Assert.DoesNotContain(vm.Packs, p => p.Id == "sent-to-me");
+
+        await vm.ImportPackCommand.ExecuteAsync(null);
+
+        Assert.Contains(vm.Packs, p => p.Id == "sent-to-me");
+    }
+
     [AvaloniaFact]
     public void The_log_tab_offers_the_games_log_as_well_as_Cairns()
     {

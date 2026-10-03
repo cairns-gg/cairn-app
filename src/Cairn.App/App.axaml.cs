@@ -109,6 +109,11 @@ public partial class App : Application
             if (PackLinks.FromArguments(desktop.Args ?? []) is { } link)
                 PackLinks.Follow(this, model, link);
 
+            // A .cairn file is how Windows and Linux hand one over: the path, as an argument
+            // to a fresh start. macOS sends an event instead — see PackLinks.Listen.
+            else if (PackFile.FromArguments(desktop.Args ?? []) is { } file)
+                PackLinks.OpenFile(this, model, file);
+
             // After the window exists, so the dialog has an owner and something to open in
             // front of. Not awaited: on most launches it decides in microseconds that a
             // check is not due, and on the rest it must not hold up the window.
