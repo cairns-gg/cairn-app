@@ -149,6 +149,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         GameLibrary library,
         RuntimeStore runtimes,
         RunningGames runs,
+        PackWork work,
         ObservableCollection<string> log,
         Action<string> note,
         Action onChanged,
@@ -165,6 +166,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         _library = library;
         _runtimes = runtimes;
         _runs = runs;
+        _work = work;
         Log = log;
         _log = note;
         _onChanged = onChanged;
@@ -615,7 +617,23 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     [ObservableProperty] public partial string? SelectedRelease { get; set; }
     [ObservableProperty] public partial bool LoadingReleases { get; set; }
 
-    [ObservableProperty] public partial bool IsBusy { get; set; }
+    /// <summary>
+    /// Something is changing this pack — here, or in a pane for it that has since been
+    /// replaced. Read from <see cref="PackWork"/> rather than kept here: see that class for
+    /// what a flag on the pane got wrong.
+    /// </summary>
+    public bool IsBusy => _work.IsBusy(Id);
+
+    private readonly PackWork _work;
+
+    /// <summary>A ModDB search is running. The pane's own, since it changes nothing on disk.</summary>
+    [ObservableProperty] public partial bool Searching { get; set; }
+
+    partial void OnSearchingChanged(bool value)
+    {
+        SearchCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsWorking));
+    }
 
     /// <summary>
     /// True from the moment Play is pressed until the game exits. Syncing and process
@@ -945,7 +963,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(NotBusy))]
     private async Task ApplyPackUpdate()
     {
-        IsBusy = true;
+        using var hold = TakePack();
+        if (hold is null) return;
+
         Error = null;
 
         try
@@ -1050,10 +1070,6 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         catch (Exception e)
         {
             Error = e.Message;
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 
@@ -1516,8 +1532,59 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         if (value is not null) CairnLog.Write($"error: {value}", Id);
     }
 
-    partial void OnIsBusyChanged(bool value)
+    /// <summary>
+    /// How many of the pack's holds this pane has right now — one at most, since the pack
+    /// has one holder; a count only so the release can be told from somebody else's.
+    /// </summary>
+    private int _holds;
+
+    /// <summary>
+    /// The pack, through <see cref="PackWork"/>, or null when something already has it. Every
+    /// command that changes the pack starts here and does nothing on null.
+    /// </summary>
+    private IDisposable? TakePack()
     {
+        var hold = _work.TryBegin(Id);
+        if (hold is null) return null;
+
+        _holds++;
+        return new Released(() =>
+        {
+            // Released while still counted, so RefreshWorkState can tell it was this pane's.
+            hold.Dispose();
+            _holds--;
+        });
+    }
+
+    private sealed class Released(Action release) : IDisposable
+    {
+        private Action? _release = release;
+
+        public void Dispose()
+        {
+            _release?.Invoke();
+            _release = null;
+        }
+    }
+
+    /// <summary>
+    /// A sync this pane wanted after an edit, refused because the pack was busy. Run when it
+    /// comes free — see <see cref="RefreshWorkState"/>.
+    /// </summary>
+    private bool _syncWhenFree;
+
+    /// <summary>
+    /// The pack was taken or let go — by this pane or by one it replaced. Called by
+    /// MainViewModel, which hears it from <see cref="PackWork"/>.
+    ///
+    /// Let go by a pane this one replaced means the files have moved under this one, so the
+    /// rows are read again; and an edit made while it was busy gets the sync it was refused.
+    /// </summary>
+    public void RefreshWorkState()
+    {
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(NotBusy));
+        OnPropertyChanged(nameof(IsWorking));
         OnPropertyChanged(nameof(CanLaunch));
         PlayCommand.NotifyCanExecuteChanged();
         CheckUpdatesCommand.NotifyCanExecuteChanged();
@@ -1531,6 +1598,20 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // told it had changed — so their buttons stayed pressable through another sync.
         ApplyPackUpdateCommand.NotifyCanExecuteChanged();
         PublishPackCommand.NotifyCanExecuteChanged();
+
+        foreach (var row in Mods) row.Busy = IsBusy;
+
+        if (IsBusy) return;
+
+        // Work this pane did reloads its own rows on the way out, as it always has. Work a
+        // pane it replaced did is news to this one.
+        if (_holds == 0) ReloadMods();
+
+        if (_syncWhenFree && !IsLaunching)
+        {
+            _syncWhenFree = false;
+            _ = SyncAfterEditAsync();
+        }
     }
 
     /// <summary>
@@ -1566,6 +1647,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
 
         foreach (var row in Arrange(rows)) Mods.Add(row);
+        foreach (var row in Mods) row.Busy = IsBusy;
 
         // The rows are new objects, so anything the old ones were carrying has to be put
         // back on them. What a check found is the pack's knowledge, not the row's.
@@ -2087,7 +2169,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        IsBusy = true;
+        Searching = true;
         SearchHits.Clear();
 
         try
@@ -2124,11 +2206,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            IsBusy = false;
+            Searching = false;
         }
     }
 
-    private bool CanSearch => !IsBusy && !string.IsNullOrWhiteSpace(SearchText);
+    private bool CanSearch => !IsBusy && !Searching && !string.IsNullOrWhiteSpace(SearchText);
 
     /// <summary>What the button beside the box will do with what is in it.</summary>
     public string SearchLabel => ModUrl.LooksLikeUrl(SearchText)
@@ -2377,9 +2459,17 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // A launch or an update is already going to sync and rebuild these rows, and two at
-        // once would race for the same directory and lockfile.
-        if (IsBusy || IsLaunching) return;
+        // Something else has the pack — a launch, an update, a sync a replaced pane started.
+        // Not dropped: what it settles against is the manifest as it was when it started,
+        // which this edit came after. RefreshWorkState runs this again once the pack is free —
+        // except behind a launch, which syncs on its way in and then has a game running on
+        // these files: the edit waits for the next Play, as it always has.
+        using var hold = TakePack();
+        if (hold is null)
+        {
+            if (!IsLaunching) _syncWhenFree = true;
+            return;
+        }
 
         _quietSync = true;
 
@@ -2432,7 +2522,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// still several seconds of network, and the status bar is where a second pair of eyes
     /// looks to see whether the app is doing something.
     /// </summary>
-    public bool IsWorking => IsBusy || CheckingUpdates;
+    public bool IsWorking => IsBusy || Searching || CheckingUpdates;
 
     /// <summary>Not while one is already running: pressing again would double the requests.</summary>
     private bool CanCheckUpdates => NotBusy && !CheckingUpdates;
@@ -2602,7 +2692,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     {
         if (modIds.Count == 0) return;
 
-        IsBusy = true;
+        // Refused while anything else has the pack — another row's Update included, which
+        // used to start a second whole-pack sync over the first.
+        var hold = TakePack();
+        if (hold is null) return;
+
         Error = null;
 
         try
@@ -2651,7 +2745,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            IsBusy = false;
+            hold.Dispose();
 
             // Rebuilds the rows, and puts back whatever is still on offer for them.
             ReloadMods();
@@ -2750,7 +2844,9 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        IsBusy = true;
+        using var hold = TakePack();
+        if (hold is null) return;
+
         Error = null;
 
         try
@@ -2778,9 +2874,6 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
             {
                 PublishStage = Lang.Get("share-syncing");
                 sync = await RunSyncAsync(quiet: true);
-
-                // RunSyncAsync clears IsBusy in its own finally, and publishing continues.
-                IsBusy = true;
             }
 
             // Before the plan, so the window and the document are of the pack as it will go
@@ -2851,7 +2944,6 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         finally
         {
             PublishStage = "";
-            IsBusy = false;
         }
     }
 
@@ -3151,6 +3243,11 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanLaunch))]
     private async Task Play()
     {
+        // From the sync to the process starting: everything Play writes — the lock, Mods,
+        // the pack's settings and mod config — is written while it holds the pack.
+        using var hold = TakePack();
+        if (hold is null) return;
+
         _runs.Begin(Id, Lang.Get("play-checking-game"));
 
         try
@@ -3779,10 +3876,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// Four callers: Play, which reports through the banner, and three that run it quietly
     /// after something else changed the manifest or needs the lock — taking an author's
     /// revision, adding or removing a mod, and publishing a pack whose lock does not cover
-    /// it. They all write the same Mods directory and lockfile, so two must never overlap.
-    /// IsBusy is what keeps them apart: set here for the whole run, it disables Play, Update
-    /// and the commands that edit the pack, and the mod-edit caller returns rather than
-    /// starting while it is set. A caller added here has to answer to it the same way.
+    /// it. They all write the same Mods directory and lockfile, so two must never overlap —
+    /// not with each other, and not with a sync a replaced pane for the same pack started.
+    ///
+    /// So the caller holds the pack, through <see cref="TakePack"/>, for the whole of what it
+    /// is doing rather than only this part of it: publishing reads the lock this writes,
+    /// and Play launches from it. Held here instead, it was let go between the sync and the
+    /// rest, and something else could start in the gap. A caller added here takes the pack
+    /// first, the same way.
     /// </summary>
     /// <param name="quiet">
     /// For a sync the user did not ask for. It still logs and still installs, but a failure
@@ -3792,7 +3893,8 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// </param>
     private async Task<SyncReport?> RunSyncAsync(bool quiet = false)
     {
-        IsBusy = true;
+        System.Diagnostics.Debug.Assert(_holds > 0, "RunSyncAsync without the pack held");
+
         if (!quiet) Error = null;
 
         try
@@ -3838,7 +3940,6 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            IsBusy = false;
             ReloadMods();
         }
     }

@@ -119,6 +119,7 @@ public partial class MainViewModel : ViewModelBase
 
         Runs = new RunningGames(_store, NoteFor);
         Runs.Changed += OnRunChanged;
+        Work.Changed += OnWorkChanged;
 
         // Before anything reads the library: an install renamed underneath a list already
         // built is one that vanishes from the pane it is shown in.
@@ -196,6 +197,12 @@ public partial class MainViewModel : ViewModelBase
     /// soon as another pack was clicked.
     /// </summary>
     public RunningGames Runs { get; }
+
+    /// <summary>
+    /// Which packs are being changed, held here for the same reason as <see cref="Runs"/>:
+    /// the work a pane starts outlives the pane. See <see cref="PackWork"/>.
+    /// </summary>
+    public PackWork Work { get; } = new();
 
     public GamesViewModel Games { get; }
 
@@ -686,6 +693,12 @@ public partial class MainViewModel : ViewModelBase
                 row.PlayingChanged(Runs.IsLaunching(row.Id), Runs.IsRunning(row.Id));
     }
 
+    private void OnWorkChanged(string packId)
+    {
+        if (Detail is { } detail && string.Equals(detail.Id, packId, StringComparison.OrdinalIgnoreCase))
+            detail.RefreshWorkState();
+    }
+
     partial void OnNewPackErrorChanged(string? value) => OnPropertyChanged(nameof(HasNewPackError));
 
     partial void OnNewPackNameChanged(string value)
@@ -746,7 +759,7 @@ public partial class MainViewModel : ViewModelBase
         CloseAnyPackForm();
 
         Detail = new PackDetailViewModel(
-            newValue.Manifest, _store, _moddb, _http, _library, _runtimes, Runs,
+            newValue.Manifest, _store, _moddb, _http, _library, _runtimes, Runs, Work,
             log: LogFor(newValue.Id),
             note: line => NoteFor(newValue.Id, line),
             // The sidebar row shows the same manifest the detail pane is editing.

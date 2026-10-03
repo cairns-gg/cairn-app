@@ -320,6 +320,16 @@ public partial class ModRowViewModel : ViewModelBase
     [RelayCommand]
     private void OpenPage() => _openPage?.Invoke(this);
 
-    [RelayCommand]
+    /// <summary>
+    /// Something is changing the pack, so this row's Update would start a second sync over
+    /// it. Pushed by the pane, as <see cref="Editable"/> is.
+    /// </summary>
+    [ObservableProperty] public partial bool Busy { get; set; }
+
+    partial void OnBusyChanged(bool value) => UpdateCommand.NotifyCanExecuteChanged();
+
+    [RelayCommand(CanExecute = nameof(CanUpdate))]
     private void Update() => _update?.Invoke(this);
+
+    private bool CanUpdate => !Busy;
 }

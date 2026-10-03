@@ -445,6 +445,13 @@ on running it.
 
 ## Smaller things
 
+- **One change to a pack at a time, wherever you click.** **0.9.9.** Pressing **Update** on two
+  mods in quick succession, or adding a mod and then clicking to another pack and back while
+  it downloaded, could start a second round of installing over the first — and the two could
+  each leave the pack's record of its mods half-written. Cairn now finishes one change to a
+  pack before it starts the next: the buttons wait while something is under way, including
+  after you click away and back, and an edit made in the meantime is installed once the pack
+  is free. Nothing to do.
 - **Publishing right after changing a mod's version shares what you meant.** **0.9.9.** If
   you set a mod to a different version and published before pressing Play, Cairn shared the
   pack asking for the new version alongside a record of the old one, so the people who took

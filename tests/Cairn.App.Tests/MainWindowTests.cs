@@ -1704,13 +1704,119 @@ public class MainWindowTests : IDisposable
         detail.PublishPackCommand.CanExecuteChanged += (_, _) => told.Add("publish");
         detail.PlayCommand.CanExecuteChanged += (_, _) => told.Add("play");
 
-        detail.IsBusy = true;
+        using var hold = vm.Work.TryBegin(detail.Id);
 
+        Assert.True(detail.IsBusy);
         Assert.Contains("update", told);
         Assert.Contains("publish", told);
         Assert.Contains("play", told);
         Assert.False(detail.ApplyPackUpdateCommand.CanExecute(null));
         Assert.False(detail.PublishPackCommand.CanExecute(null));
+    }
+
+    /// <summary>Holds every request until released, so work can be caught in flight.</summary>
+    private sealed class Held : HttpMessageHandler
+    {
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            await Release.Task;
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+    }
+
+    /// <summary>
+    /// The review's second route: work started on a pack, then a click away and back. The
+    /// busy flag lived on the pane, so the pane built on return believed nothing was running
+    /// and offered Play — a second sync over the first, both rewriting the same lock.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_pack_being_changed_is_still_busy_after_clicking_away_and_back()
+    {
+        var http = new Held();
+        var vm = new MainViewModel(http);
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+
+        var pack = vm.Packs.Single(p => p.Id == "vanilla-qol");   // installed game, one mod to fetch
+        vm.SelectedPack = pack;
+
+        var playing = vm.Detail!.PlayCommand.ExecuteAsync(null);   // stuck asking ModDB
+        Assert.True(vm.Detail.IsBusy);
+
+        vm.SelectedPack = vm.Packs.First(p => p.Id != pack.Id);
+        vm.SelectedPack = pack;
+        var returned = vm.Detail!;
+
+        Assert.True(returned.IsBusy);
+        Assert.False(returned.PlayCommand.CanExecute(null));
+        Assert.False(returned.UpdateAllCommand.CanExecute(null));
+
+        http.Release.SetResult();
+        await playing;
+        await WaitFor(() => !returned.IsBusy);
+
+        Assert.False(vm.Work.IsBusy(pack.Id));
+    }
+
+    /// <summary>
+    /// The review's first route: a row's Update while another sync has the pack. It started
+    /// a second whole-pack sync over the first; now the row cannot be pressed, and the
+    /// command refuses if it is reached anyway.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_rows_update_waits_for_whatever_has_the_pack()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+        var row = detail.Mods.First();
+
+        Assert.True(row.UpdateCommand.CanExecute(null));
+
+        using (vm.Work.TryBegin(detail.Id))
+        {
+            Assert.True(row.Busy);
+            Assert.False(row.UpdateCommand.CanExecute(null));
+
+            // And the second hold — another row's update, or a pane it replaced — is refused.
+            Assert.Null(vm.Work.TryBegin(detail.Id));
+        }
+
+        Assert.False(row.Busy);
+        Assert.True(row.UpdateCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// An edit made while something else has the pack still gets its sync, once the pack is
+    /// free — rather than being refused and left until the next Play.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task An_edit_made_while_the_pack_is_busy_is_synced_when_it_is_free()
+    {
+        var http = new OfflineHandler();
+        var (_, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        var detail = vm.Detail!;
+
+        var hold = vm.Work.TryBegin(detail.Id)!;
+
+        var row = detail.Mods.Single(r => r.ModId == "unchisel");
+        row.RequestRemoveCommand.Execute(null);
+        row.ConfirmRemoveCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Refused while held: no sync has said anything about the mod that is left.
+        static bool Synced(IEnumerable<string> log) => log.Any(l => l.Contains("glassview") && l.StartsWith("failed"));
+        Assert.False(Synced(detail.Log));
+
+        hold.Dispose();
+
+        // The sync it was refused, once the pack is free. Offline, so glassview fails — what
+        // matters is that a sync ran at all.
+        await WaitFor(() => Synced(detail.Log) && !detail.IsBusy);
+        Assert.DoesNotContain("unchisel", new PackStore(Path.Combine(_home, "packs")).Load("anego").Mods.Select(m => m.ModId));
     }
 
     [AvaloniaFact]
