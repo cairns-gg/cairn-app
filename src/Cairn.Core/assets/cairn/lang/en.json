@@ -662,6 +662,7 @@
   "bundle-no-pack-section": "This does not look like a shared pack — no 'pack' section.",
   "bundle-newer-format": "This pack was exported by a newer Cairn (format {0}).",
   "bundle-invalid": "The shared pack is not valid:",
+  "bundle-lock-duplicate": "The shared pack's lockfile lists {0} more than once.",
   "pack-update-has-no-pack": "The update has no pack.",
   "pack-id-invalid": "'{0}' is not a valid pack id. Use letters, digits, '-' and '_' only.",
   "pack-already-exists": "Pack '{0}' already exists.",

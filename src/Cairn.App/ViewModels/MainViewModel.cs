@@ -1175,41 +1175,36 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     public async Task OfferPackFileAsync(string path)
     {
-        PackBundle bundle;
+        // One boundary around all of it — reading, the preview, the dialog and the import —
+        // as the import from a link has. This is reached from an operating-system event, in
+        // an async callback nothing awaits, so anything that escaped here was an unhandled
+        // exception on the UI thread. A malformed file that parsed, and then broke building
+        // the preview, was exactly that.
         try
         {
-            bundle = PackBundle.Parse(await File.ReadAllTextAsync(path));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            ShowImportError(e.Message, path);
-            return;
-        }
+            var bundle = PackBundle.Parse(await File.ReadAllTextAsync(path));
 
-        // With no window to ask in — a test, mostly — the pane, with the path to import.
-        if (ConfirmImport is null)
-        {
-            OpenPackForm(PackForm.Import);
-            ImportAsId = "";
-            ImportError = null;
-            ImportText = path;
-            return;
-        }
+            // With no window to ask in — a test, mostly — the pane, with the path to import.
+            if (ConfirmImport is null)
+            {
+                OpenPackForm(PackForm.Import);
+                ImportAsId = "";
+                ImportError = null;
+                ImportText = path;
+                return;
+            }
 
-        // A published document's own address, as an import from a typed path shows it; a
-        // file nobody published, by its name.
-        var offer = new ImportViewModel(
-            bundle, bundle.CanonicalUrl ?? path, id => _store.Exists(id), fetched: false);
+            // A published document's own address, as an import from a typed path shows it; a
+            // file nobody published, by its name.
+            var offer = new ImportViewModel(
+                bundle, bundle.CanonicalUrl ?? path, id => _store.Exists(id), fetched: false);
 
-        if (!await ConfirmImport(offer)) return;
+            if (!await ConfirmImport(offer)) return;
 
-        try
-        {
             Added(_store.Import(
                 bundle, PackId.FromOrFallback(offer.AsId), sourceUrl: null, intent: offer.Intent));
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException
-                                      or InvalidDataException or InvalidOperationException)
+        catch (Exception e)
         {
             ShowImportError(e.Message, path);
         }

@@ -758,6 +758,7 @@
   "bundle-no-pack-section": "Isto não parece um pacote compartilhado — não tem seção «pack».",
   "bundle-newer-format": "Este pacote foi exportado por um Cairn mais novo (formato {0}).",
   "bundle-invalid": "O pacote compartilhado não é válido:",
+  "bundle-lock-duplicate": "O lockfile do pacote compartilhado lista {0} mais de uma vez.",
   "bundle-has-no-pack": "O arquivo não traz nenhum pacote.",
 
   "dotnet-no-index": "Não foi possível ler o índice de lançamentos do .NET.",

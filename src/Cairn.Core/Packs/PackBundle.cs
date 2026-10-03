@@ -128,6 +128,16 @@ public sealed class PackBundle
         if (problems.Count > 0)
             throw new InvalidDataException(Lang.Get("bundle-invalid") + "\n  " + string.Join("\n  ", problems));
 
+        // One entry per mod. A lock is what was installed, and a mod installed twice is not
+        // a thing a lock can describe — a document saying so was written by hand or by
+        // something broken, and everything downstream that keys entries by mod id (the
+        // import preview, the merge, sync's own lookups) would otherwise meet it as an
+        // exception rather than as a pack it could not use.
+        if (bundle.Lock?.Mods
+                .GroupBy(m => m.ModId, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(g => g.Count() > 1) is { } twice)
+            throw new InvalidDataException(Lang.Get("bundle-lock-duplicate", twice.Key));
+
         // Not ours to act on, whoever wrote it — see PackLock.Retired.
         if (bundle.Lock is not null) bundle.Lock.Retired = null;
 

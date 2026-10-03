@@ -178,6 +178,23 @@ public class PackBundleTests : IDisposable
     public void Junk_is_rejected_with_an_explanation(string json)
         => Assert.Throws<InvalidDataException>(() => PackBundle.Parse(json));
 
+    /// <summary>
+    /// The review's file: a lock naming one mod twice. It parsed, and then everything that
+    /// keys a lock by mod id — the import preview first — threw instead of refusing it.
+    /// </summary>
+    [Fact]
+    public void A_lock_naming_a_mod_twice_is_refused_at_the_door()
+    {
+        var json = """
+            {"pack":{"id":"review","name":"Review","gameVersion":"1.22.5","mods":[]},
+             "lock":{"gameVersion":"1.22.5","mods":[{"modid":"glassview","version":"1.0.0"},
+                                                    {"modid":"GlassView","version":"1.0.0"}]}}
+            """;
+
+        var e = Assert.Throws<InvalidDataException>(() => PackBundle.Parse(json));
+        Assert.Contains("glassview", e.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void A_bundle_from_a_newer_Cairn_is_refused_rather_than_half_understood()
     {

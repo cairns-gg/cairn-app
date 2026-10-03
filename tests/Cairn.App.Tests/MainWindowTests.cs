@@ -1940,6 +1940,46 @@ public class MainWindowTests : IDisposable
         Assert.Equal("sent-to-me", vm.SelectedPack?.Id);
     }
 
+    /// <summary>
+    /// The review's reproduction: a file that parsed and then broke building the preview,
+    /// outside every catch — reached from an OS event nothing awaits, so an unhandled
+    /// exception on the UI thread. Now refused when read, and said in the pane.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_pack_file_with_a_broken_lock_is_refused_and_never_crashes()
+    {
+        var path = Path.Combine(_home, "review.cairn");
+        File.WriteAllText(path, """
+            {"pack":{"id":"review","name":"Review","gameVersion":"1.22.5","mods":[]},
+             "lock":{"gameVersion":"1.22.5","mods":[{"modid":"glassview","version":"1.0.0"},
+                                                    {"modid":"glassview","version":"1.0.0"}]}}
+            """);
+
+        var (_, vm) = Show();
+        var asked = false;
+        vm.ConfirmImport = _ => { asked = true; return Task.FromResult(false); };
+
+        await vm.OfferPackFileAsync(path);
+
+        Assert.False(asked);
+        Assert.True(vm.ShowImport);
+        Assert.Contains("glassview", vm.ImportError);
+    }
+
+    /// <summary>Whatever else goes wrong in there — the dialog itself, here — stays inside it.</summary>
+    [AvaloniaFact]
+    public async Task Nothing_offering_a_pack_file_throws_escapes_it()
+    {
+        var path = SentPack();
+        var (_, vm) = Show();
+        vm.ConfirmImport = _ => throw new InvalidOperationException("the dialog fell over");
+
+        await vm.OfferPackFileAsync(path);
+
+        Assert.Equal("the dialog fell over", vm.ImportError);
+        Assert.DoesNotContain(vm.Packs, p => p.Id == "sent-to-me");
+    }
+
     [AvaloniaFact]
     public async Task A_pack_file_that_cannot_be_read_says_why_in_the_import_pane()
     {
