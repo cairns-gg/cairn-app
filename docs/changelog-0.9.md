@@ -1,4 +1,4 @@
-# What's new in Cairn 0.9.10
+# What's new in Cairn 0.9.11
 
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
@@ -445,11 +445,11 @@ on running it.
 
 ## Smaller things
 
-- **Copy a pack's link.** **0.9.10.** A published pack's address has been shown under its name
+- **Copy a pack's link.** **0.9.11.** A published pack's address has been shown under its name
   for a while, but it could not be selected, so passing it on meant retyping it or opening the
   page and copying it from the browser. Now clicking the address copies it, and it says
   **copied** beside it for a moment. Nothing to do.
-- **Export copies the pack too.** **0.9.10.** Pressing **Export…** still writes the `.cairn`
+- **Export copies the pack too.** **0.9.11.** Pressing **Export…** still writes the `.cairn`
   file and shows what is in it, and now also puts it on the clipboard, so you can paste it
   straight into a message without selecting it first. Nothing to do.
 - **Double-click a `.cairn` file to open it in Cairn.** **0.9.10.** A pack file you were
