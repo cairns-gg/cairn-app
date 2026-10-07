@@ -449,6 +449,9 @@ on running it.
   for a while, but it could not be selected, so passing it on meant retyping it or opening the
   page and copying it from the browser. Now clicking the address copies it, and it says
   **copied** beside it for a moment. Nothing to do.
+- **Export copies the pack too.** **0.9.10.** Pressing **Export…** still writes the `.cairn`
+  file and shows what is in it, and now also puts it on the clipboard, so you can paste it
+  straight into a message without selecting it first. Nothing to do.
 - **Double-click a `.cairn` file to open it in Cairn.** **0.9.10.** A pack file you were
   sent now opens in Cairn, which shows you what it is — its name, game version and mods —
   and adds it only if you say so. On Windows and Linux, Cairn tells your

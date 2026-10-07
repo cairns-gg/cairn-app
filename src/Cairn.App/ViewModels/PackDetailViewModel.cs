@@ -3487,9 +3487,14 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     /// author — so a file made from somebody else's pack arrives at the next person as an
     /// unowned one they may publish freely. Handing out the link keeps it attributed;
     /// handing out a file launders it.
+    ///
+    /// The JSON also goes on the clipboard, because pasting it into chat is the commonest
+    /// way it travels and the box below the button made that a select-all and a copy. The
+    /// file is still written first: it is what a double-click opens, and a clipboard that
+    /// refuses should cost the copy, not the export.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanExport))]
-    private void Export()
+    private async Task Export()
     {
         try
         {
@@ -3506,8 +3511,40 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         catch (Exception e)
         {
             Error = e.Message;
+            return;
         }
+
+        if (CopyToClipboard is null)
+        {
+            _log(Lang.Get("log-no-clipboard"));
+            return;
+        }
+
+        try
+        {
+            await CopyToClipboard(ExportedJson);
+        }
+        catch (Exception e)
+        {
+            _log(Lang.Get("log-export-copy-failed", e.Message));
+            return;
+        }
+
+        // Timed for the same reason as the link's: a clipboard gives no feedback, and a
+        // claim left standing outlives the copy it describes.
+        var generation = ++_exportCopiedGeneration;
+        ExportCopied = true;
+        await Task.Delay(ExportCopiedFor);
+        if (generation == _exportCopiedGeneration)
+            ExportCopied = false;
     }
+
+    private int _exportCopiedGeneration;
+
+    /// <summary>How long "copied" shows beside the export. Settable so tests need not wait.</summary>
+    public TimeSpan ExportCopiedFor { get; set; } = TimeSpan.FromSeconds(2);
+
+    [ObservableProperty] public partial bool ExportCopied { get; set; }
 
     /// <summary>Hands off to the shared confirmation rather than deleting outright.</summary>
     [RelayCommand(CanExecute = nameof(NotBusy))]

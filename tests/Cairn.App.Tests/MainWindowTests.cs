@@ -2567,6 +2567,41 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Exporting_a_pack_also_copies_it()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+
+        string? copied = null;
+        vm.Detail!.CopyToClipboard = text => { copied = text; return Task.CompletedTask; };
+        vm.Detail.ExportCopiedFor = TimeSpan.FromMilliseconds(50);
+
+        var export = vm.Detail.ExportCommand.ExecuteAsync(null);
+
+        // What is pasted is what was written, so a paste and the file import the same.
+        Assert.Equal(File.ReadAllText(vm.Detail.ExportedPath!), copied);
+        Assert.True(vm.Detail.ExportCopied);
+
+        await export;
+        Assert.False(vm.Detail.ExportCopied);
+    }
+
+    [AvaloniaFact]
+    public async Task A_clipboard_that_refuses_does_not_cost_the_export()
+    {
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "anego");
+        vm.Detail!.CopyToClipboard = _ => throw new InvalidOperationException("busy");
+
+        await vm.Detail.ExportCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.Detail.Error);
+        Assert.True(File.Exists(vm.Detail.ExportedPath!));
+        Assert.False(vm.Detail.ExportCopied);
+        Assert.Contains(vm.Detail.Log, l => l.Contains("busy"));
+    }
+
+    [AvaloniaFact]
     public void An_exported_pack_can_be_imported_back_under_a_new_id()
     {
         var (_, vm) = Show();

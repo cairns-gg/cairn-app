@@ -1032,6 +1032,9 @@
                                     <Button Content="{l:Tr packsettings-export}" Command="{Binding Detail.ExportCommand}" />
                                     <CheckBox Content="{l:Tr packsettings-include-lock}"
                                               IsChecked="{Binding Detail.ExportIncludesLock}" />
+                                    <TextBlock Text="{l:Tr packsettings-export-copied}" FontSize="11" Opacity="0.7"
+                                               VerticalAlignment="Center"
+                                               IsVisible="{Binding Detail.ExportCopied, FallbackValue=False}" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding Detail.ExportedPath}"
                                            IsVisible="{Binding Detail.HasExported}"
