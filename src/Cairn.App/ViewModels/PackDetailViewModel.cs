@@ -2814,6 +2814,53 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// Puts the pack's link on the clipboard, scheme and all: the line beside it drops the
+    /// scheme to be read, but a pasted link wants one so chat clients make it clickable.
+    /// Gated on <see cref="HasShareUrl"/> rather than on there being a URL, for the reasons
+    /// given there — a followed or withdrawn pack's address is not this person's to hand out.
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyShareLink()
+    {
+        if (!HasShareUrl || Share.Url is null)
+            return;
+
+        if (CopyToClipboard is null)
+        {
+            _log(Lang.Get("log-no-clipboard"));
+            return;
+        }
+
+        try
+        {
+            await CopyToClipboard(Share.Url);
+        }
+        catch (Exception e)
+        {
+            _log(Lang.Get("log-share-link-failed", e.Message));
+            return;
+        }
+
+        // Said beside the link rather than only in the log, which is on another tab: a
+        // clipboard gives no feedback of its own, and the link is where the eye is.
+        var generation = ++_shareLinkCopiedGeneration;
+        ShareLinkCopied = true;
+        await Task.Delay(ShareLinkCopiedFor);
+
+        // A second click restarts the clock rather than having the first one's timer cut
+        // the second's acknowledgement short.
+        if (generation == _shareLinkCopiedGeneration)
+            ShareLinkCopied = false;
+    }
+
+    private int _shareLinkCopiedGeneration;
+
+    /// <summary>How long "copied" shows beside the link. Settable so tests need not wait.</summary>
+    public TimeSpan ShareLinkCopiedFor { get; set; } = TimeSpan.FromSeconds(2);
+
+    [ObservableProperty] public partial bool ShareLinkCopied { get; set; }
+
+    /// <summary>
     /// The last prepared publish. Nothing has been sent while it is set, which is the
     /// point of the step — the same arrangement as VersionChange.
     /// </summary>

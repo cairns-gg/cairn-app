@@ -225,8 +225,16 @@
                          copy repeatedly, which leaves the button free to be an action. -->
                     <StackPanel Orientation="Horizontal" Spacing="8"
                                 IsVisible="{Binding Detail.HasShareUrl, FallbackValue=False}">
-                        <TextBlock Text="{Binding Detail.ShareUrlLine}" Opacity="0.7" FontSize="12"
-                                   VerticalAlignment="Center" />
+                        <!-- Clicking the address copies it, since copying is what people
+                             want it for; Open beside it is for visiting. -->
+                        <Button Classes="link" VerticalAlignment="Center"
+                                ToolTip.Tip="{l:Tr pack-copy-link-tip}"
+                                Command="{Binding Detail.CopyShareLinkCommand}">
+                            <TextBlock Text="{Binding Detail.ShareUrlLine}" Opacity="0.7" FontSize="12" />
+                        </Button>
+                        <TextBlock Text="{l:Tr pack-link-copied}" FontSize="11" Opacity="0.7"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding Detail.ShareLinkCopied, FallbackValue=False}" />
 
                         <!-- Unlisted and public look identical from outside, and which one
                              this is decides whether passing the link on is sharing it or

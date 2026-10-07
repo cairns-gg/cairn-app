@@ -157,6 +157,26 @@
         <Setter Property="Background" Value="#7E3406" />
     </Style>
 
+    <!-- Text that does something when clicked, without the weight of a button: no fill or
+         border, and an underline on hover so it still says it can be clicked. -->
+    <Style Selector="Button.link">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.link /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.link:pointerover TextBlock">
+        <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
+
     <Style Selector="TextBox">
         <Setter Property="Background" Value="{DynamicResource VsSunkenBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource VsInkBrush}" />

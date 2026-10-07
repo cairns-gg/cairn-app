@@ -256,6 +256,66 @@ public class MainWindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task A_published_packs_link_can_be_copied_whole()
+    {
+        WritePack("shared", "Shared", "1.22.5", null, ["glassview"]);
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "shared", "cairns.json"),
+            """
+            {"role":"Author","url":"https://cairns.gg/dizzyd/anego","revision":4,
+             "published":{"fingerprint":"abc","visibility":"public"}}
+            """);
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "shared");
+
+        string? copied = null;
+        vm.Detail!.CopyToClipboard = text => { copied = text; return Task.CompletedTask; };
+        vm.Detail.ShareLinkCopiedFor = TimeSpan.FromMilliseconds(50);
+
+        // Through the link on screen rather than the command, because a stale binding path
+        // would otherwise pass here and do nothing in the window.
+        var link = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Content is TextBlock { Text: "cairns.gg/dizzyd/anego" });
+        Assert.True(link.IsEffectivelyVisible);
+        Assert.DoesNotContain("copied", VisibleText(window));
+
+        link.Command!.Execute(null);
+
+        // The line drops the scheme to be read; the clipboard keeps it so a paste into
+        // chat comes out as a link rather than as text.
+        Assert.Equal("https://cairns.gg/dizzyd/anego", copied);
+        Assert.Contains("copied", VisibleText(window));
+
+        // And goes again, so it does not sit there claiming a copy long since overwritten.
+        await vm.Detail.CopyShareLinkCommand.ExecutionTask!;
+        Assert.DoesNotContain("copied", VisibleText(window));
+    }
+
+    [AvaloniaFact]
+    public async Task A_followed_packs_link_is_not_copied()
+    {
+        WritePack("followed", "Followed", "1.22.5", null, ["glassview"]);
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "followed", "cairns.json"),
+            """
+            {"role":"Follower","url":"https://cairns.gg/dizzyd/anego","revision":4,"following":true}
+            """);
+
+        var (_, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "followed");
+
+        string? copied = null;
+        vm.Detail!.CopyToClipboard = text => { copied = text; return Task.CompletedTask; };
+
+        // The button is hidden along with the line, but commands are reachable regardless
+        // of what is drawn.
+        await vm.Detail.CopyShareLinkCommand.ExecuteAsync(null);
+
+        Assert.Null(copied);
+    }
+
+    [AvaloniaFact]
     public void A_dependency_is_shown_under_the_mod_that_requires_it()
     {
         WritePack("deps", "Deps", "1.22.5", null, ["carryon"]);

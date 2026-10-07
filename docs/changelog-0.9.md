@@ -445,6 +445,10 @@ on running it.
 
 ## Smaller things
 
+- **Copy a pack's link.** **0.9.10.** A published pack's address has been shown under its name
+  for a while, but it could not be selected, so passing it on meant retyping it or opening the
+  page and copying it from the browser. Now clicking the address copies it, and it says
+  **copied** beside it for a moment. Nothing to do.
 - **Double-click a `.cairn` file to open it in Cairn.** **0.9.10.** A pack file you were
   sent now opens in Cairn, which shows you what it is — its name, game version and mods —
   and adds it only if you say so. On Windows and Linux, Cairn tells your
