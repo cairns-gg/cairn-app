@@ -883,6 +883,7 @@ public partial class MainViewModel : ViewModelBase
 
         // Same read-through arrangement as CopyToClipboard above, and for the same reason.
         Detail.Confirm = c => Confirm?.Invoke(c) ?? Task.FromResult(false);
+        Detail.ChooseRevision = r => ChooseRevision?.Invoke(r) ?? Task.FromResult(false);
         Detail.RunOptimumBuild = b => RunOptimumBuild?.Invoke(b) ?? Task.FromResult(false);
         Detail.PickClientFolder = () => PickClientFolder?.Invoke() ?? Task.FromResult<string?>(null);
         Detail.ChoosePinnedVersion = c => ChoosePinnedVersion?.Invoke(c) ?? Task.FromResult(false);
@@ -1505,6 +1506,9 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>Opens the window that names where a mod is fetched from. See ModUrlViewModel.</summary>
     public Func<ModUrlViewModel, Task<bool>>? ChooseModUrl { get; set; }
+
+    /// <summary>Opens a pack's earlier revisions. Read through by the detail pane, like Confirm.</summary>
+    public Func<RevisionsViewModel, Task<bool>>? ChooseRevision { get; set; }
 
     /// <summary>Set by the view; same arrangement as ConfirmVersionChange above.</summary>
     public Func<ShareViewModel, Task<bool>>? ConfirmPublish

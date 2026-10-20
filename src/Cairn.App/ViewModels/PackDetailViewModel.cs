@@ -1009,26 +1009,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             var merged = _store.ApplyUpdate(Id, plan, bundle);
 
-            // Copied into the instance the pane is bound to rather than swapped for the
-            // new one: every row, header and command already points at this object.
-            //
-            // Every field, for the reason PackUpdatePlan.Merge gives about its own list. One
-            // left out here is worse than one left out there: the merge reached disk, so this
-            // object is the only thing still holding the old value — and Persist writes it
-            // whole on the next ordinary edit. Reorder a mod after taking an update and the
-            // author's keybinds and mod settings were quietly replaced by the ones they had
-            // just been updated away from.
-            Manifest.Name = merged.Name;
-            Manifest.Description = merged.Description;
-            Manifest.GameVersion = merged.GameVersion;
-            Manifest.Connect = merged.Connect;
-            Manifest.Keybinds = merged.Keybinds;
-            Manifest.ModConfig = merged.ModConfig;
-            Manifest.Mods.Clear();
-            Manifest.Mods.AddRange(merged.Mods);
-
             PackUpdate = null;
-            _releaseCache.Clear();      // the game version may have moved under every mod
 
             // A reset leaves this copy matching the author's, so the guard goes back up on
             // its own: the thing it exists to protect is no longer at stake.
@@ -1047,20 +1028,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
                 (false, null) => Lang.Get("pack-updated-from-source"),
             });
 
-            ReloadMods();
-            ReloadShare();
-            RefreshGameState();
-            RefreshLock();
-
-            // Both tabs read the manifest that just changed under them, and a tick showing
-            // the pack's old answer is one somebody would correct — writing the old answer
-            // back as though they had chosen it. Hotkeys only if that tab has already paid
-            // for its scan; forced, because the rows are stale rather than absent.
-            LoadModConfig(adopting: true);
-            if (_hotkeysLoaded) _ = LoadHotkeysAsync(force: true);
-
-            OnPropertyChanged(nameof(Title));
-            _onChanged();
+            AdoptManifest(merged);
 
             // The manifest changed, so what is installed no longer matches it. Quiet,
             // because taking the update worked and Play will report properly if this
@@ -1071,6 +1039,49 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         {
             Error = e.Message;
         }
+    }
+
+    /// <summary>
+    /// Brings the pane into line with a manifest Core has just rewritten on disk — an
+    /// author's update taken, or an earlier revision restored.
+    ///
+    /// Copied into the instance the pane is bound to rather than swapped for the new one:
+    /// every row, header and command already points at this object.
+    ///
+    /// Every field, for the reason PackUpdatePlan.Merge gives about its own list. One left
+    /// out here is worse than one left out there: the new manifest reached disk, so this
+    /// object is the only thing still holding the old value — and Persist writes it whole
+    /// on the next ordinary edit. Reorder a mod after taking an update and the author's
+    /// keybinds and mod settings were quietly replaced by the ones they had just been
+    /// updated away from.
+    /// </summary>
+    private void AdoptManifest(PackManifest replaced)
+    {
+        Manifest.Name = replaced.Name;
+        Manifest.Description = replaced.Description;
+        Manifest.GameVersion = replaced.GameVersion;
+        Manifest.Connect = replaced.Connect;
+        Manifest.Keybinds = replaced.Keybinds;
+        Manifest.ModConfig = replaced.ModConfig;
+        Manifest.Mods.Clear();
+        Manifest.Mods.AddRange(replaced.Mods);
+
+        _releaseCache.Clear();      // the game version may have moved under every mod
+
+        ReloadMods();
+        ReloadShare();
+        RefreshGameState();
+        RefreshLock();
+
+        // Both tabs read the manifest that just changed under them, and a tick showing the
+        // pack's old answer is one somebody would correct — writing the old answer back as
+        // though they had chosen it. Hotkeys only if that tab has already paid for its scan;
+        // forced, because the rows are stale rather than absent.
+        LoadModConfig(adopting: true);
+        if (_hotkeysLoaded) _ = LoadHotkeysAsync(force: true);
+
+        OnPropertyChanged(nameof(Title));
+        _onChanged();
     }
 
     public bool IsWithdrawn => Share.Status == ShareStatus.Withdrawn;
@@ -1598,6 +1609,7 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
         // told it had changed — so their buttons stayed pressable through another sync.
         ApplyPackUpdateCommand.NotifyCanExecuteChanged();
         PublishPackCommand.NotifyCanExecuteChanged();
+        BrowseRevisionsCommand.NotifyCanExecuteChanged();
 
         foreach (var row in Mods) row.Busy = IsBusy;
 
@@ -2983,6 +2995,84 @@ public partial class PackDetailViewModel : ViewModelBase, IDisposable
 
             _log(Lang.Get("share-published", result.Url, result.Revision, result.Visibility));
             ReloadShare();
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+        }
+        finally
+        {
+            PublishStage = "";
+        }
+    }
+
+    /// <summary>The last revisions window opened. Inspected by tests, like <see cref="Publish"/>.</summary>
+    [ObservableProperty] public partial RevisionsViewModel? Revisions { get; set; }
+
+    /// <summary>Shows the revisions and returns whether to restore the chosen one. Supplied by the view.</summary>
+    public Func<RevisionsViewModel, Task<bool>>? ChooseRevision { get; set; }
+
+    /// <summary>
+    /// Lists what the site kept of this pack, and puts the chosen revision back into it.
+    ///
+    /// Back into this copy only. The pack then reads as having changes to publish, and is
+    /// sent with Publish changes like any other edit — after it has been played, which is
+    /// the step somebody restoring usually skipped the first time. Publishing the old
+    /// document straight back up would have been quicker and would have left this copy on
+    /// the broken set, offering to publish it again.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(NotBusy))]
+    private async Task BrowseRevisions()
+    {
+        // Core refuses the restore for any other pack. Asked here too so the refusal comes
+        // before a sign-in rather than after one.
+        if (_store.LoadLink(Id) is not { OwnsUrl: true } link)
+        {
+            Error = Lang.Get("restore-not-published", Id);
+            return;
+        }
+
+        using var hold = TakePack();
+        if (hold is null) return;
+
+        Error = null;
+
+        try
+        {
+            var session = await SignInAsync();
+            if (session is null) return;
+
+            PublishStage = Lang.Get("revisions-loading");
+
+            var client = new CairnsClient(_http, session.Server);
+            var history = await client.ListRevisionsAsync(session, link.Url);
+
+            // Cleared here as well as below: the window is about to open in front of the
+            // banner, and "asking the site…" would sit behind it for as long as it is open.
+            PublishStage = "";
+
+            Revisions = new RevisionsViewModel(Title, history, link.Revision, async revision =>
+                {
+                    var bundle = await client.FetchRevisionAsync(session, link.Url, revision);
+                    return (bundle, RevisionPreview.Of(_store, Id, revision, bundle));
+                },
+                _packData.Worlds(Id), OpenDataFolder);
+
+            if (ChooseRevision is null || !await ChooseRevision(Revisions)) return;
+            if (Revisions is not { Chosen: { } chosen, Selected: { } selected }) return;
+
+            var restored = _store.RestoreRevision(Id, chosen);
+            AdoptManifest(restored.Manifest);
+
+            _log(Lang.Get("restore-done", selected.Revision, Id));
+
+            // A setting left at its broken value is one the next publish sends again, so it
+            // is said rather than left for the Mod config tab to show.
+            foreach (var setting in restored.NotWritten) _log(setting.Describe());
+
+            // As after taking an update: what is installed no longer matches, and Play will
+            // say so properly if this cannot.
+            await RunSyncAsync(quiet: true);
         }
         catch (Exception e)
         {

@@ -249,14 +249,32 @@
 
                         <Button Content="{l:Tr pack-open-link}" Padding="8,1" FontSize="11"
                                 Command="{Binding Detail.OpenSharePageCommand}" />
+
+                        <!-- Beside the address because that is what it is the history of.
+                             Rarely wanted, so as quiet as Open rather than anywhere near
+                             Share. -->
+                        <Button Content="{l:Tr pack-revisions}" Padding="8,1" FontSize="11"
+                                ToolTip.Tip="{l:Tr pack-revisions-tip}"
+                                Command="{Binding Detail.BrowseRevisionsCommand}" />
                     </StackPanel>
 
                     <!-- Where the URL line would be. The address still answers, with a
                          tombstone, so saying nothing would leave the pack looking as if it
                          had never been shared at all. -->
-                    <TextBlock Text="{Binding Detail.WithdrawnLine}" Opacity="0.7" FontSize="12"
-                               IsVisible="{Binding Detail.IsWithdrawn, FallbackValue=False}"
-                               TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" />
+                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                IsVisible="{Binding Detail.IsWithdrawn, FallbackValue=False}">
+                        <TextBlock Text="{Binding Detail.WithdrawnLine}" Opacity="0.7" FontSize="12"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap" MaxWidth="560" />
+
+                        <!-- A withdrawn pack's history is still its author's, and putting back
+                             a revision from before the one that got it withdrawn is a
+                             reasonable way to come back. -->
+                        <Button Content="{l:Tr pack-revisions}" Padding="8,1" FontSize="11"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="{l:Tr pack-revisions-tip}"
+                                Command="{Binding Detail.BrowseRevisionsCommand}" />
+                    </StackPanel>
 
                     <TextBlock Text="{Binding Detail.FollowingLine}" Opacity="0.7" FontSize="12"
                                IsVisible="{Binding Detail.IsFollowing, FallbackValue=False}" />

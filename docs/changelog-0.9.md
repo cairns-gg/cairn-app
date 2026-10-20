@@ -3,6 +3,29 @@
 Everything since the 0.8 series. Nothing here needs anything from you unless it says so — see
 **Upgrading** at the end.
 
+## Put back a pack you published before
+
+**0.9.12.** If you publish your pack and then find the new set is broken, you can now go back
+to an earlier one. Next to your pack's address there's a new **Earlier revisions…** button. It
+lists every revision of the pack that cairns.gg kept, and when you pick one it tells you, mod
+by mod, what would change: which mods come back, which are taken out, and which move to a
+different version.
+
+**Restoring changes your copy, not the site.** Your pack goes back to that revision's mods,
+settings and hotkeys, and then shows **Publish changes** as usual. Play it first to make sure
+it's the set you wanted, then publish it: it goes up as the newest revision, and everyone
+following the pack gets it as an ordinary update.
+
+**Back up your worlds first.** Restoring doesn't touch your worlds, but the next time you
+play, they open with the restored mods. A world played with a mod that's now gone, or now
+older, can lose that mod's blocks, items and creatures for good, or stop loading. The window
+says this in red right above the Restore button, names your worlds, and has a button that
+opens the pack's folder so you can copy them somewhere safe. If you kept a backup from before
+the bad publish, copy it back into the pack's own data folder.
+
+Only you can see your pack's history, and only for packs you published from Cairn. Revisions
+published before cairns.gg began keeping history aren't in the list. Nothing to do.
+
 ## A mod ModDB stops showing, carried on by its download link
 
 **0.9.9.** A mod can disappear from ModDB without its files going anywhere — unpublished by its

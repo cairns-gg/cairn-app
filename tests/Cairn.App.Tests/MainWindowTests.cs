@@ -4898,6 +4898,164 @@ public class MainWindowTests : IDisposable
         Assert.Equal(before, vm.Packs.Count);
     }
 
+    // ---- earlier revisions ----
+
+    private PackStore PublishedMine()
+    {
+        WritePack("mine", "Mine", "1.22.5", null, ["glassview", "carryon"]);
+
+        var store = new PackStore(Path.Combine(_home, "packs"));
+        store.SaveLink("mine", new PackLink
+        {
+            Role = PackRole.Author,
+            Url = "https://cairns.gg/dizzyd/mine",
+            Revision = 6,
+            Published = new PublishRecord
+            {
+                Connect = "stripped",
+                Fingerprint = PackLink.Fingerprint(store.PublishedDocument("mine", stripConnect: true)),
+            },
+        });
+
+        new CairnsSession { Server = "https://cairns.gg", Token = "tok", Username = "dizzyd" }.Save();
+        return store;
+    }
+
+    private static OfflineHandler ServingHistory()
+    {
+        var http = new OfflineHandler();
+        http.ServeAlways("/api/packs/dizzyd/mine/revisions", """
+            {"current":6,"archived":true,"revisions":[
+              {"revision":6,"publishedAt":"2026-10-17T14:02:00.0000000+00:00"},
+              {"revision":5,"publishedAt":"2026-10-10T09:00:00.0000000+00:00"}]}
+            """);
+        http.ServeAlways("/api/packs/dizzyd/mine/revisions/5", """
+            {"formatVersion":1,
+             "pack":{"id":"mine","name":"Mine","gameVersion":"1.22.5","mods":[{"modid":"glassview"}]},
+             "lock":{"gameVersion":"1.22.5","mods":[{"modid":"glassview","version":"1.2.0","sha256":"aa"}]},
+             "publishedBy":"dizzyd","canonicalUrl":"https://cairns.gg/dizzyd/mine","revision":5}
+            """);
+        return http;
+    }
+
+    [AvaloniaFact]
+    public async Task An_earlier_revision_is_put_back_and_left_to_be_published()
+    {
+        var store = PublishedMine();
+        var http = ServingHistory();
+
+        var (window, vm) = Show(http);
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+        var detail = vm.Detail!;
+
+        // Beside the address it is the history of, and bound to the command that opens it.
+        var button = Buttons(window)["Earlier revisions…"];
+        Assert.True(button.IsEffectivelyVisible);
+        Assert.Same(detail.BrowseRevisionsCommand, button.Command);
+
+        RevisionsViewModel? shown = null;
+        detail.ChooseRevision = async revisions =>
+        {
+            shown = revisions;
+            await revisions.Loading;
+            return revisions.CanRestore;
+        };
+
+        await detail.BrowseRevisionsCommand.ExecuteAsync(null);
+
+        // Opened on the one before what followers have now, already fetched, saying which
+        // mod moves — the question somebody here is asking.
+        Assert.NotNull(shown);
+        Assert.Equal(5, shown!.Selected!.Revision);
+        Assert.Equal("what followers have now", shown.Choices[0].Note);
+        Assert.Contains(shown.Changes, c => c.ModId == "carryon");
+
+        // Restored into this copy, and on screen as such.
+        Assert.Equal(["glassview"], detail.Manifest.Mods.Select(m => m.ModId));
+        Assert.Equal(["glassview"], store.Load("mine").Mods.Select(m => m.ModId));
+
+        // And nothing sent: the site still has revision 6, and the pack says it has
+        // something to publish rather than having published it.
+        Assert.Equal(ShareStatus.Pending, detail.Share.Status);
+        Assert.Equal(6, store.LoadLink("mine")!.Revision);
+        Assert.DoesNotContain(http.Urls, u => u.Contains("/api/packs?"));
+    }
+
+    [AvaloniaFact]
+    public async Task The_revisions_window_shows_what_a_restore_would_do()
+    {
+        PublishedMine();
+
+        var saves = Path.Combine(_home, "packs", "mine", "data", "Saves");
+        Directory.CreateDirectory(saves);
+        File.WriteAllText(Path.Combine(saves, "Old Home.vcdbs"), "");
+
+        var (_, vm) = Show(ServingHistory());
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "mine");
+
+        RevisionsViewModel? shown = null;
+        vm.Detail!.ChooseRevision = async revisions =>
+        {
+            shown = revisions;
+            await revisions.Loading;
+            return false;
+        };
+
+        await vm.Detail.BrowseRevisionsCommand.ExecuteAsync(null);
+
+        // Rendered for real, because a stale binding path in here fails silently.
+        var window = new RevisionsWindow { DataContext = shown };
+        window.Show();
+
+        var text = VisibleText(window).ToList();
+        Assert.Contains(text, t => t.StartsWith("Restoring revision 5:"));
+        Assert.Contains("carryon", text);
+        Assert.Contains("what followers have now", text);
+
+        var restore = Buttons(window)["Restore revision 5"];
+        Assert.True(restore.IsEffectivelyEnabled);
+
+        // The warning, naming the world at risk, and directly above the button rather than
+        // somewhere it can be scrolled past. Bottom-docked panels stack upwards, so declaring
+        // them in the other order puts it under the button instead — checked by position.
+        Assert.Contains("This can damage your worlds", text);
+        Assert.Contains(text, t => t.Contains("Old Home") && t.Contains("Back up"));
+
+        var warning = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "WorldWarning");
+        Assert.True(warning.IsEffectivelyVisible);
+        Assert.True(
+            warning.TranslatePoint(new Point(0, 0), window)!.Value.Y
+            < restore.TranslatePoint(new Point(0, 0), window)!.Value.Y);
+        Assert.True(Showing(window, "Open the pack's folder"));
+
+        // Declining touched nothing.
+        Assert.Equal(["glassview", "carryon"], vm.Detail.Manifest.Mods.Select(m => m.ModId));
+    }
+
+    [AvaloniaFact]
+    public async Task A_followed_pack_has_no_history_of_yours_to_restore()
+    {
+        WritePack("followed", "Followed", "1.22.5", null, ["glassview"]);
+        File.WriteAllText(
+            Path.Combine(_home, "packs", "followed", "cairns.json"),
+            """
+            {"role":"Follower","url":"https://cairns.gg/dizzyd/anego","revision":4,"following":true}
+            """);
+
+        var (window, vm) = Show();
+        vm.SelectedPack = vm.Packs.Single(p => p.Id == "followed");
+
+        Assert.False(Showing(window, "Earlier revisions…"));
+
+        // Commands are reachable whatever is drawn; this one refuses before signing in.
+        var opened = false;
+        vm.Detail!.ChooseRevision = _ => { opened = true; return Task.FromResult(true); };
+        await vm.Detail.BrowseRevisionsCommand.ExecuteAsync(null);
+
+        Assert.False(opened);
+        Assert.True(vm.Detail.HasError);
+    }
+
     [AvaloniaFact]
     public async Task A_pack_withdrawn_on_the_site_stops_being_refused_as_unchanged()
     {

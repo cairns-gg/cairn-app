@@ -25,6 +25,22 @@ public sealed record PublishResult(
     [property: JsonPropertyName("revision")] int Revision,
     [property: JsonPropertyName("visibility")] string Visibility);
 
+/// <summary>One revision the site kept of a pack.</summary>
+public sealed record PackRevision(
+    [property: JsonPropertyName("revision")] int Revision,
+    [property: JsonPropertyName("publishedAt")] DateTimeOffset? PublishedAt);
+
+/// <summary>
+/// The revisions of one pack the site can still hand back.
+///
+/// <see cref="Archived"/> false is a server that keeps no history at all, which is worth
+/// telling apart from a pack that has none: the first is nothing the author did.
+/// </summary>
+public sealed record PackHistory(
+    [property: JsonPropertyName("current")] int Current,
+    [property: JsonPropertyName("archived")] bool Archived,
+    [property: JsonPropertyName("revisions")] IReadOnlyList<PackRevision> Revisions);
+
 /// <summary>
 /// Talks to cairns.gg.
 ///
@@ -198,6 +214,77 @@ public sealed class CairnsClient(HttpClient http, string? server = null)
 
         var response = await http.SendAsync(request, ct).ConfigureAwait(false);
         await ThrowIfFailed(response, Lang.Get("cairns-doing-withdraw")).ConfigureAwait(false);
+    }
+
+    // ---- history ----
+
+    /// <summary>
+    /// The revisions of a pack the site archived, newest first.
+    ///
+    /// Signed in, and only ever answered for the pack's own author. Rolling a pack back is
+    /// often rolling back something that should not have gone up at all — a private
+    /// server's address — and a history anybody could read would go on serving it.
+    /// </summary>
+    /// <param name="packUrl">The pack's canonical URL, which names its owner and slug.</param>
+    public async Task<PackHistory> ListRevisionsAsync(
+        CairnsSession session, string packUrl, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, $"{HistoryUrl(packUrl)}/revisions");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+
+        using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+        await ThrowIfHistoryRefused(response, session, packUrl).ConfigureAwait(false);
+
+        return await response.Content.ReadFromJsonAsync<PackHistory>(ct).ConfigureAwait(false)
+               ?? throw new CairnsException(Lang.Get("cairns-no-answer"));
+    }
+
+    /// <summary>
+    /// One archived revision, parsed. The site hands back the bytes it stored, so this is
+    /// the document followers were served, envelope and all.
+    /// </summary>
+    public async Task<PackBundle> FetchRevisionAsync(
+        CairnsSession session, string packUrl, int revision, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, $"{HistoryUrl(packUrl)}/revisions/{revision}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+
+        using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+
+        // Said as what it is. A revision missing from the archive is a gap the site knows it
+        // can have — published before it kept history, or a store that failed — and "not
+        // found" would read as the pack having gone.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new CairnsException(Lang.Get("cairns-revision-not-kept", revision));
+
+        await ThrowIfHistoryRefused(response, session, packUrl).ConfigureAwait(false);
+
+        return PackBundle.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Where a pack's history lives on this server, from its canonical URL's owner and
+    /// slug. The host is not read — see <see cref="PackLink.OwnerAndSlug"/>.
+    /// </summary>
+    private string HistoryUrl(string packUrl) =>
+        PackLink.OwnerAndSlug(packUrl) is { } pack
+            ? $"{Server}/api/packs/{Uri.EscapeDataString(pack.Owner)}/{Uri.EscapeDataString(pack.Slug)}"
+            : throw new CairnsException(Lang.Get("cairns-not-a-pack-url", packUrl));
+
+    private static async Task ThrowIfHistoryRefused(
+        HttpResponseMessage response, CairnsSession session, string packUrl)
+    {
+        // The two refusals with something to say beyond a status line: the history is its
+        // author's, and an account that is not theirs is the usual reason for being refused.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+            throw new CairnsException(Lang.Get("cairns-history-not-yours", packUrl, session.Username));
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new CairnsException(Lang.Get("cairns-history-no-pack", packUrl));
+
+        await ThrowIfFailed(response, Lang.Get("cairns-doing-history")).ConfigureAwait(false);
     }
 
     // ---- plumbing ----

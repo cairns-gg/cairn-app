@@ -14,8 +14,10 @@ Stated up front because each of these is a plausible-sounding feature that would
 - **No hosting of mod zips.** Packs reference ModDB by `modid` and the client downloads
   from there. This is the legal and bandwidth firewall — we redistribute nobody's mod,
   and a pack is a few KB of JSON rather than 300 MB of archives.
-- **No pack version history.** A URL serves the current bundle. Recipients who want
-  reproducibility get it from the lockfile, not from server-side revisions.
+- **No public pack version history.** A URL serves the current bundle. Recipients who
+  want reproducibility get it from the lockfile, not from server-side revisions. The site
+  does keep every revision, and its author can put one back — see **Putting an earlier
+  revision back** — but nobody else can read them.
 - **No comments, ratings, or downloads-per-day leaderboards.** These are a moderation
   burden with no bearing on whether a pack installs.
 - **No teams or shared editing.** One pack, one owner. Revisit when there is evidence
@@ -473,6 +475,42 @@ The fallback matters twice over: it works for people who don't have Cairn instal
 and that line is the install pitch. Someone arriving from a Discord link should be able
 to tell what this is and what to do about it without an account.
 
+### Putting an earlier revision back
+
+An author who published a broken set wants the one before it. **Earlier revisions…**, beside
+the pack's address, lists what the site archived of it, says per mod what restoring each one
+would do, and puts the chosen one back into the author's copy: its mods, its lock, its mod
+settings and hotkeys. `cairn-cli revisions <id>` and `cairn-cli restore <id> <rev>` do the
+same.
+
+**Restored locally, not republished.** The pack then reads **Publish changes** like any
+other edit, and goes up as the newest revision when the author presses it — after playing
+it, which is the step that was skipped the first time. Having the site copy the old
+document forward would have been quicker, and would have left the author's own copy on the
+broken set with Share offering to publish it again.
+
+Three things are the local copy's rather than the document's: the pack id, a server address
+the revision does not carry (stripped on the way up is not removed from the pack), and where
+each mod is downloaded from — the lock is merged as an author's update is, so an unchanged
+mod keeps its file and every file the restored lock stops naming is retired for the next sync.
+Carried mod settings are written into the files as well, because publishing reads them back
+from there.
+
+**The worlds are warned about every time.** The restore touches no world; the next launch
+opens them with the restored mods, and a world played with a mod that is now gone or older
+can lose that mod's blocks, items and creatures for good, or stop loading. That cannot be
+undone from Cairn, so the window says it in the error colours directly above the button —
+naming the pack's worlds, with a button to open their folder — whatever is selected, rather
+than only when some heuristic judges a change risky. A revision for an older game adds a
+sentence of its own. `cairn-cli restore` prints the same warning, `--check` included.
+
+**Author only.** Rolling back is often rolling back something that should never have been
+published — a private server's address — and a public history would go on serving it. The
+history endpoints answer the pack's owner and nobody else, and the rule that only a pack
+published or withdrawn from this machine may be restored lives in Core
+(`PackLink.OwnsUrl`), so the CLI refuses the same packs. A revision published before
+the site began archiving, or whose archiving failed, is a gap in the list, not an error.
+
 ## API
 
 ```
@@ -483,6 +521,8 @@ POST   /api/packs                        publish; body is a PackBundle
 PUT    /api/packs/<user>/<pack>          update
 DELETE /api/packs/<user>/<pack>          unshare -> tombstone
 GET    /api/packs/<user>/<pack>          the published document
+GET    /api/packs/<user>/<pack>/revisions        archived revisions (owner only)
+GET    /api/packs/<user>/<pack>/revisions/<n>    one archived revision (owner only)
 GET    /api/search?q=                    public packs only
 ```
 

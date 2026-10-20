@@ -143,6 +143,7 @@ public partial class MainWindow : Window
         vm.OpenPreferences = ShowPreferencesAsync;
         vm.ConfirmVersionChange = ConfirmVersionChangeAsync;
         vm.ConfirmPublish = ConfirmPublishAsync;
+        vm.ChooseRevision = ChooseRevisionAsync;
         vm.ConfirmPackUpdate = ConfirmPackUpdateAsync;
         vm.ConfirmImport = ConfirmImportAsync;
         vm.ChooseImportSource = ChooseImportSourceAsync;
@@ -208,6 +209,10 @@ public partial class MainWindow : Window
     /// </summary>
     private Task<bool> ConfirmPublishAsync(ShareViewModel share) =>
         new ShareWindow { DataContext = share }.ShowDialog<bool>(this);
+
+    /// <summary>True only if a revision is to be restored. Any other dismissal changes nothing.</summary>
+    private Task<bool> ChooseRevisionAsync(RevisionsViewModel revisions) =>
+        new RevisionsWindow { DataContext = revisions }.ShowDialog<bool>(this);
 
     /// <summary>True only if the update was applied. Any other dismissal takes nothing.</summary>
     private Task<bool> ConfirmPackUpdateAsync(PackUpdateViewModel update) =>

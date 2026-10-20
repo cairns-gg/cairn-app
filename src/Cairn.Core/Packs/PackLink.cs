@@ -137,6 +137,36 @@ public sealed class PackLink
     /// </summary>
     [JsonPropertyName("withdrawn")] public bool Withdrawn { get; set; }
 
+    /// <summary>
+    /// Whether <see cref="Url"/> is this copy's own address: an author's, published from
+    /// this machine or withdrawn from it.
+    ///
+    /// The last half is what keeps a taken-over pack out. It has the same role and a URL
+    /// too, but the URL is where it came from — somebody else's address, whose history is
+    /// not this copy's to restore from.
+    /// </summary>
+    [JsonIgnore]
+    public bool OwnsUrl =>
+        Role == PackRole.Author && !string.IsNullOrWhiteSpace(Url) && (Published is not null || Withdrawn);
+
+    /// <summary>
+    /// The owner and slug a pack's canonical URL names, or null if it names something else.
+    ///
+    /// The path and not the host, because the path is what identifies the pack on the site:
+    /// a revision published while the site had another address is still this pack's.
+    /// Asking for its history and accepting one of its revisions both go through here, so
+    /// the two cannot disagree about which pack a document belongs to.
+    /// </summary>
+    public static (string Owner, string Slug)? OwnerAndSlug(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+
+        var parts = uri.AbsolutePath.Trim('/').Split('/');
+        if (parts.Length != 2 || parts.Any(string.IsNullOrWhiteSpace)) return null;
+
+        return (Uri.UnescapeDataString(parts[0]), Uri.UnescapeDataString(parts[1]));
+    }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

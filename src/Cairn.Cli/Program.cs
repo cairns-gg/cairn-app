@@ -95,6 +95,8 @@ internal static class Program
                 "whoami" => await WhoAmI(http),
                 "publish" => await Publish(store, moddb, http, args),
                 "unpublish" => await Unpublish(store, http, args),
+                "revisions" => await Revisions(store, http, args),
+                "restore" => await Restore(store, http, args),
                 "-h" or "--help" or "help" => Ok(Usage),
                 _ => Fail($"unknown command '{args[0]}'"),
             };
@@ -154,6 +156,8 @@ internal static class Program
               cairn-cli publish <id> [--slug x] [--unlisted] [--keep-server] [--force]
                                                      share a pack
               cairn-cli unpublish <id>                withdraw a published pack
+              cairn-cli revisions <id>                the revisions cairns.gg kept of your pack
+              cairn-cli restore <id> <rev> [--check]  put an earlier revision back, to publish again
 
             Packs live under $CAIRN_HOME, then whatever `home set` recorded, then
             ~/.cairn/packs/<id> — in that order, and CAIRN_HOME always wins.
@@ -1829,6 +1833,83 @@ internal static class Program
         store.MarkWithdrawn(id);
 
         Console.WriteLine($"withdrew {link.Url} — publish again to bring it back");
+        return 0;
+    }
+
+    /// <summary>
+    /// Lists what the site archived of one of your packs. Only ever your own: see
+    /// <see cref="CairnsClient.ListRevisionsAsync"/>.
+    /// </summary>
+    private static async Task<int> Revisions(PackStore store, HttpClient http, string[] args)
+    {
+        if (args.Length < 2) return Fail("usage: cairn-cli revisions <id>");
+
+        var id = args[1];
+        if (store.LoadLink(id) is not { OwnsUrl: true } link)
+            return Fail($"'{id}' has not been published from this machine");
+
+        if (CairnsSession.Load() is not { } session)
+            return Fail("not signed in — run: cairn-cli login");
+
+        var history = await new CairnsClient(http, session.Server).ListRevisionsAsync(session, link.Url);
+
+        if (!history.Archived) return Fail("this server keeps no history of published packs");
+        if (history.Revisions.Count == 0) return Fail($"the site has no revisions of {link.Url}");
+
+        foreach (var r in history.Revisions)
+        {
+            var when = r.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "";
+            var note = r.Revision == history.Current ? "  (current)"
+                : r.Revision == link.Revision ? "  (last published from here)" : "";
+            Console.WriteLine($"  {r.Revision,4}  {when}{note}");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Puts an earlier revision back into the local pack. Publishing it again is left to
+    /// <c>publish</c>, as in the launcher: the restored set is worth playing before every
+    /// follower is sent it.
+    ///
+    /// The preview, the world warning and what became of each setting come from Core in
+    /// the launcher's own words; the lines around them are this tool's, in English like the
+    /// rest of it.
+    /// </summary>
+    private static async Task<int> Restore(PackStore store, HttpClient http, string[] args)
+    {
+        if (args.Length < 3 || !int.TryParse(args[2], out var revision) || revision < 1)
+            return Fail("usage: cairn-cli restore <id> <revision> [--check]");
+
+        var id = args[1];
+        if (store.LoadLink(id) is not { OwnsUrl: true } link)
+            return Fail($"'{id}' has not been published from this machine");
+
+        if (CairnsSession.Load() is not { } session)
+            return Fail("not signed in — run: cairn-cli login");
+
+        var bundle = await new CairnsClient(http, session.Server)
+            .FetchRevisionAsync(session, link.Url, revision);
+
+        var preview = RevisionPreview.Of(store, id, revision, bundle);
+        Console.WriteLine(preview.Summary);
+        foreach (var change in preview.Changes)
+            Console.WriteLine($"  {change.ModId,-24} {RevisionPreview.Describe(change)}");
+
+        if (!preview.Anything) return 0;
+
+        // Before anything changes, and on --check too: that is when somebody is deciding.
+        // See RevisionPreview.WorldWarning for why it is said every time.
+        Console.WriteLine();
+        Console.WriteLine($"! {Lang.Get("restore-worlds-heading")}");
+        Console.WriteLine($"  {RevisionPreview.WorldWarning(new PackData(store).Worlds(id), preview)}");
+
+        if (args.Contains("--check")) return 0;
+
+        var restored = store.RestoreRevision(id, bundle);
+        foreach (var setting in restored.NotWritten) Console.WriteLine($"! {setting.Describe()}");
+
+        Console.WriteLine($"restored revision {revision} into '{id}' — play it, then publish to send it to everyone following");
         return 0;
     }
 

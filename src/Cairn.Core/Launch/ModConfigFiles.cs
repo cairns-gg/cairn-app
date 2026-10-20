@@ -156,6 +156,31 @@ public static class ModConfigFiles
     };
 
     /// <summary>
+    /// Puts declared values in as the author's own decision rather than as a launch's
+    /// request: every one is written, whatever the file holds now.
+    ///
+    /// <see cref="Apply"/> keeps a value that differs from what the pack last wrote, because
+    /// at launch that difference is the player's own edit. Restoring an earlier revision is
+    /// the one time the difference is the thing being undone — a setting changed in game
+    /// after the last launch, published, and found to break the pack — so Apply would keep
+    /// exactly the value the restore exists to replace, and the next publish would read it
+    /// back out of the file and send it again.
+    ///
+    /// So the record is forgotten for the files being declared, and Apply then treats every
+    /// value as the pack's first word on them. Files the declaration leaves out keep their
+    /// record, so what the pack has stopped asking for is still reported as released.
+    /// </summary>
+    public static IReadOnlyList<ModConfigChange> Overwrite(
+        string dataPath, IReadOnlyDictionary<string, JsonObject>? declared, string? modsDir = null)
+    {
+        var record = LoadRecord(dataPath);
+        foreach (var file in declared?.Keys ?? []) record.Remove(file);
+        SaveRecord(dataPath, record);
+
+        return Apply(dataPath, declared, modsDir);
+    }
+
+    /// <summary>
     /// Puts the pack's declared values into the mods' config files, and returns everything
     /// that happened — including what it decided not to do, which is the half a person needs
     /// to be told about.

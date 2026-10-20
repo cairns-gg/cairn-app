@@ -153,6 +153,67 @@ public sealed class PackStore
     }
 
     /// <summary>
+    /// Puts an earlier published revision of this pack back into the local copy: its mods,
+    /// its lock, its settings and its hotkeys, as they were when it went up.
+    ///
+    /// Local only. Nothing is published, and the publish record is left as it was, so the
+    /// pack then reads as having changes to publish — the restored set is played before it
+    /// is sent, which is the step whoever needs this usually skipped the first time.
+    ///
+    /// Three things are deliberately not the document's to decide. The id stays this
+    /// copy's. A server address the revision does not carry is kept, because a stripped
+    /// address is absent from the document by design rather than removed from the pack.
+    /// And the lock is merged rather than replaced — the same merge an author's update
+    /// gets — so a mod at the same version and bytes keeps the location this copy already
+    /// found, and every file the restored lock stops naming is recorded for the next sync
+    /// to remove.
+    ///
+    /// The carried mod settings are written into the files as well as the manifest.
+    /// <see cref="PublishedDocument"/> reads them back from the files, so a restore that
+    /// only changed the manifest would publish the settings it was meant to undo.
+    /// </summary>
+    /// <param name="revision">An earlier revision, as the site archived it.</param>
+    /// <returns>
+    /// The restored manifest, and what became of each carried setting — a value that could
+    /// not be written is one the next publish would send at its current value, so the
+    /// front-ends say which.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">This copy does not publish anywhere.</exception>
+    /// <exception cref="InvalidDataException">The revision is of some other pack.</exception>
+    public RestoredRevision RestoreRevision(string id, PackBundle revision)
+    {
+        if (LoadLink(id) is not { OwnsUrl: true } link)
+            throw new InvalidOperationException(Lang.Get("restore-not-published", id));
+
+        // Asked of the document rather than assumed from where it was fetched: this is about
+        // to replace a pack wholesale, and a revision of another pack would do it silently.
+        // By owner and slug, as the history was asked for — see PackLink.OwnerAndSlug.
+        if (PackLink.OwnerAndSlug(revision.CanonicalUrl) is not { } of
+            || PackLink.OwnerAndSlug(link.Url) is not { } mine
+            || !string.Equals(of.Owner, mine.Owner, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(of.Slug, mine.Slug, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(
+                Lang.Get("restore-other-pack", revision.CanonicalUrl ?? "?", link.Url));
+
+        var restored = revision.Pack
+                       ?? throw new InvalidDataException(Lang.Get("bundle-has-no-pack"));
+
+        restored.Id = id;
+        restored.Connect ??= Load(id).Connect;
+
+        Save(restored);
+        MergeLock(id, restored, revision.Lock);
+
+        // As a launch does it, capture first: what the author is later shown as their own
+        // change should not be something this wrote a moment earlier. Then overwrite rather
+        // than apply — see ModConfigFiles.Overwrite for the value Apply would keep.
+        ModConfigFiles.Capture(DataDir(id));
+        var settings = ModConfigFiles.Overwrite(DataDir(id), restored.ModConfig, ModsDir(id));
+
+        return new RestoredRevision(restored, settings);
+    }
+
+    /// <summary>
     /// Remembers the mods this update was told to stop asking about, and forgets the ones
     /// that are back in the pack.
     ///

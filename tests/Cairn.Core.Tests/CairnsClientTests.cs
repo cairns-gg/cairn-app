@@ -163,4 +163,102 @@ public class CairnsClientTests
 
         Assert.Equal(CairnsClient.DefaultServer, new CairnsClient(new HttpClient()).Server);
     }
+
+    // ---- history ----
+
+    [Fact]
+    public async Task A_packs_history_is_asked_for_by_its_own_address_and_signed()
+    {
+        HttpRequestMessage? sent = null;
+        var (client, _) = Make((request, _) =>
+        {
+            sent = request;
+            return Json(HttpStatusCode.OK, """
+                {"current":11,"archived":true,"revisions":[
+                  {"revision":11,"publishedAt":"2026-10-17T14:02:00.0000000+00:00"},
+                  {"revision":9,"publishedAt":"2026-10-01T09:00:00.0000000+00:00"}]}
+                """);
+        });
+
+        // The canonical URL names a host the session is not signed in to. The path is what
+        // identifies the pack; the server asked is the one the session belongs to.
+        var history = await client.ListRevisionsAsync(Session, "https://cairns.gg/dizzyd/anego");
+
+        Assert.Equal("https://cairns.test/api/packs/dizzyd/anego/revisions", sent!.RequestUri!.ToString());
+        Assert.Equal("tok", sent.Headers.Authorization!.Parameter);
+
+        Assert.True(history.Archived);
+        Assert.Equal(11, history.Current);
+
+        // A gap is the archive's to have, and is passed on as it came.
+        Assert.Equal([11, 9], history.Revisions.Select(r => r.Revision));
+    }
+
+    [Fact]
+    public async Task Somebody_elses_history_is_refused_by_name()
+    {
+        var (client, _) = Make((_, _) => new HttpResponseMessage(HttpStatusCode.Forbidden));
+
+        var error = await Assert.ThrowsAsync<CairnsException>(
+            () => client.ListRevisionsAsync(Session, "https://cairns.gg/someone/anego"));
+
+        Assert.Contains("dizzyd", error.Message);
+        Assert.Contains("someone/anego", error.Message);
+    }
+
+    [Fact]
+    public async Task A_revision_the_site_did_not_keep_says_so_rather_than_not_found()
+    {
+        var (client, _) = Make((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var error = await Assert.ThrowsAsync<CairnsException>(
+            () => client.FetchRevisionAsync(Session, "https://cairns.gg/dizzyd/anego", 4));
+
+        Assert.Contains("did not keep revision 4", error.Message);
+    }
+
+    [Fact]
+    public async Task An_unreachable_archive_arrives_with_the_servers_reason()
+    {
+        var (client, _) = Make((_, _) => Json(HttpStatusCode.ServiceUnavailable,
+            """{"problems":["Pack history could not be read from storage. Try again later, and get in touch if it keeps happening."]}"""));
+
+        var error = await Assert.ThrowsAsync<CairnsException>(
+            () => client.ListRevisionsAsync(Session, "https://cairns.gg/dizzyd/anego"));
+
+        Assert.Contains("could not be read from storage", error.Message);
+    }
+
+    [Fact]
+    public async Task A_fetched_revision_is_the_document_the_site_stored()
+    {
+        HttpRequestMessage? sent = null;
+        var (client, _) = Make((request, _) =>
+        {
+            sent = request;
+            return Json(HttpStatusCode.OK, """
+                {"formatVersion":1,"pack":{"id":"anego","gameVersion":"1.22.5","mods":[]},
+                 "canonicalUrl":"https://cairns.gg/dizzyd/anego","revision":5}
+                """);
+        });
+
+        var bundle = await client.FetchRevisionAsync(Session, "https://cairns.gg/dizzyd/anego", 5);
+
+        Assert.Equal("https://cairns.test/api/packs/dizzyd/anego/revisions/5", sent!.RequestUri!.ToString());
+        Assert.Equal(5, bundle.Revision);
+        Assert.Equal("https://cairns.gg/dizzyd/anego", bundle.CanonicalUrl);
+    }
+
+    [Theory]
+    [InlineData("not a url")]
+    [InlineData("https://cairns.gg/")]
+    [InlineData("https://cairns.gg/dizzyd")]
+    [InlineData("https://cairns.gg/dizzyd/anego/extra")]
+    public async Task Only_a_packs_own_address_is_asked_about(string url)
+    {
+        var (client, handler) = Make((_, _) => new HttpResponseMessage(HttpStatusCode.OK));
+
+        await Assert.ThrowsAsync<CairnsException>(() => client.ListRevisionsAsync(Session, url));
+        Assert.Equal(0, handler.Calls);
+    }
 }
