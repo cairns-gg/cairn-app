@@ -48,7 +48,7 @@ public sealed record OptimumSource(string Url, string Ref, string GameVersion, s
     /// </summary>
     public static readonly IReadOnlyList<OptimumSource> Known =
     [
-        // Plain upstream, at the v0.3.13 tag. Both of the commits the fork entry below
+        // Plain upstream, at the v0.4.4 tag. Both of the commits the fork entry below
         // carries — the macOS archive-root fix and atomic client downloads — were merged
         // upstream in August 2026, so from 1.22.7 on there is nothing to carry.
         //
@@ -65,9 +65,9 @@ public sealed record OptimumSource(string Url, string Ref, string GameVersion, s
         // the same release. That is the version of this list going stale that costs
         // somebody an afternoon rather than a few frames per second.
         new(Url: "https://github.com/StratumServer/Optimum.git",
-            Ref: "e5888a3f38fd3520be29706636016eb12f3b850b",
+            Ref: "5e09ee81b50d4fd033121e2f2886a0b0e3997532",
             GameVersion: "1.22.7",
-            Version: "0.3.13"),
+            Version: "0.4.4"),
 
         // dizzyd/Optimum's main plus two commits, both of which Cairn needs and neither of
         // which existed upstream at the time:
